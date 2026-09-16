@@ -24,6 +24,7 @@ const api = {
   },
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
+    exportLogs: () => ipcRenderer.invoke('app:exportLogs'),
     checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
     downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
     installUpdate: () => ipcRenderer.invoke('app:installUpdate'),

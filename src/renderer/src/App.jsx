@@ -262,6 +262,15 @@ export default function App() {
     if (!res.ok) showToast('error', res.error.message)
   }
 
+  async function handleExportLogs() {
+    const res = await window.serviceAuto.app.exportLogs()
+    if (res.ok) {
+      showToast('success', `Loguri exportate pe Desktop (${res.data.copied} fisiere) - trimite folderul pentru debugging.`)
+    } else {
+      showToast('error', res.error.message)
+    }
+  }
+
   // "Editeaza" pe o lucrare recenta nu modifica fisa finalizata/PDF-ul
   // existent - creeaza o fisa noua, in lucru, pre-completata cu aceleasi
   // date, ca istoricul deja finalizat sa ramana intact.
@@ -315,6 +324,9 @@ export default function App() {
             </button>
             <button type="button" onClick={handleOpenFolder}>
               Deschide folderul cu fise
+            </button>
+            <button type="button" title="Exporta fisierele de log pe Desktop, pentru debugging" onClick={handleExportLogs}>
+              Exporta loguri
             </button>
           </div>
         </header>

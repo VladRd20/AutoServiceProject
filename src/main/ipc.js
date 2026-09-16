@@ -1,5 +1,5 @@
 import { ipcMain, shell, app } from 'electron'
-import log from './logger'
+import log, { exportLogs } from './logger'
 import { validateFisa } from '../shared/calculations'
 import {
   saveDraft,
@@ -109,6 +109,14 @@ export function registerIpcHandlers() {
   ipcMain.handle('backup:now', () => wrap(() => backupNow(), 'backupNow'))
 
   ipcMain.handle('app:getVersion', () => wrap(() => app.getVersion(), 'getVersion'))
+
+  ipcMain.handle('app:exportLogs', () =>
+    wrap(async () => {
+      const { destDir, copied } = await exportLogs()
+      await shell.openPath(destDir)
+      return { destDir, copied }
+    }, 'exportLogs')
+  )
 
   ipcMain.handle('app:checkForUpdates', () =>
     wrap(async () => {
