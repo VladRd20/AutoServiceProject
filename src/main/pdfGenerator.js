@@ -13,26 +13,37 @@ function fontsDir() {
     : path.join(app.getAppPath(), 'build', 'fonts')
 }
 
+// Fonturile sunt incarcate o singura data in memorie si refolosite la fiecare
+// PDF generat - fara asta, fiecare finalizare/reincercare citea din nou cele
+// 4 fisiere .ttf de pe disc, inutil, de vreme ce nu se schimba in timpul rularii.
+let cachedFonts = null
+
 function getFonts() {
+  if (cachedFonts) return cachedFonts
+
   const dir = fontsDir()
-  const fonts = {
-    Roboto: {
-      normal: path.join(dir, 'Roboto-Regular.ttf'),
-      bold: path.join(dir, 'Roboto-Medium.ttf'),
-      italics: path.join(dir, 'Roboto-Italic.ttf'),
-      bolditalic: path.join(dir, 'Roboto-MediumItalic.ttf')
-    }
+  const variants = {
+    normal: path.join(dir, 'Roboto-Regular.ttf'),
+    bold: path.join(dir, 'Roboto-Medium.ttf'),
+    italics: path.join(dir, 'Roboto-Italic.ttf'),
+    bolditalic: path.join(dir, 'Roboto-MediumItalic.ttf')
   }
-  for (const variant of Object.values(fonts.Roboto)) {
-    if (!fs.existsSync(variant)) {
+
+  const roboto = {}
+  for (const [style, filePath] of Object.entries(variants)) {
+    try {
+      roboto[style] = fs.readFileSync(filePath)
+    } catch (err) {
       throw new AppError(
         'FONT_MISSING',
         'Fisierele de font lipsesc din instalare. Reinstaleaza aplicatia.',
-        new Error(`Font lipsa: ${variant}`)
+        err
       )
     }
   }
-  return fonts
+
+  cachedFonts = { Roboto: roboto }
+  return cachedFonts
 }
 
 function formatBani(n) {

@@ -145,32 +145,41 @@ export default function App() {
     return () => clearTimeout(saveTimerRef.current)
   }, [fisa, refreshDrafts, showToast])
 
-  async function handleOpenDraft(id) {
-    const res = await window.serviceAuto.fisa.loadDraft(id)
-    if (res.ok) {
-      setFisa(res.data)
-      setErrors({})
-      setPdfRetry(null)
-    } else {
-      showToast('error', res.error.message)
-    }
-  }
-
-  async function handleDeleteDraft(id) {
-    const res = await window.serviceAuto.fisa.deleteDraft(id)
-    if (res.ok) {
-      if (fisa.id === id) resetToNewFisa()
-      refreshDrafts()
-    } else {
-      showToast('error', res.error.message)
-    }
-  }
-
-  function resetToNewFisa() {
+  const resetToNewFisa = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     hasSavedOnceRef.current = false
     setFisa(emptyFisa())
-  }
+  }, [])
+
+  const handleOpenDraft = useCallback(
+    async (id) => {
+      const res = await window.serviceAuto.fisa.loadDraft(id)
+      if (res.ok) {
+        setFisa(res.data)
+        setErrors({})
+        setPdfRetry(null)
+      } else {
+        showToast('error', res.error.message)
+      }
+    },
+    [showToast]
+  )
+
+  // Referinta stabila (deps: doar id-ul fisei curente) - altfel DraftsSidebar
+  // s-ar re-randa la fiecare litera tastata in formular, desi lista de
+  // drafturi/lucrari recente nu s-a schimbat deloc.
+  const handleDeleteDraft = useCallback(
+    async (id) => {
+      const res = await window.serviceAuto.fisa.deleteDraft(id)
+      if (res.ok) {
+        if (fisa.id === id) resetToNewFisa()
+        refreshDrafts()
+      } else {
+        showToast('error', res.error.message)
+      }
+    },
+    [fisa.id, resetToNewFisa, refreshDrafts, showToast]
+  )
 
   // Dupa finalizare, trecem la o alta fisa in lucru daca exista una (cazul
   // uzual la un flux cu mai multe masini in paralel); daca nu mai e nimic
@@ -196,11 +205,11 @@ export default function App() {
     }
   }
 
-  function handleNewFisa() {
+  const handleNewFisa = useCallback(() => {
     resetToNewFisa()
     setErrors({})
     setPdfRetry(null)
-  }
+  }, [resetToNewFisa])
 
   async function handleRelease() {
     const { valid, errors: localErrors } = validateFisa(fisa)
@@ -256,19 +265,22 @@ export default function App() {
   // "Editeaza" pe o lucrare recenta nu modifica fisa finalizata/PDF-ul
   // existent - creeaza o fisa noua, in lucru, pre-completata cu aceleasi
   // date, ca istoricul deja finalizat sa ramana intact.
-  function handleEditRecent(finalizedFisa) {
+  const handleEditRecent = useCallback((finalizedFisa) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     hasSavedOnceRef.current = false
     const { _file, id, status, finalizedAt, ...rest } = finalizedFisa
     setFisa({ ...rest, id: null })
     setErrors({})
     setPdfRetry(null)
-  }
+  }, [])
 
-  async function handleOpenPdfFromSearch(fileName) {
-    const res = await window.serviceAuto.fise.openPdf(fileName)
-    if (!res.ok) showToast('error', res.error.message)
-  }
+  const handleOpenPdfFromSearch = useCallback(
+    async (fileName) => {
+      const res = await window.serviceAuto.fise.openPdf(fileName)
+      if (!res.ok) showToast('error', res.error.message)
+    },
+    [showToast]
+  )
 
   return (
     <div className="app">

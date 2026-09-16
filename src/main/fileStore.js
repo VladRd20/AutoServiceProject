@@ -1,7 +1,6 @@
 import { app } from 'electron'
 import path from 'path'
 import fs from 'fs/promises'
-import fsSync from 'fs'
 import log from './logger'
 import { toAppError, AppError } from './errors'
 
@@ -73,8 +72,14 @@ function resolveBaseDir() {
   return baseDirPromise
 }
 
+// ensureDirs() e apelat la inceputul aproape fiecarei operatii de fisier -
+// odata ce directoarele exista cu succes intr-o rulare, nu mai are rost sa
+// repetam cele 3 mkdir la fiecare apel (nu dispar singure in timpul rularii).
+let dirsEnsured = false
+
 export async function ensureDirs() {
   resolvedBaseDir = await resolveBaseDir()
+  if (dirsEnsured) return
 
   for (const dir of [getFiseDir(), getDraftsDir(), getBackupDir()]) {
     try {
@@ -85,6 +90,7 @@ export async function ensureDirs() {
       throw toAppError(err, 'Nu s-a putut crea folderul de date al aplicatiei.')
     }
   }
+  dirsEnsured = true
 }
 
 function sanitizeSegment(value) {
@@ -275,50 +281,75 @@ export async function searchFise(query) {
     .sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || ''))
 }
 
-// Cele mai recente fise finalizate, pentru acces rapid din sidebar.
+// Cele mai recente fise finalizate, pentru acces rapid din sidebar. Evitam
+// sa citim si sa parsam continutul TUTUROR fiselor doar ca sa aflam care
+// sunt cele mai noi N - presortam ieftin dupa data modificarii fisierului
+// (fisele finalizate nu se mai modifica dupa scriere, deci mtime e un proxy
+// de incredere pentru finalizedAt) si citim continutul doar pentru candidati.
 export async function listRecentFise(limit = 8) {
   await ensureDirs()
-  const all = await readAllFiseFinalizate()
-  return all
-    .sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || ''))
-    .slice(0, limit)
+
+  let files
+  try {
+    files = (await fs.readdir(getFiseDir())).filter((f) => f.endsWith('.json'))
+  } catch (err) {
+    throw toAppError(err, 'Nu s-a putut citi lista de fise finalizate.')
+  }
+
+  const withMtime = await Promise.all(
+    files.map(async (f) => {
+      try {
+        const stat = await fs.stat(path.join(getFiseDir(), f))
+        return { f, mtimeMs: stat.mtimeMs }
+      } catch {
+        return { f, mtimeMs: 0 }
+      }
+    })
+  )
+
+  const candidates = withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, limit)
+
+  const result = []
+  for (const { f } of candidates) {
+    try {
+      const raw = await fs.readFile(path.join(getFiseDir(), f), 'utf-8')
+      result.push({ ...JSON.parse(raw), _file: f })
+    } catch (err) {
+      log.warn(`[fileStore] fisa finalizata corupta sarita: ${f}`, err)
+    }
+  }
+
+  return result.sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || ''))
 }
 
-// Backup simplu: copiaza folderul de fise intr-un subfolder datat.
-// Fara dependinta de zip - copiere de fisiere, robusta si usor de inspectat manual.
+// Backup: oglinda incrementala a folderului de fise, actualizata zilnic.
+// Fisele finalizate nu se mai modifica dupa scriere, deci nu are rost sa
+// copiem din nou fisierele deja backup-uite intr-un folder datat nou in
+// fiecare zi (asta insemna, dupa 30 de zile, pana la 30x duplicare a
+// aceluiasi continut) - copiem doar ce lipseste din oglinda.
 export async function backupNow() {
   await ensureDirs()
-  const stamp = new Date().toISOString().slice(0, 10)
-  const dest = path.join(getBackupDir(), stamp)
+  const dest = path.join(getBackupDir(), 'mirror')
   try {
     await fs.mkdir(dest, { recursive: true })
     const files = await fs.readdir(getFiseDir())
+    let copiate = 0
     for (const f of files) {
-      await fs.copyFile(path.join(getFiseDir(), f), path.join(dest, f))
+      const destPath = path.join(dest, f)
+      try {
+        await fs.access(destPath)
+      } catch {
+        await fs.copyFile(path.join(getFiseDir(), f), destPath)
+        copiate++
+      }
     }
-    await pruneOldBackups()
-    log.info(`[fileStore] backup realizat: ${dest} (${files.length} fisiere)`)
+    log.info(`[fileStore] backup actualizat: ${dest} (${copiate} fisiere noi din ${files.length} totale)`)
     return dest
   } catch (err) {
     // Backup-ul e o plasa de siguranta secundara - un esec aici nu trebuie sa
     // opreasca aplicatia, doar sa fie logat clar.
     log.error('[fileStore] backup esuat', err)
     throw toAppError(err, 'Backup-ul automat a esuat. Datele originale sunt intacte.')
-  }
-}
-
-async function pruneOldBackups(days = 30) {
-  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
-  const entries = await fs.readdir(getBackupDir(), { withFileTypes: true })
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const full = path.join(getBackupDir(), entry.name)
-    const stat = fsSync.statSync(full, { throwIfNoEntry: false })
-    if (stat && stat.mtimeMs < cutoff) {
-      await fs.rm(full, { recursive: true, force: true }).catch((err) => {
-        log.warn(`[fileStore] nu s-a putut sterge backup vechi ${full}`, err)
-      })
-    }
   }
 }
 

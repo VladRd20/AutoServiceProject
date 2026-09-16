@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { memo } from 'react'
 
 function formatData(dataISO) {
   const datePart = String(dataISO || '').slice(0, 10)
@@ -6,16 +6,12 @@ function formatData(dataISO) {
   return y && m && d ? `${d}.${m}.${y}` : dataISO || '-'
 }
 
-export default function DraftsSidebar({
-  drafts,
-  currentId,
-  onOpen,
-  onDelete,
-  onNew,
-  recentFise,
-  onEditRecent,
-  onOpenPdf
-}) {
+// Randat cu React.memo: fara asta, s-ar re-randa la fiecare litera tastata
+// oriunde in formularul fisei curente, desi listele proprii (drafturi/lucrari
+// recente) raman neschimbate in timpul editarii. Are efect real doar daca
+// handler-ele primite ca props (onOpen, onDelete etc) au referinta stabila
+// intre randari - vezi useCallback-urile din App.jsx.
+function DraftsSidebar({ drafts, currentId, onOpen, onDelete, onNew, recentFise, onEditRecent, onOpenPdf }) {
   return (
     <aside className="sidebar">
       <button type="button" className="btn-primary" onClick={onNew}>
@@ -71,3 +67,5 @@ export default function DraftsSidebar({
     </aside>
   )
 }
+
+export default memo(DraftsSidebar)
