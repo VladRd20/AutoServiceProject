@@ -79,8 +79,9 @@ function sanitizeSegment(value) {
 }
 
 function formatDataFilename(dataISO) {
-  // dataISO: "YYYY-MM-DD" -> "DD-MM-YYYY" pentru numele fisierului
-  const [y, m, d] = String(dataISO).split('-')
+  // dataISO poate fi "YYYY-MM-DD" (data aleasa manual) sau un ISO datetime
+  // complet (data curenta) - in ambele cazuri primele 10 caractere sunt data.
+  const [y, m, d] = String(dataISO).slice(0, 10).split('-')
   if (!y || !m || !d) return sanitizeSegment(dataISO)
   return `${d}-${m}-${y}`
 }
@@ -162,9 +163,13 @@ export async function deleteDraft(id) {
 // si returneaza calea, pentru a fi asociata cu PDF-ul generat separat.
 export async function finalizeFisa(fisa) {
   await ensureDirs()
-  const baseName = fisaBaseName(fisa)
+  const now = new Date()
+  // Daca "Data curenta" e bifat, data folosita in fisa/PDF e data si ora
+  // exacta a finalizarii (Release), nu momentul in care a fost bifat checkbox-ul.
+  const data = fisa.dataCurenta ? now.toISOString() : fisa.data
+  const finalFisa = { ...fisa, data, status: 'finalizata', finalizedAt: now.toISOString() }
+  const baseName = fisaBaseName(finalFisa)
   const jsonPath = path.join(getFiseDir(), `${baseName}.json`)
-  const finalFisa = { ...fisa, status: 'finalizata', finalizedAt: new Date().toISOString() }
   await writeJsonAtomic(jsonPath, finalFisa)
 
   if (fisa.id) {

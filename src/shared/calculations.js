@@ -59,7 +59,7 @@ export function validateFisa(fisa) {
   )
     errors['auto.an'] = 'An fabricatie invalid'
 
-  if (!fisa.data) errors['data'] = 'Data interventiei este obligatorie'
+  if (!fisa.dataCurenta && !fisa.data) errors['data'] = 'Data interventiei este obligatorie'
 
   ;(fisa.piese || []).forEach((p, i) => {
     if (!p.denumire?.trim()) errors[`piese.${i}.denumire`] = 'Denumirea piesei este obligatorie'

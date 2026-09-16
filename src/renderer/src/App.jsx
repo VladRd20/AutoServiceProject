@@ -7,7 +7,10 @@ import DraftsSidebar from './components/DraftsSidebar'
 import { validateFisa } from '../../shared/calculations'
 import { draftBackupRef } from './draftBackup'
 
-const AUTOSAVE_MS = 5000
+// Prima salvare (cand fisa capata continut) e instanta, ca sa apara imediat
+// in "Fise in lucru". Salvarile urmatoare se fac la scurt timp dupa ce
+// utilizatorul se opreste din tastat, nu pe fiecare litera.
+const AUTOSAVE_DEBOUNCE_MS = 1000
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10)
@@ -19,6 +22,7 @@ function emptyFisa() {
     client: { nume: '', telefon: '' },
     auto: { nrInmatriculare: '', marca: '', model: '', vin: '', an: '' },
     data: todayISO(),
+    dataCurenta: true,
     piese: [],
     lucrari: [],
     reducerePercent: 0
@@ -36,7 +40,8 @@ export default function App() {
   const [toast, setToast] = useState(null)
   const [releasing, setReleasing] = useState(false)
   const [pdfRetry, setPdfRetry] = useState(null) // { fisa, baseName }
-  const dirtyRef = useRef(false)
+  const saveTimerRef = useRef(null)
+  const hasSavedOnceRef = useRef(false)
 
   const showToast = useCallback((type, message, action) => setToast({ type, message, action }), [])
 
@@ -60,24 +65,29 @@ export default function App() {
 
   useEffect(() => {
     draftBackupRef.current = fisa
-    dirtyRef.current = true
   }, [fisa])
 
-  // Autosave periodic al draftului curent, daca are continut relevant introdus.
+  // Autosave: prima salvare e instanta (fisa apare imediat in sidebar la primul
+  // caracter), salvarile urmatoare sunt debounce-uite ca sa nu scriem pe disc
+  // la fiecare apasare de tasta.
   useEffect(() => {
-    const interval = setInterval(async () => {
-      if (!dirtyRef.current) return
-      if (!fisaAreContinut(fisa)) return
+    if (!fisaAreContinut(fisa)) return undefined
+
+    const isFirstSave = !fisa.id && !hasSavedOnceRef.current
+    const delay = isFirstSave ? 0 : AUTOSAVE_DEBOUNCE_MS
+
+    saveTimerRef.current = setTimeout(async () => {
+      hasSavedOnceRef.current = true
       const res = await window.serviceAuto.fisa.saveDraft(fisa)
-      dirtyRef.current = false
       if (res.ok) {
         if (!fisa.id) setFisa((f) => (f.id ? f : { ...f, id: res.data }))
         refreshDrafts()
       } else {
         showToast('error', `Autosave esuat: ${res.error.message}`)
       }
-    }, AUTOSAVE_MS)
-    return () => clearInterval(interval)
+    }, delay)
+
+    return () => clearTimeout(saveTimerRef.current)
   }, [fisa, refreshDrafts, showToast])
 
   async function handleOpenDraft(id) {
@@ -94,15 +104,21 @@ export default function App() {
   async function handleDeleteDraft(id) {
     const res = await window.serviceAuto.fisa.deleteDraft(id)
     if (res.ok) {
-      if (fisa.id === id) setFisa(emptyFisa())
+      if (fisa.id === id) resetToNewFisa()
       refreshDrafts()
     } else {
       showToast('error', res.error.message)
     }
   }
 
-  function handleNewFisa() {
+  function resetToNewFisa() {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    hasSavedOnceRef.current = false
     setFisa(emptyFisa())
+  }
+
+  function handleNewFisa() {
+    resetToNewFisa()
     setErrors({})
     setPdfRetry(null)
   }
@@ -127,7 +143,7 @@ export default function App() {
 
     if (res.data.pdfSaved) {
       showToast('success', `Fisa finalizata si PDF salvat: ${res.data.baseName}.pdf`)
-      setFisa(emptyFisa())
+      resetToNewFisa()
       setErrors({})
       setPdfRetry(null)
     } else {
@@ -146,7 +162,7 @@ export default function App() {
     if (res.ok) {
       showToast('success', `PDF salvat: ${baseName}.pdf`)
       setPdfRetry(null)
-      setFisa(emptyFisa())
+      resetToNewFisa()
     } else {
       showToast('error', `PDF tot a esuat: ${res.error.message}`, {
         label: 'Reincearca',

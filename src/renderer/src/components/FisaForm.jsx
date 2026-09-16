@@ -68,11 +68,30 @@ export default function FisaForm({ fisa, onChange, errors }) {
 
       <section className="card">
         <h2>Interventie</h2>
-        <div className="grid-2">
-          <Field label="Data" error={errors['data']}>
-            <input type="date" value={fisa.data} onChange={(e) => onChange({ ...fisa, data: e.target.value })} />
-          </Field>
+        <div className="checkbox-field">
+          <label>
+            <input
+              type="checkbox"
+              checked={fisa.dataCurenta}
+              onChange={(e) => onChange({ ...fisa, dataCurenta: e.target.checked })}
+            />
+            Data curenta
+          </label>
+          {fisa.dataCurenta && (
+            <span className="hint">La finalizare (Release) se va folosi data si ora curenta.</span>
+          )}
         </div>
+        {!fisa.dataCurenta && (
+          <div className="grid-2">
+            <Field label="Data" error={errors['data']}>
+              <input
+                type="date"
+                value={fisa.data}
+                onChange={(e) => onChange({ ...fisa, data: e.target.value })}
+              />
+            </Field>
+          </div>
+        )}
       </section>
     </>
   )

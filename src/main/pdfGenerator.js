@@ -39,10 +39,24 @@ function formatBani(n) {
   return `${n.toFixed(2)} lei`
 }
 
-function formatDataAfisare(dataISO) {
-  const [y, m, d] = String(dataISO || '').split('-')
+function formatDataAfisare(fisa) {
+  const dataISO = fisa?.data
+  const [y, m, d] = String(dataISO || '').slice(0, 10).split('-')
   if (!y || !m || !d) return dataISO || '-'
-  return `${d}.${m}.${y}`
+  const dataStr = `${d}.${m}.${y}`
+
+  // Cand fisa a fost finalizata cu "Data curenta" bifat, dataISO e un
+  // datetime complet - afisam si ora exacta a finalizarii.
+  if (fisa?.dataCurenta && dataISO.length > 10) {
+    const dt = new Date(dataISO)
+    if (!isNaN(dt)) {
+      const hh = String(dt.getHours()).padStart(2, '0')
+      const min = String(dt.getMinutes()).padStart(2, '0')
+      return `${dataStr} ${hh}:${min}`
+    }
+  }
+
+  return dataStr
 }
 
 function tabelPiese(piese) {
@@ -76,7 +90,7 @@ function buildDocDefinition(fisa) {
 
   const content = [
     { text: 'Fisa de service auto', style: 'titlu' },
-    { text: `Data interventiei: ${formatDataAfisare(fisa.data)}`, margin: [0, 0, 0, 12] },
+    { text: `Data interventiei: ${formatDataAfisare(fisa)}`, margin: [0, 0, 0, 12] },
 
     { text: 'Client', style: 'sectiune' },
     {
