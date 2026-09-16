@@ -144,6 +144,29 @@ export default function App() {
     setFisa(emptyFisa())
   }
 
+  // Dupa finalizare, trecem la o alta fisa in lucru daca exista una (cazul
+  // uzual la un flux cu mai multe masini in paralel); daca nu mai e nimic
+  // in lucru, deschidem o fisa noua goala.
+  async function goToNextDraftOrNew() {
+    const res = await window.serviceAuto.fisa.listDrafts()
+    if (!res.ok) {
+      showToast('error', res.error.message)
+      resetToNewFisa()
+      setErrors({})
+      setPdfRetry(null)
+      return
+    }
+
+    setDrafts(res.data)
+    if (res.data.length > 0) {
+      await handleOpenDraft(res.data[0].id)
+    } else {
+      resetToNewFisa()
+      setErrors({})
+      setPdfRetry(null)
+    }
+  }
+
   function handleNewFisa() {
     resetToNewFisa()
     setErrors({})
@@ -170,9 +193,7 @@ export default function App() {
 
     if (res.data.pdfSaved) {
       showToast('success', `Fisa finalizata si PDF salvat: ${res.data.baseName}.pdf`)
-      resetToNewFisa()
-      setErrors({})
-      setPdfRetry(null)
+      await goToNextDraftOrNew()
     } else {
       setPdfRetry({ fisa: res.data.fisa, baseName: res.data.baseName })
       showToast(
@@ -180,8 +201,8 @@ export default function App() {
         `Fisa a fost salvata, dar PDF-ul a esuat: ${res.data.pdfError}`,
         { label: 'Reincearca PDF', onClick: () => handleRetryPdf(res.data.fisa, res.data.baseName) }
       )
+      refreshDrafts()
     }
-    refreshDrafts()
   }
 
   async function handleRetryPdf(finalFisa, baseName) {
@@ -189,7 +210,7 @@ export default function App() {
     if (res.ok) {
       showToast('success', `PDF salvat: ${baseName}.pdf`)
       setPdfRetry(null)
-      resetToNewFisa()
+      await goToNextDraftOrNew()
     } else {
       showToast('error', `PDF tot a esuat: ${res.error.message}`, {
         label: 'Reincearca',
