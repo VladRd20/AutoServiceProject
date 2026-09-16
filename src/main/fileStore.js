@@ -40,24 +40,41 @@ export function isUsingFallbackLocation() {
 
 async function tryUseDir(dir) {
   await fs.mkdir(dir, { recursive: true })
-  const testFile = path.join(dir, '.write-test')
+  // Nume unic per apel, ca doua verificari concurente sa nu-si stearga
+  // reciproc fisierul de test (ar produce ENOENT fals-pozitiv la unlink).
+  const testFile = path.join(dir, `.write-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   await fs.writeFile(testFile, 'ok')
   await fs.unlink(testFile)
 }
 
-export async function ensureDirs() {
-  try {
-    await tryUseDir(primaryDir())
-    resolvedBaseDir = primaryDir()
-    usingFallback = false
-  } catch (err) {
-    log.warn(
-      `[fileStore] folderul "${primaryDir()}" nu e scriptibil, revin la folderul de date standard (AppData)`,
-      err
-    )
-    resolvedBaseDir = fallbackDir()
-    usingFallback = true
+// Rezolvarea locatiei (primary vs fallback) se face o singura data per pornire
+// a aplicatiei - toate apelurile concurente la ensureDirs() (listDrafts,
+// saveDraft, etc, care pot porni aproape simultan la incarcarea UI-ului)
+// asteapta acelasi rezultat, in loc sa ruleze fiecare propriul test de scriere.
+let baseDirPromise = null
+
+function resolveBaseDir() {
+  if (!baseDirPromise) {
+    baseDirPromise = (async () => {
+      try {
+        await tryUseDir(primaryDir())
+        usingFallback = false
+        return primaryDir()
+      } catch (err) {
+        log.warn(
+          `[fileStore] folderul "${primaryDir()}" nu e scriptibil, revin la folderul de date standard (AppData)`,
+          err
+        )
+        usingFallback = true
+        return fallbackDir()
+      }
+    })()
   }
+  return baseDirPromise
+}
+
+export async function ensureDirs() {
+  resolvedBaseDir = await resolveBaseDir()
 
   for (const dir of [getFiseDir(), getDraftsDir(), getBackupDir()]) {
     try {
