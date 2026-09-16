@@ -4,6 +4,7 @@ import fs from 'fs/promises'
 import log from './logger'
 import { toAppError, AppError } from './errors'
 import { foldForMatch } from '../shared/calculations'
+import { SEED_MARCI_MODELE, SEED_PIESE, SEED_LUCRARI } from '../shared/seedData'
 
 // Locatia principala: folderul "date" langa aplicatie (portabil, usor de gasit
 // si de facut backup manual) - in dev, langa proiect; in build, langa exe.
@@ -257,6 +258,21 @@ export async function getAutocompleteData() {
   const modelePerMarca = {} // cheie lowercase marca -> Set de modele
   const piese = new Map() // cheie lowercase denumire -> { denumire, pretUnitar, finalizedAt }
   const lucrari = new Map()
+
+  // Pornim de la setul de baza (piata din Romania) - istoricul real, de mai
+  // jos, il suprascrie mereu pe acesta (finalizedAt gol pierde in fata
+  // oricarei fise reale, vezi comparatia din upsertItem).
+  for (const [marca, modele] of Object.entries(SEED_MARCI_MODELE)) {
+    const marcaKey = foldForMatch(marca)
+    marci.set(marcaKey, marca)
+    modelePerMarca[marcaKey] = new Set(modele)
+  }
+  for (const denumire of SEED_PIESE) {
+    piese.set(foldForMatch(denumire), { denumire, finalizedAt: '' })
+  }
+  for (const denumire of SEED_LUCRARI) {
+    lucrari.set(foldForMatch(denumire), { denumire, finalizedAt: '' })
+  }
 
   function upsertItem(map, denumireRaw, pretRaw, finalizedAt, priceKey) {
     const denumire = denumireRaw?.trim()

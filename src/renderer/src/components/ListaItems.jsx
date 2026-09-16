@@ -29,7 +29,7 @@ export default function ListaItems({
   // vreodata un pret pe care utilizatorul l-a introdus deja intentionat.
   function handleDenumireChange(item, value) {
     const match = suggestions?.find((s) => foldForMatch(s.denumire) === foldForMatch(value))
-    if (match && Number(item[priceKey]) === 0) {
+    if (match && match[priceKey] != null && Number(item[priceKey]) === 0) {
       updateItem(item.id, { denumire: value, [priceKey]: match[priceKey] })
     } else {
       updateItem(item.id, { denumire: value })
