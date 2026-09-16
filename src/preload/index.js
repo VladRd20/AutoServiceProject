@@ -25,6 +25,8 @@ const api = {
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
+    downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
+    installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
     onUpdateEvent: (callback) => {
       const listener = (_e, payload) => callback(payload)
       ipcRenderer.on('update:event', listener)

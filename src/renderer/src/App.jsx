@@ -5,6 +5,7 @@ import Totaluri from './components/Totaluri'
 import Toast from './components/Toast'
 import DraftsSidebar from './components/DraftsSidebar'
 import SearchModal from './components/SearchModal'
+import UpdateBanner from './components/UpdateBanner'
 import { validateFisa } from '../../shared/calculations'
 import { draftBackupRef } from './draftBackup'
 
@@ -43,6 +44,7 @@ export default function App() {
   const [checkingUpdates, setCheckingUpdates] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [recentFise, setRecentFise] = useState([])
+  const [updateInfo, setUpdateInfo] = useState({ status: 'idle' })
 
   const showToast = useCallback((type, message, action) => setToast({ type, message, action }), [])
 
@@ -75,9 +77,10 @@ export default function App() {
     draftBackupRef.current = fisa
   }, [fisa])
 
-  // Update-urile de versiune noua/gata de instalare sunt afisate de main
-  // process printr-un dialog nativ. Aici tratam doar starile relevante pentru
-  // o verificare declansata manual din UI (buton "Verifica actualizari").
+  // Update-urile de versiune noua/gata de instalare sunt anuntate si printr-un
+  // dialog nativ (main process), dar tinem si o stare persistenta in UI
+  // (banner) - daca utilizatorul inchide dialogul fara sa raspunda, tot vede
+  // ca exista o actualizare disponibila, nu doar un toast care dispare.
   useEffect(() => {
     const unsubscribe = window.serviceAuto.app.onUpdateEvent((evt) => {
       if (evt.type === 'checking') {
@@ -85,6 +88,16 @@ export default function App() {
         return
       }
       setCheckingUpdates(false)
+
+      if (evt.type === 'available') {
+        setUpdateInfo({ status: 'available', version: evt.version })
+      } else if (evt.type === 'downloading') {
+        setUpdateInfo((info) => ({ status: 'downloading', version: info.version, percent: 0 }))
+      } else if (evt.type === 'progress') {
+        setUpdateInfo((info) => ({ ...info, status: 'downloading', percent: evt.percent }))
+      } else if (evt.type === 'downloaded') {
+        setUpdateInfo({ status: 'downloaded', version: evt.version })
+      }
 
       if (!manualUpdateCheckRef.current) return
       manualUpdateCheckRef.current = false
@@ -94,7 +107,6 @@ export default function App() {
       } else if (evt.type === 'error') {
         showToast('error', `Verificarea actualizarilor a esuat: ${evt.message || 'eroare necunoscuta'}.`)
       }
-      // 'available' e deja anuntat printr-un dialog nativ de main process.
     })
     return unsubscribe
   }, [showToast])
@@ -102,6 +114,14 @@ export default function App() {
   function handleCheckForUpdates() {
     manualUpdateCheckRef.current = true
     window.serviceAuto.app.checkForUpdates()
+  }
+
+  function handleDownloadUpdate() {
+    window.serviceAuto.app.downloadUpdate()
+  }
+
+  function handleInstallUpdate() {
+    window.serviceAuto.app.installUpdate()
   }
 
   // Autosave: prima salvare e instanta (fisa apare imediat in "Fise in lucru",
@@ -264,6 +284,14 @@ export default function App() {
       />
 
       <main className="main">
+        <UpdateBanner
+          status={updateInfo.status}
+          version={updateInfo.version}
+          percent={updateInfo.percent}
+          onDownload={handleDownloadUpdate}
+          onInstall={handleInstallUpdate}
+        />
+
         <header className="topbar">
           <h1>Fisa de service auto</h1>
           <div className="topbar-actions">

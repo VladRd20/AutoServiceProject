@@ -143,6 +143,63 @@ body {
   gap: 10px;
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.update-banner button {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+  padding: 6px 14px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.update-banner button:hover {
+  background: #1d4ed8;
+}
+
+.update-banner-ready {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #14532d;
+}
+
+.update-banner-ready button {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
+.update-banner-ready button:hover {
+  background: #15803d;
+}
+
+.update-progress {
+  flex: 1;
+  height: 6px;
+  background: #dbeafe;
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 200px;
+}
+
+.update-progress-fill {
+  height: 100%;
+  background: #2563eb;
+  transition: width 0.3s ease;
+}
+
 .topbar h1 {
   font-size: 22px;
   margin: 0;

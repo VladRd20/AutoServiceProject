@@ -15,7 +15,7 @@ import {
   listRecentFise
 } from './fileStore'
 import { generatePdf } from './pdfGenerator'
-import { checkForUpdatesSafe } from './updater'
+import { checkForUpdatesSafe, downloadUpdateNow, installUpdateNow } from './updater'
 
 // Orice eroare e prinsa aici si transformata intr-un rezultat {ok:false, error}
 // serializabil - nu lasam niciodata o exceptie bruta sa traverseze IPC catre UI,
@@ -115,5 +115,19 @@ export function registerIpcHandlers() {
       checkForUpdatesSafe()
       return true
     }, 'checkForUpdates')
+  )
+
+  ipcMain.handle('app:downloadUpdate', () =>
+    wrap(async () => {
+      downloadUpdateNow()
+      return true
+    }, 'downloadUpdate')
+  )
+
+  ipcMain.handle('app:installUpdate', () =>
+    wrap(async () => {
+      installUpdateNow()
+      return true
+    }, 'installUpdate')
   )
 }

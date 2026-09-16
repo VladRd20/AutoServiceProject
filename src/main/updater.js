@@ -10,6 +10,8 @@ autoUpdater.autoInstallOnAppQuit = true
 
 let mainWindowRef = null
 let checking = false
+let downloading = false
+let downloaded = false
 
 function sendStatus(type, data) {
   if (mainWindowRef && !mainWindowRef.isDestroyed()) {
@@ -46,12 +48,7 @@ export function initUpdater(mainWindow) {
         cancelId: 1
       })
       .then(({ response }) => {
-        if (response !== 0) return
-        sendStatus('downloading')
-        autoUpdater.downloadUpdate().catch((err) => {
-          log.warn('[updater] downloadUpdate esuat', err)
-          sendStatus('error', { message: err?.message })
-        })
+        if (response === 0) downloadUpdateNow()
       })
       .catch((err) => log.warn('[updater] dialog update-available esuat', err))
   })
@@ -62,6 +59,8 @@ export function initUpdater(mainWindow) {
 
   autoUpdater.on('update-downloaded', (info) => {
     log.info(`[updater] update ${info.version} descarcat, se ofera restart`)
+    downloading = false
+    downloaded = true
     sendStatus('downloaded', { version: info.version })
 
     dialog
@@ -74,7 +73,7 @@ export function initUpdater(mainWindow) {
         cancelId: 1
       })
       .then(({ response }) => {
-        if (response === 0) autoUpdater.quitAndInstall()
+        if (response === 0) installUpdateNow()
       })
       .catch((err) => log.warn('[updater] dialog update-downloaded esuat', err))
   })
@@ -94,4 +93,23 @@ export function checkForUpdatesSafe() {
     .finally(() => {
       checking = false
     })
+}
+
+// Declansata fie din dialogul nativ, fie din butonul "Descarca" al
+// banner-ului din UI - idempotenta, nu porneste o a doua descarcare daca
+// una e deja in curs.
+export function downloadUpdateNow() {
+  if (downloading || downloaded) return
+  downloading = true
+  sendStatus('downloading')
+  autoUpdater.downloadUpdate().catch((err) => {
+    downloading = false
+    log.warn('[updater] downloadUpdate esuat', err)
+    sendStatus('error', { message: err?.message })
+  })
+}
+
+export function installUpdateNow() {
+  if (!downloaded) return
+  autoUpdater.quitAndInstall()
 }
