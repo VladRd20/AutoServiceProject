@@ -55,8 +55,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "CHANGE_ME_GITHUB_USERNAME",
-      "repo": "CHANGE_ME_REPO_NAME"
+      "owner": "VladRd20",
+      "repo": "AutoServiceProject"
     }
   },
   "allowScripts": {
