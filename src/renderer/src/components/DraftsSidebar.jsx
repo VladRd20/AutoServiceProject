@@ -1,6 +1,21 @@
 import React from 'react'
 
-export default function DraftsSidebar({ drafts, currentId, onOpen, onDelete, onNew }) {
+function formatData(dataISO) {
+  const datePart = String(dataISO || '').slice(0, 10)
+  const [y, m, d] = datePart.split('-')
+  return y && m && d ? `${d}.${m}.${y}` : dataISO || '-'
+}
+
+export default function DraftsSidebar({
+  drafts,
+  currentId,
+  onOpen,
+  onDelete,
+  onNew,
+  recentFise,
+  onEditRecent,
+  onOpenPdf
+}) {
   return (
     <aside className="sidebar">
       <button type="button" className="btn-primary" onClick={onNew}>
@@ -29,6 +44,29 @@ export default function DraftsSidebar({ drafts, currentId, onOpen, onDelete, onN
             </li>
           )
         })}
+      </ul>
+
+      <h3>Lucrari recente</h3>
+      {recentFise.length === 0 && <p className="hint">Nicio fisa finalizata inca.</p>}
+      <ul className="recent-list">
+        {recentFise.map((f) => (
+          <li key={f._file}>
+            <div className="recent-info">
+              <strong>{f.auto?.nrInmatriculare || 'Fara numar'}</strong>
+              <span>
+                {f.client?.nume || 'Fara nume'} · {formatData(f.data)}
+              </span>
+            </div>
+            <div className="recent-actions">
+              <button type="button" title="Editeaza (creeaza o fisa noua pe baza acesteia)" onClick={() => onEditRecent(f)}>
+                Editeaza
+              </button>
+              <button type="button" title="Deschide PDF" onClick={() => onOpenPdf(f._file)}>
+                PDF
+              </button>
+            </div>
+          </li>
+        ))}
       </ul>
     </aside>
   )

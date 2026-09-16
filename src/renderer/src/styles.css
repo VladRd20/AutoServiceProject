@@ -74,6 +74,57 @@ body {
   color: #9ca3af;
 }
 
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recent-list li {
+  padding: 8px;
+  border-radius: 6px;
+  background: #2d3341;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recent-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.recent-info strong {
+  font-size: 13px;
+  color: #e5e7eb;
+}
+
+.recent-info span {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.recent-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.recent-actions button {
+  flex: 1;
+  font-size: 11px;
+  padding: 4px 6px;
+  background: #1f2430;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+}
+
+.recent-actions button:hover {
+  background: #374151;
+}
+
 .main {
   flex: 1;
   overflow-y: auto;

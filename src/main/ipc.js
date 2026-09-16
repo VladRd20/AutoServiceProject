@@ -11,7 +11,8 @@ import {
   getPdfPath,
   backupNow,
   isUsingFallbackLocation,
-  searchFise
+  searchFise,
+  listRecentFise
 } from './fileStore'
 import { generatePdf } from './pdfGenerator'
 import { checkForUpdatesSafe } from './updater'
@@ -79,6 +80,8 @@ export function registerIpcHandlers() {
   )
 
   ipcMain.handle('fisa:search', (e, query) => wrap(() => searchFise(query), 'search'))
+
+  ipcMain.handle('fisa:listRecent', (e, limit) => wrap(() => listRecentFise(limit), 'listRecent'))
 
   ipcMain.handle('fise:openPdf', (e, fileName) =>
     wrap(async () => {

@@ -224,14 +224,10 @@ function foldForSearch(value) {
     .replace(/[̀-ͯ]/g, '')
 }
 
-// Cauta in toate fisele finalizate dupa client, numar de inmatriculare,
-// marca/model sau VIN. Citeste fiecare fisa de pe disc - suficient de rapid
-// pentru volumul unui singur service auto (sute-mii de fise).
-export async function searchFise(query) {
-  await ensureDirs()
-  const q = foldForSearch(query).trim()
-  if (!q) return []
-
+// Citeste toate fisele finalizate de pe disc. Suficient de rapid pentru
+// volumul unui singur service auto (sute-mii de fise) - o fisa corupta
+// individual e logata si sarita, nu blocheaza restul.
+async function readAllFiseFinalizate() {
   let files
   try {
     files = (await fs.readdir(getFiseDir())).filter((f) => f.endsWith('.json'))
@@ -239,33 +235,53 @@ export async function searchFise(query) {
     throw toAppError(err, 'Nu s-a putut citi lista de fise finalizate.')
   }
 
-  const results = []
+  const result = []
   for (const f of files) {
     try {
       const raw = await fs.readFile(path.join(getFiseDir(), f), 'utf-8')
-      const fisa = JSON.parse(raw)
-      const haystack = foldForSearch(
-        [
-          fisa.client?.nume,
-          fisa.client?.telefon,
-          fisa.auto?.nrInmatriculare,
-          fisa.auto?.marca,
-          fisa.auto?.model,
-          fisa.auto?.vin
-        ]
-          .filter(Boolean)
-          .join(' ')
-      )
-      if (haystack.includes(q)) {
-        results.push({ ...fisa, _file: f })
-      }
+      result.push({ ...JSON.parse(raw), _file: f })
     } catch (err) {
-      // O fisa corupta individual nu trebuie sa blocheze cautarea - o logam si sarim peste ea.
-      log.warn(`[fileStore] fisa finalizata corupta sarita la cautare: ${f}`, err)
+      log.warn(`[fileStore] fisa finalizata corupta sarita: ${f}`, err)
     }
   }
+  return result
+}
 
-  return results.sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || ''))
+function fisaHaystack(fisa) {
+  return foldForSearch(
+    [
+      fisa.client?.nume,
+      fisa.client?.telefon,
+      fisa.auto?.nrInmatriculare,
+      fisa.auto?.marca,
+      fisa.auto?.model,
+      fisa.auto?.vin
+    ]
+      .filter(Boolean)
+      .join(' ')
+  )
+}
+
+// Cauta in toate fisele finalizate dupa client, numar de inmatriculare,
+// marca/model sau VIN.
+export async function searchFise(query) {
+  await ensureDirs()
+  const q = foldForSearch(query).trim()
+  if (!q) return []
+
+  const all = await readAllFiseFinalizate()
+  return all
+    .filter((fisa) => fisaHaystack(fisa).includes(q))
+    .sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || ''))
+}
+
+// Cele mai recente fise finalizate, pentru acces rapid din sidebar.
+export async function listRecentFise(limit = 8) {
+  await ensureDirs()
+  const all = await readAllFiseFinalizate()
+  return all
+    .sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || ''))
+    .slice(0, limit)
 }
 
 // Backup simplu: copiaza folderul de fise intr-un subfolder datat.

@@ -42,6 +42,7 @@ export default function App() {
   const manualUpdateCheckRef = useRef(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [recentFise, setRecentFise] = useState([])
 
   const showToast = useCallback((type, message, action) => setToast({ type, message, action }), [])
 
@@ -51,8 +52,15 @@ export default function App() {
     else showToast('error', res.error.message)
   }, [showToast])
 
+  const refreshRecentFise = useCallback(async () => {
+    const res = await window.serviceAuto.fisa.listRecent(8)
+    if (res.ok) setRecentFise(res.data)
+    else showToast('error', res.error.message)
+  }, [showToast])
+
   useEffect(() => {
     refreshDrafts()
+    refreshRecentFise()
     window.serviceAuto.fise.getLocationInfo().then((res) => {
       if (res.ok && res.data.usingFallback) {
         showToast(
@@ -61,7 +69,7 @@ export default function App() {
         )
       }
     })
-  }, [refreshDrafts, showToast])
+  }, [refreshDrafts, refreshRecentFise, showToast])
 
   useEffect(() => {
     draftBackupRef.current = fisa
@@ -148,6 +156,7 @@ export default function App() {
   // uzual la un flux cu mai multe masini in paralel); daca nu mai e nimic
   // in lucru, deschidem o fisa noua goala.
   async function goToNextDraftOrNew() {
+    refreshRecentFise()
     const res = await window.serviceAuto.fisa.listDrafts()
     if (!res.ok) {
       showToast('error', res.error.message)
@@ -224,6 +233,18 @@ export default function App() {
     if (!res.ok) showToast('error', res.error.message)
   }
 
+  // "Editeaza" pe o lucrare recenta nu modifica fisa finalizata/PDF-ul
+  // existent - creeaza o fisa noua, in lucru, pre-completata cu aceleasi
+  // date, ca istoricul deja finalizat sa ramana intact.
+  function handleEditRecent(finalizedFisa) {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    hasSavedOnceRef.current = false
+    const { _file, id, status, finalizedAt, ...rest } = finalizedFisa
+    setFisa({ ...rest, id: null })
+    setErrors({})
+    setPdfRetry(null)
+  }
+
   async function handleOpenPdfFromSearch(fileName) {
     const res = await window.serviceAuto.fise.openPdf(fileName)
     if (!res.ok) showToast('error', res.error.message)
@@ -237,6 +258,9 @@ export default function App() {
         onOpen={handleOpenDraft}
         onDelete={handleDeleteDraft}
         onNew={handleNewFisa}
+        recentFise={recentFise}
+        onEditRecent={handleEditRecent}
+        onOpenPdf={handleOpenPdfFromSearch}
       />
 
       <main className="main">
