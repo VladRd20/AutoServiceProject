@@ -143,7 +143,7 @@ function buildDocDefinition(fisa) {
       ? {
           text: `Reducere (${totals.procentReducere}%): -${formatBani(totals.valoareReducere)}`,
           alignment: 'right',
-          color: '#b45309'
+          color: '#15803d'
         }
       : null,
     { text: `Total final: ${formatBani(totals.totalFinal)}`, alignment: 'right', style: 'totalFinal' }
