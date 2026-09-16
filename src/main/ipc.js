@@ -10,7 +10,8 @@ import {
   getFiseDir,
   getPdfPath,
   backupNow,
-  isUsingFallbackLocation
+  isUsingFallbackLocation,
+  searchFise
 } from './fileStore'
 import { generatePdf } from './pdfGenerator'
 import { checkForUpdatesSafe } from './updater'
@@ -75,6 +76,18 @@ export function registerIpcHandlers() {
       await generatePdf(fisa, pdfPath)
       return { pdfSaved: true, pdfPath }
     }, 'retryPdf')
+  )
+
+  ipcMain.handle('fisa:search', (e, query) => wrap(() => searchFise(query), 'search'))
+
+  ipcMain.handle('fise:openPdf', (e, fileName) =>
+    wrap(async () => {
+      const baseName = String(fileName || '').replace(/\.json$/, '')
+      const pdfPath = getPdfPath(baseName)
+      const result = await shell.openPath(pdfPath)
+      if (result) throw new Error(result)
+      return pdfPath
+    }, 'openPdf')
   )
 
   ipcMain.handle('fise:getLocationInfo', () =>

@@ -10,10 +10,12 @@ const api = {
     deleteDraft: (id) => ipcRenderer.invoke('fisa:deleteDraft', id),
     validate: (fisa) => ipcRenderer.invoke('fisa:validate', fisa),
     finalize: (fisa) => ipcRenderer.invoke('fisa:finalize', fisa),
-    retryPdf: (payload) => ipcRenderer.invoke('fisa:retryPdf', payload)
+    retryPdf: (payload) => ipcRenderer.invoke('fisa:retryPdf', payload),
+    search: (query) => ipcRenderer.invoke('fisa:search', query)
   },
   fise: {
     openFolder: () => ipcRenderer.invoke('fise:openFolder'),
+    openPdf: (fileName) => ipcRenderer.invoke('fise:openPdf', fileName),
     getLocationInfo: () => ipcRenderer.invoke('fise:getLocationInfo')
   },
   backup: {

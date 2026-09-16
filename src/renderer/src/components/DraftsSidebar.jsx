@@ -9,17 +9,26 @@ export default function DraftsSidebar({ drafts, currentId, onOpen, onDelete, onN
       <h3>Fise in lucru</h3>
       {drafts.length === 0 && <p className="hint">Niciuna momentan.</p>}
       <ul className="drafts-list">
-        {drafts.map((d) => (
-          <li key={d.id} className={d.id === currentId ? 'active' : ''}>
-            <button type="button" onClick={() => onOpen(d.id)}>
-              <strong>{d.auto?.nrInmatriculare || 'Fara numar'}</strong>
-              <span>{d.client?.nume || 'Fara nume client'}</span>
-            </button>
-            <button type="button" className="btn-remove" title="Sterge" onClick={() => onDelete(d.id)}>
-              ✕
-            </button>
-          </li>
-        ))}
+        {drafts.map((d) => {
+          const goala = !d.auto?.nrInmatriculare?.trim() && !d.client?.nume?.trim()
+          return (
+            <li key={d.id} className={d.id === currentId ? 'active' : ''}>
+              <button type="button" onClick={() => onOpen(d.id)}>
+                {goala ? (
+                  <strong>Fisa noua</strong>
+                ) : (
+                  <>
+                    <strong>{d.auto?.nrInmatriculare || 'Fara numar'}</strong>
+                    <span>{d.client?.nume || 'Fara nume client'}</span>
+                  </>
+                )}
+              </button>
+              <button type="button" className="btn-remove" title="Sterge" onClick={() => onDelete(d.id)}>
+                ✕
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </aside>
   )

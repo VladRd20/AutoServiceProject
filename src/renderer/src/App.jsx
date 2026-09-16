@@ -4,6 +4,7 @@ import ListaItems from './components/ListaItems'
 import Totaluri from './components/Totaluri'
 import Toast from './components/Toast'
 import DraftsSidebar from './components/DraftsSidebar'
+import SearchModal from './components/SearchModal'
 import { validateFisa } from '../../shared/calculations'
 import { draftBackupRef } from './draftBackup'
 
@@ -29,10 +30,6 @@ function emptyFisa() {
   }
 }
 
-function fisaAreContinut(fisa) {
-  return Boolean(fisa.client.nume?.trim() || fisa.auto.nrInmatriculare?.trim())
-}
-
 export default function App() {
   const [fisa, setFisa] = useState(emptyFisa)
   const [drafts, setDrafts] = useState([])
@@ -44,6 +41,7 @@ export default function App() {
   const hasSavedOnceRef = useRef(false)
   const manualUpdateCheckRef = useRef(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
 
   const showToast = useCallback((type, message, action) => setToast({ type, message, action }), [])
 
@@ -98,12 +96,10 @@ export default function App() {
     window.serviceAuto.app.checkForUpdates()
   }
 
-  // Autosave: prima salvare e instanta (fisa apare imediat in sidebar la primul
-  // caracter), salvarile urmatoare sunt debounce-uite ca sa nu scriem pe disc
-  // la fiecare apasare de tasta.
+  // Autosave: prima salvare e instanta (fisa apare imediat in "Fise in lucru",
+  // chiar goala, sub o denumire generica), salvarile urmatoare sunt
+  // debounce-uite ca sa nu scriem pe disc la fiecare apasare de tasta.
   useEffect(() => {
-    if (!fisaAreContinut(fisa)) return undefined
-
     const isFirstSave = !fisa.id && !hasSavedOnceRef.current
     const delay = isFirstSave ? 0 : AUTOSAVE_DEBOUNCE_MS
 
@@ -207,6 +203,11 @@ export default function App() {
     if (!res.ok) showToast('error', res.error.message)
   }
 
+  async function handleOpenPdfFromSearch(fileName) {
+    const res = await window.serviceAuto.fise.openPdf(fileName)
+    if (!res.ok) showToast('error', res.error.message)
+  }
+
   return (
     <div className="app">
       <DraftsSidebar
@@ -221,6 +222,9 @@ export default function App() {
         <header className="topbar">
           <h1>Fisa de service auto</h1>
           <div className="topbar-actions">
+            <button type="button" onClick={() => setSearchOpen(true)}>
+              Cauta clienti
+            </button>
             <button type="button" disabled={checkingUpdates} onClick={handleCheckForUpdates}>
               {checkingUpdates ? 'Se verifica...' : 'Verifica actualizari'}
             </button>
@@ -272,6 +276,14 @@ export default function App() {
       </main>
 
       <Toast toast={toast} onClose={() => setToast(null)} />
+
+      {searchOpen && (
+        <SearchModal
+          onClose={() => setSearchOpen(false)}
+          onOpenPdf={handleOpenPdfFromSearch}
+          showToast={showToast}
+        />
+      )}
     </div>
   )
 }
