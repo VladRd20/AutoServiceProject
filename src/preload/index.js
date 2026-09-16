@@ -3,6 +3,10 @@ import { contextBridge, ipcRenderer } from 'electron'
 // API tipizata, restransa la doar ce are nevoie UI-ul - nicio expunere directa
 // de Node/Electron catre renderer (contextIsolation ramane intacta).
 const api = {
+  license: {
+    getStatus: () => ipcRenderer.invoke('license:getStatus'),
+    activate: (key) => ipcRenderer.invoke('license:activate', key)
+  },
   fisa: {
     saveDraft: (fisa) => ipcRenderer.invoke('fisa:saveDraft', fisa),
     loadDraft: (id) => ipcRenderer.invoke('fisa:loadDraft', id),

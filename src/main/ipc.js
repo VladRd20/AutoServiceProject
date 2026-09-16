@@ -17,6 +17,7 @@ import {
 } from './fileStore'
 import { generatePdf } from './pdfGenerator'
 import { checkForUpdatesSafe, downloadUpdateNow, installUpdateNow } from './updater'
+import { isActivated, activate } from './license'
 
 // Orice eroare e prinsa aici si transformata intr-un rezultat {ok:false, error}
 // serializabil - nu lasam niciodata o exceptie bruta sa traverseze IPC catre UI,
@@ -34,16 +35,39 @@ async function wrap(fn, context) {
   }
 }
 
-export function registerIpcHandlers() {
-  ipcMain.handle('fisa:saveDraft', (e, fisa) => wrap(() => saveDraft(fisa), 'saveDraft'))
-  ipcMain.handle('fisa:loadDraft', (e, id) => wrap(() => loadDraft(id), 'loadDraft'))
-  ipcMain.handle('fisa:listDrafts', () => wrap(() => listDrafts(), 'listDrafts'))
-  ipcMain.handle('fisa:deleteDraft', (e, id) => wrap(() => deleteDraft(id), 'deleteDraft'))
+// Poarta de licenta - gardeaza handlerele "de business" (fise, cautare,
+// PDF-uri). Verificarea reala are loc in main process, nu doar in UI, ca
+// simpla ascundere a ecranului din renderer sa nu fie suficienta pentru a
+// ocoli activarea.
+function wrapLicensed(fn, context) {
+  return wrap(() => {
+    if (!isActivated()) {
+      const err = new Error('Aplicatia nu este activata. Introdu cheia de licenta.')
+      err.code = 'NOT_LICENSED'
+      throw err
+    }
+    return fn()
+  }, context)
+}
 
-  ipcMain.handle('fisa:validate', (e, fisa) => wrap(() => validateFisa(fisa), 'validate'))
+export function registerIpcHandlers() {
+  ipcMain.handle('license:getStatus', () => wrap(() => ({ activated: isActivated() }), 'license:getStatus'))
+  ipcMain.handle('license:activate', (e, key) =>
+    wrap(() => {
+      const payload = activate(key)
+      return { activated: true, payload }
+    }, 'license:activate')
+  )
+
+  ipcMain.handle('fisa:saveDraft', (e, fisa) => wrapLicensed(() => saveDraft(fisa), 'saveDraft'))
+  ipcMain.handle('fisa:loadDraft', (e, id) => wrapLicensed(() => loadDraft(id), 'loadDraft'))
+  ipcMain.handle('fisa:listDrafts', () => wrapLicensed(() => listDrafts(), 'listDrafts'))
+  ipcMain.handle('fisa:deleteDraft', (e, id) => wrapLicensed(() => deleteDraft(id), 'deleteDraft'))
+
+  ipcMain.handle('fisa:validate', (e, fisa) => wrapLicensed(() => validateFisa(fisa), 'validate'))
 
   ipcMain.handle('fisa:finalize', (e, fisa) =>
-    wrap(async () => {
+    wrapLicensed(async () => {
       const { valid, errors } = validateFisa(fisa)
       if (!valid) {
         const err = new Error('Fisa contine campuri invalide sau incomplete.')
@@ -73,21 +97,23 @@ export function registerIpcHandlers() {
   )
 
   ipcMain.handle('fisa:retryPdf', (e, { fisa, baseName }) =>
-    wrap(async () => {
+    wrapLicensed(async () => {
       const pdfPath = getPdfPath(baseName)
       await generatePdf(fisa, pdfPath)
       return { pdfSaved: true, pdfPath }
     }, 'retryPdf')
   )
 
-  ipcMain.handle('fisa:search', (e, query) => wrap(() => searchFise(query), 'search'))
+  ipcMain.handle('fisa:search', (e, query) => wrapLicensed(() => searchFise(query), 'search'))
 
-  ipcMain.handle('fisa:listRecent', (e, limit) => wrap(() => listRecentFise(limit), 'listRecent'))
+  ipcMain.handle('fisa:listRecent', (e, limit) => wrapLicensed(() => listRecentFise(limit), 'listRecent'))
 
-  ipcMain.handle('fisa:getAutocompleteData', () => wrap(() => getAutocompleteData(), 'getAutocompleteData'))
+  ipcMain.handle('fisa:getAutocompleteData', () =>
+    wrapLicensed(() => getAutocompleteData(), 'getAutocompleteData')
+  )
 
   ipcMain.handle('fise:openPdf', (e, fileName) =>
-    wrap(async () => {
+    wrapLicensed(async () => {
       const baseName = String(fileName || '').replace(/\.json$/, '')
       const pdfPath = getPdfPath(baseName)
       const result = await shell.openPath(pdfPath)

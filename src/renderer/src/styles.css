@@ -564,3 +564,54 @@ button:hover {
   padding: 24px;
   text-align: center;
 }
+
+.activation-screen {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f5f7;
+}
+
+.activation-card {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.activation-card h1 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+.activation-card p {
+  color: #6b7280;
+  font-size: 14px;
+  margin: 0 0 20px;
+}
+
+.activation-card textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: monospace;
+  resize: vertical;
+  margin-bottom: 12px;
+}
+
+.activation-card button {
+  width: 100%;
+  padding: 10px;
+}
+
+.activation-error {
+  color: #dc2626;
+  font-size: 13px;
+  margin: -4px 0 12px;
+}

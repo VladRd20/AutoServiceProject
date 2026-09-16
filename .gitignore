@@ -7,3 +7,7 @@ dist/
 # Date reale ale clientilor (nume, telefon, fise) - NU trebuie sa ajunga
 # niciodata in repo-ul public GitHub.
 /date/
+
+# Cheia privata de semnare a licentelor - daca ajunge pe GitHub, oricine
+# poate genera chei de licenta valide. NU comite niciodata acest folder.
+/keys/
