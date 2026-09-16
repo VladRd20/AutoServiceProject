@@ -9,7 +9,8 @@ import {
   finalizeFisa,
   getFiseDir,
   getPdfPath,
-  backupNow
+  backupNow,
+  isUsingFallbackLocation
 } from './fileStore'
 import { generatePdf } from './pdfGenerator'
 import { checkForUpdatesSafe } from './updater'
@@ -74,6 +75,10 @@ export function registerIpcHandlers() {
       await generatePdf(fisa, pdfPath)
       return { pdfSaved: true, pdfPath }
     }, 'retryPdf')
+  )
+
+  ipcMain.handle('fise:getLocationInfo', () =>
+    wrap(async () => ({ dir: getFiseDir(), usingFallback: isUsingFallbackLocation() }), 'getLocationInfo')
   )
 
   ipcMain.handle('fise:openFolder', () =>

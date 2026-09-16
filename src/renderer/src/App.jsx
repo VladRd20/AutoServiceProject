@@ -48,7 +48,15 @@ export default function App() {
 
   useEffect(() => {
     refreshDrafts()
-  }, [refreshDrafts])
+    window.serviceAuto.fise.getLocationInfo().then((res) => {
+      if (res.ok && res.data.usingFallback) {
+        showToast(
+          'error',
+          `Folderul din proiect nu e scriptibil - fisele se salveaza in schimb in ${res.data.dir}`
+        )
+      }
+    })
+  }, [refreshDrafts, showToast])
 
   useEffect(() => {
     draftBackupRef.current = fisa

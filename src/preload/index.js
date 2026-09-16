@@ -13,7 +13,8 @@ const api = {
     retryPdf: (payload) => ipcRenderer.invoke('fisa:retryPdf', payload)
   },
   fise: {
-    openFolder: () => ipcRenderer.invoke('fise:openFolder')
+    openFolder: () => ipcRenderer.invoke('fise:openFolder'),
+    getLocationInfo: () => ipcRenderer.invoke('fise:getLocationInfo')
   },
   backup: {
     now: () => ipcRenderer.invoke('backup:now')

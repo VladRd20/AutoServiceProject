@@ -5,29 +5,66 @@ import fsSync from 'fs'
 import log from './logger'
 import { toAppError, AppError } from './errors'
 
-function baseDir() {
+// Locatia principala: folderul "date" langa aplicatie (portabil, usor de gasit
+// si de facut backup manual) - in dev, langa proiect; in build, langa exe.
+// Daca acel folder nu e scriptibil (ex: aplicatia instalata in Program Files
+// fara drepturi de admin), revenim automat la folderul de date standard al
+// utilizatorului (AppData), ca aplicatia sa functioneze oricum.
+function primaryDir() {
+  const root = app.isPackaged ? path.dirname(process.execPath) : app.getAppPath()
+  return path.join(root, 'date')
+}
+
+function fallbackDir() {
   return app.getPath('userData')
 }
 
+let resolvedBaseDir = primaryDir()
+let usingFallback = false
+
 export function getFiseDir() {
-  return path.join(baseDir(), 'fise')
+  return path.join(resolvedBaseDir, 'fise')
 }
 
 export function getDraftsDir() {
-  return path.join(baseDir(), 'drafturi')
+  return path.join(resolvedBaseDir, 'drafturi')
 }
 
 export function getBackupDir() {
-  return path.join(baseDir(), 'backup')
+  return path.join(resolvedBaseDir, 'backup')
+}
+
+export function isUsingFallbackLocation() {
+  return usingFallback
+}
+
+async function tryUseDir(dir) {
+  await fs.mkdir(dir, { recursive: true })
+  const testFile = path.join(dir, '.write-test')
+  await fs.writeFile(testFile, 'ok')
+  await fs.unlink(testFile)
 }
 
 export async function ensureDirs() {
+  try {
+    await tryUseDir(primaryDir())
+    resolvedBaseDir = primaryDir()
+    usingFallback = false
+  } catch (err) {
+    log.warn(
+      `[fileStore] folderul "${primaryDir()}" nu e scriptibil, revin la folderul de date standard (AppData)`,
+      err
+    )
+    resolvedBaseDir = fallbackDir()
+    usingFallback = true
+  }
+
   for (const dir of [getFiseDir(), getDraftsDir(), getBackupDir()]) {
     try {
       await fs.mkdir(dir, { recursive: true })
     } catch (err) {
-      // Daca nu putem crea directoarele de baza, aplicatia nu poate functiona -
-      // aruncam un AppError explicit, prins la nivel de UI la pornire.
+      // Daca nu putem crea directoarele de baza nici in fallback, aplicatia nu
+      // poate functiona - aruncam un AppError explicit, prins la nivel de UI la pornire.
       throw toAppError(err, 'Nu s-a putut crea folderul de date al aplicatiei.')
     }
   }

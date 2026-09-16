@@ -3,3 +3,7 @@ out/
 dist/
 *.log
 .DS_Store
+
+# Date reale ale clientilor (nume, telefon, fise) - NU trebuie sa ajunga
+# niciodata in repo-ul public GitHub.
+/date/
