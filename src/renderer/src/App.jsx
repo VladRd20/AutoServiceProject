@@ -45,6 +45,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [recentFise, setRecentFise] = useState([])
   const [updateInfo, setUpdateInfo] = useState({ status: 'idle' })
+  const [autocomplete, setAutocomplete] = useState({ marci: [], modelePerMarca: {}, piese: [], lucrari: [] })
 
   const showToast = useCallback((type, message, action) => setToast({ type, message, action }), [])
 
@@ -60,9 +61,17 @@ export default function App() {
     else showToast('error', res.error.message)
   }, [showToast])
 
+  // Nu esueaza vizibil daca nu merge - auto-completarea e un confort, nu o
+  // functionalitate critica; daca lipseste, formularul functioneaza normal.
+  const refreshAutocomplete = useCallback(async () => {
+    const res = await window.serviceAuto.fisa.getAutocompleteData()
+    if (res.ok) setAutocomplete(res.data)
+  }, [])
+
   useEffect(() => {
     refreshDrafts()
     refreshRecentFise()
+    refreshAutocomplete()
     window.serviceAuto.fise.getLocationInfo().then((res) => {
       if (res.ok && res.data.usingFallback) {
         showToast(
@@ -71,7 +80,7 @@ export default function App() {
         )
       }
     })
-  }, [refreshDrafts, refreshRecentFise, showToast])
+  }, [refreshDrafts, refreshRecentFise, refreshAutocomplete, showToast])
 
   useEffect(() => {
     draftBackupRef.current = fisa
@@ -186,6 +195,7 @@ export default function App() {
   // in lucru, deschidem o fisa noua goala.
   async function goToNextDraftOrNew() {
     refreshRecentFise()
+    refreshAutocomplete()
     const res = await window.serviceAuto.fisa.listDrafts()
     if (!res.ok) {
       showToast('error', res.error.message)
@@ -331,7 +341,7 @@ export default function App() {
           </div>
         </header>
 
-        <FisaForm fisa={fisa} onChange={setFisa} errors={errors} />
+        <FisaForm fisa={fisa} onChange={setFisa} errors={errors} autocomplete={autocomplete} />
 
         <ListaItems
           titlu="Piese"
@@ -341,6 +351,7 @@ export default function App() {
           priceLabel="Pret unitar"
           errorPrefix="piese"
           errors={errors}
+          suggestions={autocomplete.piese}
         />
 
         <ListaItems
@@ -351,6 +362,7 @@ export default function App() {
           priceLabel="Pret"
           errorPrefix="lucrari"
           errors={errors}
+          suggestions={autocomplete.lucrari}
         />
 
         <Totaluri

@@ -14,6 +14,16 @@ export function round2(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
+// Elimina diacriticele si normalizeaza case-ul, ca "Ștefan"/"stefan" sau
+// "Škoda"/"skoda" sa se potriveasca la cautare/auto-completare. Folosit atat
+// pentru cheile de auto-completare (main) cat si pentru potrivirea lor in UI.
+export function foldForMatch(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+}
+
 export function calcListaTotal(items, pretKey) {
   return round2(
     items.reduce((sum, item) => sum + calcLinieTotal(item.cantitate, item[pretKey]), 0)

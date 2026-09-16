@@ -12,7 +12,8 @@ const api = {
     finalize: (fisa) => ipcRenderer.invoke('fisa:finalize', fisa),
     retryPdf: (payload) => ipcRenderer.invoke('fisa:retryPdf', payload),
     search: (query) => ipcRenderer.invoke('fisa:search', query),
-    listRecent: (limit) => ipcRenderer.invoke('fisa:listRecent', limit)
+    listRecent: (limit) => ipcRenderer.invoke('fisa:listRecent', limit),
+    getAutocompleteData: () => ipcRenderer.invoke('fisa:getAutocompleteData')
   },
   fise: {
     openFolder: () => ipcRenderer.invoke('fise:openFolder'),

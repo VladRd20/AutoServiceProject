@@ -1,14 +1,39 @@
 import React from 'react'
-import { calcLinieTotal } from '../../../shared/calculations'
+import { calcLinieTotal, foldForMatch } from '../../../shared/calculations'
 
 let nextId = 1
 export function newItemId() {
   return `item-${Date.now()}-${nextId++}`
 }
 
-export default function ListaItems({ titlu, items, onChange, priceKey, priceLabel, errorPrefix, errors }) {
+export default function ListaItems({
+  titlu,
+  items,
+  onChange,
+  priceKey,
+  priceLabel,
+  errorPrefix,
+  errors,
+  suggestions
+}) {
+  const datalistId = `denumire-list-${errorPrefix}`
+
   function updateItem(id, patch) {
     onChange(items.map((it) => (it.id === id ? { ...it, ...patch } : it)))
+  }
+
+  // Cand denumirea introdusa se potriveste exact cu una folosita anterior si
+  // pretul e inca la valoarea implicita (0, adica linie noua neatinsa),
+  // completam automat ultimul pret folosit pentru acel denumire - util pentru
+  // piese/lucrari recurente (schimb ulei, filtru etc), fara sa suprascriem
+  // vreodata un pret pe care utilizatorul l-a introdus deja intentionat.
+  function handleDenumireChange(item, value) {
+    const match = suggestions?.find((s) => foldForMatch(s.denumire) === foldForMatch(value))
+    if (match && Number(item[priceKey]) === 0) {
+      updateItem(item.id, { denumire: value, [priceKey]: match[priceKey] })
+    } else {
+      updateItem(item.id, { denumire: value })
+    }
   }
 
   function addItem() {
@@ -28,6 +53,12 @@ export default function ListaItems({ titlu, items, onChange, priceKey, priceLabe
         </button>
       </div>
 
+      <datalist id={datalistId}>
+        {(suggestions || []).map((s) => (
+          <option key={s.denumire} value={s.denumire} />
+        ))}
+      </datalist>
+
       {items.length === 0 && <p className="hint">Nicio linie adaugata inca.</p>}
 
       {items.map((item, i) => {
@@ -37,9 +68,10 @@ export default function ListaItems({ titlu, items, onChange, priceKey, priceLabe
             <div className="field field-grow">
               <input
                 type="text"
+                list={datalistId}
                 placeholder="Denumire"
                 value={item.denumire}
-                onChange={(e) => updateItem(item.id, { denumire: e.target.value })}
+                onChange={(e) => handleDenumireChange(item, e.target.value)}
               />
               {err('denumire') && <span className="field-error">{err('denumire')}</span>}
             </div>

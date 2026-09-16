@@ -3,6 +3,7 @@ import path from 'path'
 import fs from 'fs/promises'
 import log from './logger'
 import { toAppError, AppError } from './errors'
+import { foldForMatch } from '../shared/calculations'
 
 // Locatia principala: folderul "date" langa aplicatie (portabil, usor de gasit
 // si de facut backup manual) - in dev, langa proiect; in build, langa exe.
@@ -221,15 +222,6 @@ export async function listFiseFinalizate() {
   }
 }
 
-// Elimina diacriticele si normalizeaza case-ul, ca "Ștefan" sa fie gasit si
-// cautand "stefan", iar "B-123-ABC" si "b123abc" sa se potriveasca.
-function foldForSearch(value) {
-  return String(value || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-}
-
 // Citeste toate fisele finalizate de pe disc. Suficient de rapid pentru
 // volumul unui singur service auto (sute-mii de fise) - o fisa corupta
 // individual e logata si sarita, nu blocheaza restul.
@@ -253,8 +245,57 @@ async function readAllFiseFinalizate() {
   return result
 }
 
+// Date pentru auto-completare: marci/modele si denumiri de piese/lucrari
+// deja folosite, extrase din fisele finalizate - nu e o baza de date externa,
+// se "invata" din ce a introdus deja service-ul, si e mereu la zi cu ce
+// lucreaza efectiv atelierul respectiv.
+export async function getAutocompleteData() {
+  await ensureDirs()
+  const all = await readAllFiseFinalizate()
+
+  const marci = new Map() // cheie lowercase -> denumire originala
+  const modelePerMarca = {} // cheie lowercase marca -> Set de modele
+  const piese = new Map() // cheie lowercase denumire -> { denumire, pretUnitar, finalizedAt }
+  const lucrari = new Map()
+
+  function upsertItem(map, denumireRaw, pretRaw, finalizedAt, priceKey) {
+    const denumire = denumireRaw?.trim()
+    if (!denumire) return
+    const key = foldForMatch(denumire)
+    const existing = map.get(key)
+    if (!existing || (finalizedAt || '') > (existing.finalizedAt || '')) {
+      map.set(key, { denumire, [priceKey]: pretRaw, finalizedAt })
+    }
+  }
+
+  for (const fisa of all) {
+    const marca = fisa.auto?.marca?.trim()
+    const model = fisa.auto?.model?.trim()
+    if (marca) {
+      const marcaKey = foldForMatch(marca)
+      if (!marci.has(marcaKey)) marci.set(marcaKey, marca)
+      if (model) {
+        if (!modelePerMarca[marcaKey]) modelePerMarca[marcaKey] = new Set()
+        modelePerMarca[marcaKey].add(model)
+      }
+    }
+
+    for (const p of fisa.piese || []) upsertItem(piese, p.denumire, p.pretUnitar, fisa.finalizedAt, 'pretUnitar')
+    for (const l of fisa.lucrari || []) upsertItem(lucrari, l.denumire, l.pret, fisa.finalizedAt, 'pret')
+  }
+
+  return {
+    marci: [...marci.values()].sort((a, b) => a.localeCompare(b)),
+    modelePerMarca: Object.fromEntries(
+      Object.entries(modelePerMarca).map(([k, set]) => [k, [...set].sort((a, b) => a.localeCompare(b))])
+    ),
+    piese: [...piese.values()].sort((a, b) => a.denumire.localeCompare(b.denumire)),
+    lucrari: [...lucrari.values()].sort((a, b) => a.denumire.localeCompare(b.denumire))
+  }
+}
+
 function fisaHaystack(fisa) {
-  return foldForSearch(
+  return foldForMatch(
     [
       fisa.client?.nume,
       fisa.client?.telefon,
@@ -272,7 +313,7 @@ function fisaHaystack(fisa) {
 // marca/model sau VIN.
 export async function searchFise(query) {
   await ensureDirs()
-  const q = foldForSearch(query).trim()
+  const q = foldForMatch(query).trim()
   if (!q) return []
 
   const all = await readAllFiseFinalizate()

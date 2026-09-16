@@ -1,4 +1,5 @@
 import React from 'react'
+import { foldForMatch } from '../../../shared/calculations'
 
 function Field({ label, error, children }) {
   return (
@@ -10,9 +11,12 @@ function Field({ label, error, children }) {
   )
 }
 
-export default function FisaForm({ fisa, onChange, errors }) {
+export default function FisaForm({ fisa, onChange, errors, autocomplete }) {
   const setClient = (patch) => onChange({ ...fisa, client: { ...fisa.client, ...patch } })
   const setAuto = (patch) => onChange({ ...fisa, auto: { ...fisa.auto, ...patch } })
+
+  const marci = autocomplete?.marci || []
+  const modeleCurente = autocomplete?.modelePerMarca?.[foldForMatch(fisa.auto.marca)] || []
 
   return (
     <>
@@ -50,10 +54,30 @@ export default function FisaForm({ fisa, onChange, errors }) {
             <input type="number" value={fisa.auto.an} onChange={(e) => setAuto({ an: e.target.value })} />
           </Field>
           <Field label="Marca" error={errors['auto.marca']}>
-            <input type="text" value={fisa.auto.marca} onChange={(e) => setAuto({ marca: e.target.value })} />
+            <input
+              type="text"
+              list="marci-list"
+              value={fisa.auto.marca}
+              onChange={(e) => setAuto({ marca: e.target.value })}
+            />
+            <datalist id="marci-list">
+              {marci.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
           </Field>
           <Field label="Model" error={errors['auto.model']}>
-            <input type="text" value={fisa.auto.model} onChange={(e) => setAuto({ model: e.target.value })} />
+            <input
+              type="text"
+              list="modele-list"
+              value={fisa.auto.model}
+              onChange={(e) => setAuto({ model: e.target.value })}
+            />
+            <datalist id="modele-list">
+              {modeleCurente.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
           </Field>
           <Field label="VIN" error={errors['auto.vin']}>
             <input

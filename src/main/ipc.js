@@ -12,7 +12,8 @@ import {
   backupNow,
   isUsingFallbackLocation,
   searchFise,
-  listRecentFise
+  listRecentFise,
+  getAutocompleteData
 } from './fileStore'
 import { generatePdf } from './pdfGenerator'
 import { checkForUpdatesSafe, downloadUpdateNow, installUpdateNow } from './updater'
@@ -82,6 +83,8 @@ export function registerIpcHandlers() {
   ipcMain.handle('fisa:search', (e, query) => wrap(() => searchFise(query), 'search'))
 
   ipcMain.handle('fisa:listRecent', (e, limit) => wrap(() => listRecentFise(limit), 'listRecent'))
+
+  ipcMain.handle('fisa:getAutocompleteData', () => wrap(() => getAutocompleteData(), 'getAutocompleteData'))
 
   ipcMain.handle('fise:openPdf', (e, fileName) =>
     wrap(async () => {
