@@ -6,6 +6,7 @@
   "author": "ServiceAuto",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/fix-hoisted-deps.js",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
