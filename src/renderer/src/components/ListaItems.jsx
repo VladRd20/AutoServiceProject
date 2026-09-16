@@ -1,5 +1,6 @@
 import React from 'react'
 import { calcLinieTotal, foldForMatch } from '../../../shared/calculations'
+import Autocomplete from './Autocomplete'
 
 let nextId = 1
 export function newItemId() {
@@ -16,7 +17,7 @@ export default function ListaItems({
   errors,
   suggestions
 }) {
-  const datalistId = `denumire-list-${errorPrefix}`
+  const denumiri = (suggestions || []).map((s) => s.denumire)
 
   function updateItem(id, patch) {
     onChange(items.map((it) => (it.id === id ? { ...it, ...patch } : it)))
@@ -53,12 +54,6 @@ export default function ListaItems({
         </button>
       </div>
 
-      <datalist id={datalistId}>
-        {(suggestions || []).map((s) => (
-          <option key={s.denumire} value={s.denumire} />
-        ))}
-      </datalist>
-
       {items.length === 0 && <p className="hint">Nicio linie adaugata inca.</p>}
 
       {items.map((item, i) => {
@@ -66,12 +61,11 @@ export default function ListaItems({
         return (
           <div className="linie" key={item.id}>
             <div className="field field-grow">
-              <input
-                type="text"
-                list={datalistId}
-                placeholder="Denumire"
+              <Autocomplete
                 value={item.denumire}
-                onChange={(e) => handleDenumireChange(item, e.target.value)}
+                onChange={(v) => handleDenumireChange(item, v)}
+                options={denumiri}
+                placeholder="Denumire"
               />
               {err('denumire') && <span className="field-error">{err('denumire')}</span>}
             </div>

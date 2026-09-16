@@ -272,6 +272,43 @@ body {
   border: 1px solid #d1d5db;
   border-radius: 6px;
   font-size: 14px;
+  width: 100%;
+}
+
+.autocomplete {
+  position: relative;
+  width: 100%;
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.autocomplete-dropdown li {
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1f2430;
+  cursor: pointer;
+}
+
+.autocomplete-dropdown li.active,
+.autocomplete-dropdown li:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .field-error {
