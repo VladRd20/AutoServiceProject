@@ -27,6 +27,7 @@ export default function FisaForm({ fisa, onChange, errors, autocomplete }) {
           <Field label="Nume client" error={errors['client.nume']}>
             <input
               type="text"
+              placeholder="Ion Popescu"
               value={fisa.client.nume}
               onChange={(e) => setClient({ nume: e.target.value })}
             />
@@ -34,6 +35,7 @@ export default function FisaForm({ fisa, onChange, errors, autocomplete }) {
           <Field label="Numar de telefon" error={errors['client.telefon']}>
             <input
               type="text"
+              placeholder="+373 69 123 456"
               value={fisa.client.telefon}
               onChange={(e) => setClient({ telefon: e.target.value })}
             />
@@ -47,27 +49,40 @@ export default function FisaForm({ fisa, onChange, errors, autocomplete }) {
           <Field label="Numar de inmatriculare" error={errors['auto.nrInmatriculare']}>
             <input
               type="text"
+              placeholder="C AB 123"
               value={fisa.auto.nrInmatriculare}
               onChange={(e) => setAuto({ nrInmatriculare: e.target.value.toUpperCase() })}
             />
           </Field>
           <Field label="An fabricatie" error={errors['auto.an']}>
-            <input type="number" value={fisa.auto.an} onChange={(e) => setAuto({ an: e.target.value })} />
+            <input
+              type="number"
+              placeholder="2018"
+              value={fisa.auto.an}
+              onChange={(e) => setAuto({ an: e.target.value })}
+            />
           </Field>
           <Field label="Marca" error={errors['auto.marca']}>
-            <Autocomplete value={fisa.auto.marca} onChange={(v) => setAuto({ marca: v })} options={marci} />
+            <Autocomplete
+              value={fisa.auto.marca}
+              onChange={(v) => setAuto({ marca: v })}
+              options={marci}
+              placeholder="Dacia"
+            />
           </Field>
           <Field label="Model" error={errors['auto.model']}>
             <Autocomplete
               value={fisa.auto.model}
               onChange={(v) => setAuto({ model: v })}
               options={modeleCurente}
+              placeholder="Logan"
             />
           </Field>
           <Field label="VIN" error={errors['auto.vin']}>
             <input
               type="text"
               maxLength={17}
+              placeholder="UU1XXXXXXXXXXXXXX"
               value={fisa.auto.vin}
               onChange={(e) => setAuto({ vin: e.target.value.toUpperCase() })}
             />

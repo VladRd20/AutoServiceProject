@@ -6,6 +6,7 @@ import Toast from './components/Toast'
 import DraftsSidebar from './components/DraftsSidebar'
 import SearchModal from './components/SearchModal'
 import UpdateBanner from './components/UpdateBanner'
+import ThemeToggle from './components/ThemeToggle'
 import { validateFisa } from '../../shared/calculations'
 import { draftBackupRef } from './draftBackup'
 
@@ -46,6 +47,7 @@ export default function App() {
   const [recentFise, setRecentFise] = useState([])
   const [updateInfo, setUpdateInfo] = useState({ status: 'idle' })
   const [autocomplete, setAutocomplete] = useState({ marci: [], modelePerMarca: {}, piese: [], lucrari: [] })
+  const [saveState, setSaveState] = useState('idle') // idle | saving | saved
 
   const showToast = useCallback((type, message, action) => setToast({ type, message, action }), [])
 
@@ -142,11 +144,14 @@ export default function App() {
 
     saveTimerRef.current = setTimeout(async () => {
       hasSavedOnceRef.current = true
+      setSaveState('saving')
       const res = await window.serviceAuto.fisa.saveDraft(fisa)
       if (res.ok) {
         if (!fisa.id) setFisa((f) => (f.id ? f : { ...f, id: res.data }))
+        setSaveState('saved')
         refreshDrafts()
       } else {
+        setSaveState('idle')
         showToast('error', `Autosave esuat: ${res.error.message}`)
       }
     }, delay)
@@ -157,6 +162,7 @@ export default function App() {
   const resetToNewFisa = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     hasSavedOnceRef.current = false
+    setSaveState('idle')
     setFisa(emptyFisa())
   }, [])
 
@@ -167,6 +173,7 @@ export default function App() {
         setFisa(res.data)
         setErrors({})
         setPdfRetry(null)
+        setSaveState('saved')
       } else {
         showToast('error', res.error.message)
       }
@@ -287,6 +294,7 @@ export default function App() {
   const handleEditRecent = useCallback((finalizedFisa) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     hasSavedOnceRef.current = false
+    setSaveState('idle')
     const { _file, id, status, finalizedAt, ...rest } = finalizedFisa
     setFisa({ ...rest, id: null })
     setErrors({})
@@ -338,6 +346,7 @@ export default function App() {
             <button type="button" title="Exporta fisierele de log pe Desktop, pentru debugging" onClick={handleExportLogs}>
               Exporta loguri
             </button>
+            <ThemeToggle />
           </div>
         </header>
 
@@ -373,14 +382,20 @@ export default function App() {
         />
 
         <div className="release-bar">
-          {pdfRetry && (
-            <button type="button" onClick={() => handleRetryPdf(pdfRetry.fisa, pdfRetry.baseName)}>
-              Reincearca generare PDF
+          <span className={`autosave-status ${saveState === 'saved' ? 'saved' : ''}`}>
+            {saveState === 'saving' && '⏳ Se salvează...'}
+            {saveState === 'saved' && '✓ Salvat'}
+          </span>
+          <div className="release-bar-actions">
+            {pdfRetry && (
+              <button type="button" onClick={() => handleRetryPdf(pdfRetry.fisa, pdfRetry.baseName)}>
+                Reincearca generare PDF
+              </button>
+            )}
+            <button type="button" className="btn-primary btn-release" disabled={releasing} onClick={handleRelease}>
+              {releasing ? 'Se finalizeaza...' : 'Finalizare / Release'}
             </button>
-          )}
-          <button type="button" className="btn-primary btn-release" disabled={releasing} onClick={handleRelease}>
-            {releasing ? 'Se finalizeaza...' : 'Finalizare / Release'}
-          </button>
+          </div>
         </div>
       </main>
 
