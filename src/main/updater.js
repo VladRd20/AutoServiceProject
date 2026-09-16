@@ -1,5 +1,4 @@
 import { autoUpdater } from 'electron-updater'
-import { dialog } from 'electron'
 import log from './logger'
 
 autoUpdater.logger = log
@@ -35,22 +34,9 @@ export function initUpdater(mainWindow) {
 
   autoUpdater.on('update-available', (info) => {
     log.info(`[updater] versiune noua disponibila: ${info.version}`)
+    // Anuntat doar prin banner-ul din UI (stilizat, cu buton propriu) - un
+    // dialog nativ Windows aici arata neplacut si nu poate fi personalizat.
     sendStatus('available', { version: info.version })
-
-    dialog
-      .showMessageBox(mainWindowRef, {
-        type: 'info',
-        title: 'Actualizare disponibila',
-        message: `Este disponibila versiunea ${info.version}.`,
-        detail: 'Poti continua sa lucrezi cat timp se descarca in fundal.',
-        buttons: ['Descarca acum', 'Mai tarziu'],
-        defaultId: 0,
-        cancelId: 1
-      })
-      .then(({ response }) => {
-        if (response === 0) downloadUpdateNow()
-      })
-      .catch((err) => log.warn('[updater] dialog update-available esuat', err))
   })
 
   autoUpdater.on('download-progress', (progress) => {
@@ -61,21 +47,8 @@ export function initUpdater(mainWindow) {
     log.info(`[updater] update ${info.version} descarcat, se ofera restart`)
     downloading = false
     downloaded = true
+    // La fel - doar banner-ul din UI, cu butonul lui "Reporneste acum".
     sendStatus('downloaded', { version: info.version })
-
-    dialog
-      .showMessageBox(mainWindowRef, {
-        type: 'info',
-        title: 'Actualizare gata de instalare',
-        message: `A fost descarcata versiunea ${info.version}. Repornesti aplicatia acum pentru a o instala?`,
-        buttons: ['Repornire acum', 'Mai tarziu'],
-        defaultId: 0,
-        cancelId: 1
-      })
-      .then(({ response }) => {
-        if (response === 0) installUpdateNow()
-      })
-      .catch((err) => log.warn('[updater] dialog update-downloaded esuat', err))
   })
 
   checkForUpdatesSafe()
@@ -95,9 +68,8 @@ export function checkForUpdatesSafe() {
     })
 }
 
-// Declansata fie din dialogul nativ, fie din butonul "Descarca" al
-// banner-ului din UI - idempotenta, nu porneste o a doua descarcare daca
-// una e deja in curs.
+// Declansata din butonul "Descarca" al banner-ului din UI - idempotenta,
+// nu porneste o a doua descarcare daca una e deja in curs.
 export function downloadUpdateNow() {
   if (downloading || downloaded) return
   downloading = true
