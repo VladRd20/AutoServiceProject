@@ -42,6 +42,8 @@ export default function App() {
   const [pdfRetry, setPdfRetry] = useState(null) // { fisa, baseName }
   const saveTimerRef = useRef(null)
   const hasSavedOnceRef = useRef(false)
+  const manualUpdateCheckRef = useRef(false)
+  const [checkingUpdates, setCheckingUpdates] = useState(false)
 
   const showToast = useCallback((type, message, action) => setToast({ type, message, action }), [])
 
@@ -66,6 +68,35 @@ export default function App() {
   useEffect(() => {
     draftBackupRef.current = fisa
   }, [fisa])
+
+  // Update-urile de versiune noua/gata de instalare sunt afisate de main
+  // process printr-un dialog nativ. Aici tratam doar starile relevante pentru
+  // o verificare declansata manual din UI (buton "Verifica actualizari").
+  useEffect(() => {
+    const unsubscribe = window.serviceAuto.app.onUpdateEvent((evt) => {
+      if (evt.type === 'checking') {
+        setCheckingUpdates(true)
+        return
+      }
+      setCheckingUpdates(false)
+
+      if (!manualUpdateCheckRef.current) return
+      manualUpdateCheckRef.current = false
+
+      if (evt.type === 'not-available') {
+        showToast('success', 'Ai deja cea mai recenta versiune.')
+      } else if (evt.type === 'error') {
+        showToast('error', `Verificarea actualizarilor a esuat: ${evt.message || 'eroare necunoscuta'}.`)
+      }
+      // 'available' e deja anuntat printr-un dialog nativ de main process.
+    })
+    return unsubscribe
+  }, [showToast])
+
+  function handleCheckForUpdates() {
+    manualUpdateCheckRef.current = true
+    window.serviceAuto.app.checkForUpdates()
+  }
 
   // Autosave: prima salvare e instanta (fisa apare imediat in sidebar la primul
   // caracter), salvarile urmatoare sunt debounce-uite ca sa nu scriem pe disc
@@ -189,9 +220,14 @@ export default function App() {
       <main className="main">
         <header className="topbar">
           <h1>Fisa de service auto</h1>
-          <button type="button" onClick={handleOpenFolder}>
-            Deschide folderul cu fise
-          </button>
+          <div className="topbar-actions">
+            <button type="button" disabled={checkingUpdates} onClick={handleCheckForUpdates}>
+              {checkingUpdates ? 'Se verifica...' : 'Verifica actualizari'}
+            </button>
+            <button type="button" onClick={handleOpenFolder}>
+              Deschide folderul cu fise
+            </button>
+          </div>
         </header>
 
         <FisaForm fisa={fisa} onChange={setFisa} errors={errors} />

@@ -63,7 +63,7 @@ app.whenReady().then(async () => {
 
   registerIpcHandlers()
   createWindow()
-  initUpdater()
+  initUpdater(mainWindow)
 
   // Backup zilnic, best-effort - nu blocheaza si nu opreste aplicatia daca esueaza.
   backupNow().catch((err) => log.warn('[main] backup initial esuat', err))

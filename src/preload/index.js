@@ -21,7 +21,12 @@ const api = {
   },
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
-    checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates')
+    checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
+    onUpdateEvent: (callback) => {
+      const listener = (_e, payload) => callback(payload)
+      ipcRenderer.on('update:event', listener)
+      return () => ipcRenderer.removeListener('update:event', listener)
+    }
   }
 }
 
