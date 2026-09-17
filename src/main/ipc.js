@@ -67,8 +67,8 @@ export function registerIpcHandlers() {
     wrap(() => ({ activated: isActivated() && !isRevoked(), revoked: isActivated() && isRevoked() }), 'license:getStatus')
   )
   ipcMain.handle('license:activate', (e, key) =>
-    wrap(() => {
-      const payload = activate(key)
+    wrap(async () => {
+      const payload = await activate(key)
       return { activated: true, payload }
     }, 'license:activate')
   )

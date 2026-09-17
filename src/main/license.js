@@ -193,13 +193,33 @@ function fetchRevokedList() {
 }
 
 // Activeaza aplicatia cu o cheie de licenta noua - verifica semnatura, apoi
-// leaga activarea de masina curenta.
-export function activate(keyString) {
+// leaga activarea de masina curenta. Verifica si revocarea (best-effort): o
+// cheie deja revocata nu trebuie sa poata fi (re)activata doar introducand-o
+// din nou pe ecranul de activare - fara asta, checkRevocationOnline() de la
+// pornire era singura bariera, si oricine putea sa o ocoleasca instant.
+export async function activate(keyString) {
   const payload = verifyLicenseKey(keyString)
   if (!payload) {
     const err = new Error('Cheia de licenta este invalida.')
     err.code = 'INVALID_KEY'
     throw err
+  }
+
+  const id = deriveId(payload)
+  try {
+    const revokedIds = await fetchRevokedList()
+    if (revokedIds.includes(id)) {
+      const err = new Error('Aceasta cheie de licenta a fost revocata. Contacteaza dezvoltatorul pentru o cheie noua.')
+      err.code = 'REVOKED'
+      throw err
+    }
+  } catch (err) {
+    if (err.code === 'REVOKED') throw err
+    // Fara internet la activare - nu blocam un client nou legitim doar
+    // pentru ca nu are conexiune chiar in acel moment. Verificarea de la
+    // urmatoarea pornire (checkRevocationOnline) tot va prinde cazul, daca
+    // e cu adevarat revocata, imediat ce masina ajunge online.
+    log.warn('[license] verificare revocare la activare esuata (probabil offline) - ignorata', err)
   }
 
   const fingerprint = getMachineFingerprint()
