@@ -458,6 +458,7 @@ export default function App() {
         onEditRecent={handleEditRecent}
         onOpenPdf={handleOpenPdfFromSearch}
         onPrintPdf={handlePrintPdfFromList}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       <main className="main">
@@ -494,8 +495,7 @@ export default function App() {
               items={[
                 { label: 'Rapoarte', onClick: () => setReportsOpen(true) },
                 { label: 'Deschide folderul cu fise', onClick: handleOpenFolder },
-                { label: exportingLogs ? 'Se exporta...' : 'Exporta loguri', onClick: handleExportLogs },
-                { label: 'Setari', onClick: () => setSettingsOpen(true) }
+                { label: exportingLogs ? 'Se exporta...' : 'Exporta loguri', onClick: handleExportLogs }
               ]}
             />
             <ThemeToggle />
