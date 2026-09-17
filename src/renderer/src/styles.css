@@ -636,6 +636,39 @@ textarea:focus-visible,
   font-size: 15px;
 }
 
+/* Stari dinamice pentru butoane care reflecta un proces in fundal (ex.
+   verificare actualizari) - doar culoare, fara nicio miscare/animatie. */
+.btn-status-info {
+  background: var(--info-bg);
+  border-color: var(--info-border);
+  color: var(--info-ink);
+}
+
+.btn-status-success {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success-ink);
+}
+
+.btn-status-error {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.btn-status-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-status-info:hover,
+.btn-status-success:hover,
+.btn-status-error:hover,
+.btn-status-accent:hover {
+  filter: brightness(0.95);
+}
+
 .btn-release:disabled {
   opacity: 0.6;
   cursor: not-allowed;

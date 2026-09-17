@@ -68,8 +68,10 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [recentFise, setRecentFise] = useState([])
   const [updateInfo, setUpdateInfo] = useState({ status: 'idle' })
+  const [updateFlash, setUpdateFlash] = useState(null) // 'no-update' | 'error' - dispare singur dupa cateva secunde
   const [autocomplete, setAutocomplete] = useState({ marci: [], modelePerMarca: {}, piese: [], lucrari: [] })
   const [saveState, setSaveState] = useState('idle') // idle | saving | saved
+  const [exportingLogs, setExportingLogs] = useState(false)
 
   const showToast = useCallback((type, message, action) => setToast({ type, message, action }), [])
 
@@ -137,12 +139,31 @@ export default function App() {
 
       if (evt.type === 'not-available') {
         showToast('success', 'Ai deja cea mai recenta versiune.')
+        setUpdateFlash('no-update')
+        setTimeout(() => setUpdateFlash(null), 3000)
       } else if (evt.type === 'error') {
         showToast('error', `Verificarea actualizarilor a esuat: ${evt.message || 'eroare necunoscuta'}.`)
+        setUpdateFlash('error')
+        setTimeout(() => setUpdateFlash(null), 3000)
       }
     })
     return unsubscribe
   }, [showToast])
+
+  // Starea completa a butonului "Verifica actualizari" - utilizatorul trebuie
+  // sa vada in orice moment ce se intampla efectiv (verifica, nu a gasit
+  // nimic, descarca cu procent, gata de instalat), nu doar un text static.
+  function getUpdateButtonState() {
+    if (checkingUpdates) return { text: 'Se verifică...', variant: 'info' }
+    if (updateInfo.status === 'downloading') {
+      return { text: `Se descarcă... ${updateInfo.percent ?? 0}%`, variant: 'info' }
+    }
+    if (updateInfo.status === 'downloaded') return { text: 'Gata de instalat ✓', variant: 'success' }
+    if (updateInfo.status === 'available') return { text: `Versiune nouă: v${updateInfo.version}`, variant: 'accent' }
+    if (updateFlash === 'no-update') return { text: 'Ești la zi ✓', variant: 'success' }
+    if (updateFlash === 'error') return { text: 'Verificare eșuată', variant: 'error' }
+    return { text: 'Verifică actualizări', variant: null }
+  }
 
   function handleCheckForUpdates() {
     manualUpdateCheckRef.current = true
@@ -314,7 +335,9 @@ export default function App() {
   }
 
   async function handleExportLogs() {
+    setExportingLogs(true)
     const res = await window.serviceAuto.app.exportLogs()
+    setExportingLogs(false)
     if (res.ok) {
       showToast('success', `Loguri exportate pe Desktop (${res.data.copied} fisiere) - trimite folderul pentru debugging.`)
     } else {
@@ -344,6 +367,8 @@ export default function App() {
     [showToast]
   )
 
+  const updateBtn = getUpdateButtonState()
+
   return (
     <div className="app">
       <DraftsSidebar
@@ -372,14 +397,24 @@ export default function App() {
             <button type="button" onClick={() => setSearchOpen(true)}>
               Cauta clienti
             </button>
-            <button type="button" disabled={checkingUpdates} onClick={handleCheckForUpdates}>
-              {checkingUpdates ? 'Se verifica...' : 'Verifica actualizari'}
+            <button
+              type="button"
+              className={updateBtn.variant ? `btn-status-${updateBtn.variant}` : ''}
+              disabled={checkingUpdates || updateInfo.status === 'downloading'}
+              onClick={handleCheckForUpdates}
+            >
+              {updateBtn.text}
             </button>
             <button type="button" onClick={handleOpenFolder}>
               Deschide folderul cu fise
             </button>
-            <button type="button" title="Exporta fisierele de log pe Desktop, pentru debugging" onClick={handleExportLogs}>
-              Exporta loguri
+            <button
+              type="button"
+              title="Exporta fisierele de log pe Desktop, pentru debugging"
+              disabled={exportingLogs}
+              onClick={handleExportLogs}
+            >
+              {exportingLogs ? 'Se exportă...' : 'Exportă loguri'}
             </button>
             <ThemeToggle />
           </div>
