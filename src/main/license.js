@@ -43,6 +43,23 @@ function fromB64url(str) {
   return Buffer.from(padded + pad, 'base64')
 }
 
+// Chei emise inainte de scripts/license-admin.js (pre-v0.4.0) nu au un camp
+// "id" in payload - fara el nu pot fi gasite in lista de revocari. Derivam
+// un id stabil din continutul payload-ului, ca sa poata fi "importate" in
+// registru (scripts/license-admin.js import) si revocate ca oricare altele.
+// ATENTIE: logica trebuie sa ramana identica cu cea din license-admin.js.
+function legacyId(payload) {
+  return crypto
+    .createHash('sha256')
+    .update(`${payload.product}|${payload.client}|${payload.issuedAt}`)
+    .digest('hex')
+    .slice(0, 16)
+}
+
+function deriveId(payload) {
+  return payload.id || legacyId(payload)
+}
+
 // Verifica o cheie de licenta (format "payload.semnatura", ambele base64url)
 // si intoarce payload-ul daca semnatura e valida, altfel null. Verificarea e
 // pur locala - nu necesita nicio conexiune la internet.
@@ -138,12 +155,13 @@ export function isRevoked() {
 // Chei vechi, emise inainte sa existe campul "id" in payload, nu au id - nu
 // pot fi revocate de la distanta, raman valabile cat timp semnatura e buna.
 export async function checkRevocationOnline() {
-  if (!isActivated() || !cachedPayload?.id) return
+  if (!isActivated() || !cachedPayload) return
   try {
+    const id = deriveId(cachedPayload)
     const revokedIds = await fetchRevokedList()
-    if (revokedIds.includes(cachedPayload.id)) {
+    if (revokedIds.includes(id)) {
       cachedRevoked = true
-      log.warn(`[license] licenta revocata de la distanta (id: ${cachedPayload.id})`)
+      log.warn(`[license] licenta revocata de la distanta (id: ${id})`)
     }
   } catch (err) {
     log.warn('[license] verificarea revocarii a esuat (probabil offline) - ignorata', err)

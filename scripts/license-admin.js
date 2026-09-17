@@ -18,6 +18,7 @@
 //   node scripts/license-admin.js regenerate <id> [--revoke-old]
 //   node scripts/license-admin.js edit <id> [--client "Nume nou"] [--notes "..."]
 //   node scripts/license-admin.js purge <id>
+//   node scripts/license-admin.js import <cheie_veche> ["notite"]
 
 const crypto = require('crypto')
 const fs = require('fs')
@@ -28,6 +29,11 @@ const PRIVATE_KEY_PATH = path.join(ROOT, 'keys', 'private.pem')
 const REGISTRY_PATH = path.join(ROOT, 'keys', 'licenses.json')
 const REVOKED_LIST_PATH = path.join(ROOT, 'license', 'revoked.json')
 
+// Corespunde cheii private din keys/private.pem - vezi si src/main/license.js.
+const PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAF2ECTVo6BRbA3K4QcsO7sDpH2+5XCe7jW5jpemxI+zw=
+-----END PUBLIC KEY-----`
+
 function loadPrivateKey() {
   if (!fs.existsSync(PRIVATE_KEY_PATH)) {
     console.error(`Nu gasesc cheia privata la ${PRIVATE_KEY_PATH}.`)
@@ -37,8 +43,48 @@ function loadPrivateKey() {
   return crypto.createPrivateKey(fs.readFileSync(PRIVATE_KEY_PATH, 'utf-8'))
 }
 
+// Verifica o cheie deja emisa (format "payload.semnatura") si intoarce
+// payload-ul daca semnatura e valida, altfel null. Trebuie sa ramana
+// identica cu verifyLicenseKey() din src/main/license.js.
+function verifyLicenseKey(keyString) {
+  try {
+    const [payloadPart, sigPart] = String(keyString || '').trim().split('.')
+    if (!payloadPart || !sigPart) return null
+    const payloadBuf = fromB64url(payloadPart)
+    const sigBuf = fromB64url(sigPart)
+    const publicKey = crypto.createPublicKey(PUBLIC_KEY_PEM)
+    const valid = crypto.verify(null, payloadBuf, publicKey, sigBuf)
+    if (!valid) return null
+    return JSON.parse(payloadBuf.toString('utf8'))
+  } catch (err) {
+    return null
+  }
+}
+
+// Chei emise inainte sa existe campul "id" in payload (pre-v0.4.0) nu pot fi
+// gasite in lista de revocari dupa un id propriu - derivam unul stabil din
+// continutul payload-ului. Trebuie sa ramana identica cu legacyId() din
+// src/main/license.js, altfel aplicatia si acest tool calculeaza id-uri diferite.
+function legacyId(payload) {
+  return crypto
+    .createHash('sha256')
+    .update(`${payload.product}|${payload.client}|${payload.issuedAt}`)
+    .digest('hex')
+    .slice(0, 16)
+}
+
+function deriveId(payload) {
+  return payload.id || legacyId(payload)
+}
+
 function b64url(buf) {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function fromB64url(str) {
+  const padded = str.replace(/-/g, '+').replace(/_/g, '/')
+  const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4))
+  return Buffer.from(padded + pad, 'base64')
 }
 
 function loadRegistry() {
@@ -278,6 +324,44 @@ function cmdPurge(args) {
   }
 }
 
+function cmdImport(args) {
+  const keyString = args[0]
+  const notes = args[1] || 'importata (cheie veche, emisa inainte de acest registru)'
+  if (!keyString) {
+    console.error('Foloseste: node scripts/license-admin.js import <cheie_veche> ["notite"]')
+    process.exit(1)
+  }
+  const payload = verifyLicenseKey(keyString)
+  if (!payload) {
+    console.error('Cheia nu e valida (semnatura nu se potriveste sau formatul e gresit).')
+    process.exit(1)
+  }
+  const id = deriveId(payload)
+  const registry = loadRegistry()
+  if (registry.some((e) => e.id === id)) {
+    console.log(`Cheia asta e deja in registru (id: ${id}).`)
+    return
+  }
+  registry.push({
+    id,
+    client: payload.client || 'Client necunoscut',
+    key: keyString.trim(),
+    issuedAt: payload.issuedAt || null,
+    status: 'active',
+    revokedAt: null,
+    notes
+  })
+  saveRegistry(registry)
+  console.log(`Importata: "${payload.client}" (id: ${id}).`)
+  if (!payload.id) {
+    console.log(
+      'E o cheie veche, fara id propriu - id-ul de mai sus a fost derivat din continut, doar pentru\n' +
+        'ca "revoke"/"restore" sa poata sa o gaseasca. Ramane valabil doar daca clientul are o versiune\n' +
+        'a aplicatiei suficient de noua cat sa verifice revocarea in acelasi fel (v0.4.1+).'
+    )
+  }
+}
+
 function main() {
   const [, , cmd, ...args] = process.argv
   const commands = {
@@ -287,7 +371,8 @@ function main() {
     restore: cmdRestore,
     regenerate: cmdRegenerate,
     edit: cmdEdit,
-    purge: cmdPurge
+    purge: cmdPurge,
+    import: cmdImport
   }
   const fn = commands[cmd]
   if (!fn) {
@@ -299,6 +384,7 @@ function main() {
     console.log('  regenerate <id> [--revoke-old]')
     console.log('  edit <id> [--client "..."] [--notes "..."]')
     console.log('  purge <id>')
+    console.log('  import <cheie_veche> ["notite"]')
     process.exit(cmd ? 1 : 0)
   }
   fn(args)
