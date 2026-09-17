@@ -145,7 +145,18 @@ export default function App() {
     refreshRecentFise()
     refreshAutocomplete()
     window.serviceAuto.fise.getLocationInfo().then((res) => {
-      if (res.ok && res.data.usingFallback) {
+      if (!res.ok) return
+      if (res.data.recoveredFromSafetyBackup) {
+        showToast(
+          'error',
+          'Folderul principal de date a fost gasit gol la pornire - fisele au fost restaurate automat din backup-ul de siguranta.'
+        )
+      } else if (res.data.migratedFromLegacy) {
+        showToast(
+          'success',
+          'Datele au fost mutate automat intr-o locatie mai sigura (nu mai dispar la actualizari).'
+        )
+      } else if (res.data.usingFallback) {
         showToast(
           'error',
           `Folderul din proiect nu e scriptibil - fisele se salveaza in schimb in ${res.data.dir}`

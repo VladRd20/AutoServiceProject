@@ -11,6 +11,8 @@ import {
   getPdfPath,
   backupNow,
   isUsingFallbackLocation,
+  isMigratedFromLegacy,
+  isRecoveredFromSafetyBackup,
   searchFise,
   listRecentFise,
   getAutocompleteData,
@@ -179,7 +181,15 @@ export function registerIpcHandlers() {
   )
 
   ipcMain.handle('fise:getLocationInfo', () =>
-    wrap(async () => ({ dir: getFiseDir(), usingFallback: isUsingFallbackLocation() }), 'getLocationInfo')
+    wrap(
+      async () => ({
+        dir: getFiseDir(),
+        usingFallback: isUsingFallbackLocation(),
+        migratedFromLegacy: isMigratedFromLegacy(),
+        recoveredFromSafetyBackup: isRecoveredFromSafetyBackup()
+      }),
+      'getLocationInfo'
+    )
   )
 
   ipcMain.handle('fise:openFolder', () =>

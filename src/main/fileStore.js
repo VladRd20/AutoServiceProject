@@ -7,13 +7,33 @@ import { foldForMatch, calcTotaluri, calcLinieTotal, round2 } from '../shared/ca
 import { SEED_MARCI_MODELE, SEED_PIESE, SEED_LUCRARI } from '../shared/seedData'
 import { getDataPathOverride, setDataPathOverride } from './appConfig'
 
-// Locatia implicita: folderul "date" langa aplicatie (portabil, usor de gasit
-// si de facut backup manual) - in dev, langa proiect; in build, langa exe.
-// Configurabila din Setari - daca utilizatorul a ales explicit alt folder,
-// acela are prioritate (vezi getDataPathOverride).
+// Locatia implicita: folderul de date al utilizatorului (AppData), NU langa
+// exe - un update auto (NSIS) dezinstaleaza intai versiunea veche, ceea ce
+// sterge recursiv folderul de instalare. Orice fisier pus acolo (cum era
+// "date" inainte, langa exe) disparea la fiecare update. AppData nu e
+// atins niciodata de instalare/dezinstalare, doar de utilizator sau de un
+// dezinstalare EXPLICITA cu "sterge si datele" - motiv pentru care license.dat
+// (deja in AppData) a supravietuit updateurilor cand "date" nu a supravietuit.
+// In dev, ramane langa proiect, ca sa nu se amestece cu instalari reale.
 export function getDefaultDataPath() {
-  const root = app.isPackaged ? path.dirname(process.execPath) : app.getAppPath()
-  return path.join(root, 'date')
+  if (!app.isPackaged) return path.join(app.getAppPath(), 'date')
+  return path.join(app.getPath('userData'), 'date')
+}
+
+// Locatia veche (pre-fix), folosita de orice instalare care a pornit inainte
+// de schimbarea de mai sus - migrata automat o singura data la pornire, ca
+// niciun utilizator existent sa nu ramana pe vechea locatie nesigura.
+function getLegacyDefaultDataPath() {
+  if (!app.isPackaged) return null
+  return path.join(path.dirname(process.execPath), 'date')
+}
+
+// Plasa de siguranta independenta: TOT in AppData, deci niciodata in aceeasi
+// locatie cu folderul de date principal (implicit SAU ales manual din
+// Setari) - daca acela dispare din orice motiv (update, antivirus, greseala
+// umana, disc), backup-ul de aici nu dispare odata cu el.
+export function getSafetyBackupDir() {
+  return path.join(app.getPath('userData'), 'safety-backup')
 }
 
 // Daca acel folder nu e scriptibil (ex: aplicatia instalata in Program Files
@@ -29,6 +49,8 @@ function fallbackDir() {
 
 let resolvedBaseDir = primaryDir()
 let usingFallback = false
+let migratedFromLegacy = false
+let recoveredFromSafetyBackup = false
 
 export function getFiseDir() {
   return path.join(resolvedBaseDir, 'fise')
@@ -46,6 +68,19 @@ export function isUsingFallbackLocation() {
   return usingFallback
 }
 
+// Adevarat o singura data, la pornirea in care s-a intamplat migrarea
+// automata dinspre vechea locatie (langa exe) - vezi getLegacyDefaultDataPath.
+export function isMigratedFromLegacy() {
+  return migratedFromLegacy
+}
+
+// Adevarat o singura data, la pornirea in care s-a detectat ca folderul de
+// date principal era gol desi exista un backup independent cu continut -
+// semn ca ceva a sters datele principale, si au fost restaurate automat.
+export function isRecoveredFromSafetyBackup() {
+  return recoveredFromSafetyBackup
+}
+
 async function tryUseDir(dir) {
   await fs.mkdir(dir, { recursive: true })
   // Nume unic per apel, ca doua verificari concurente sa nu-si stearga
@@ -53,6 +88,101 @@ async function tryUseDir(dir) {
   const testFile = path.join(dir, `.write-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   await fs.writeFile(testFile, 'ok')
   await fs.unlink(testFile)
+}
+
+async function dirEntryCount(dir) {
+  try {
+    const entries = await fs.readdir(dir)
+    return entries.length
+  } catch {
+    return 0
+  }
+}
+
+// Copiaza doar ce lipseste la destinatie - nu suprascrie si nu sterge
+// niciodata nimic la sursa. Folosita atat pentru migrarea din vechea locatie,
+// cat si pentru restaurarea din backup-ul de siguranta.
+async function copyMissing(srcDir, destDir) {
+  try {
+    await fs.access(srcDir)
+  } catch {
+    return 0
+  }
+  await fs.mkdir(destDir, { recursive: true })
+  let copiate = 0
+  const entries = await fs.readdir(srcDir, { withFileTypes: true })
+  for (const entry of entries) {
+    const destPath = path.join(destDir, entry.name)
+    try {
+      await fs.access(destPath)
+      continue // exista deja la destinatie - nu atingem
+    } catch {
+      // nu exista - copiem
+    }
+    if (entry.isDirectory()) {
+      await fs.cp(path.join(srcDir, entry.name), destPath, { recursive: true, force: false, errorOnExist: false })
+    } else {
+      await fs.copyFile(path.join(srcDir, entry.name), destPath)
+    }
+    copiate++
+  }
+  return copiate
+}
+
+// Migrare + recuperare automata, o singura data per pornire, dupa ce
+// directorul principal a fost rezolvat si creat:
+//  1) daca foloseste locatia implicita NOUA si e goala, dar exista date la
+//     vechea locatie (langa exe, de pe instalari mai vechi) - le copiaza.
+//  2) daca fise+drafturi sunt AMBELE goale, dar backup-ul de siguranta
+//     (independent, in AppData) are continut - il restaureaza. Asta prinde
+//     orice cauza de disparitie (update, antivirus, stergere accidentala),
+//     nu doar cazul specific de mai sus.
+async function migrateAndRecover(baseDir) {
+  const fiseDir = path.join(baseDir, 'fise')
+  const draftsDir = path.join(baseDir, 'drafturi')
+
+  if (!getDataPathOverride()) {
+    const legacyBase = getLegacyDefaultDataPath()
+    if (legacyBase && path.resolve(legacyBase) !== path.resolve(baseDir)) {
+      const alreadyHasData = (await dirEntryCount(fiseDir)) > 0 || (await dirEntryCount(draftsDir)) > 0
+      if (!alreadyHasData) {
+        const n1 = await copyMissing(path.join(legacyBase, 'fise'), fiseDir)
+        const n2 = await copyMissing(path.join(legacyBase, 'drafturi'), draftsDir)
+        try {
+          await fs.copyFile(path.join(legacyBase, 'setari.json'), path.join(baseDir, 'setari.json'))
+        } catch {
+          // setari.json poate sa nu existe - nicio problema
+        }
+        if (n1 + n2 > 0) {
+          migratedFromLegacy = true
+          log.warn(
+            `[fileStore] migrare automata din locatia veche (${legacyBase}) in locatia noua, sigura (${baseDir}): ${n1} fise, ${n2} drafturi`
+          )
+        }
+      }
+    }
+  }
+
+  const isEmpty = (await dirEntryCount(fiseDir)) === 0 && (await dirEntryCount(draftsDir)) === 0
+  if (isEmpty) {
+    const safetyDir = getSafetyBackupDir()
+    const hasSafetyData =
+      (await dirEntryCount(path.join(safetyDir, 'fise'))) > 0 ||
+      (await dirEntryCount(path.join(safetyDir, 'drafturi'))) > 0
+    if (hasSafetyData) {
+      const n1 = await copyMissing(path.join(safetyDir, 'fise'), fiseDir)
+      const n2 = await copyMissing(path.join(safetyDir, 'drafturi'), draftsDir)
+      try {
+        await fs.copyFile(path.join(safetyDir, 'setari.json'), path.join(baseDir, 'setari.json'))
+      } catch {
+        // setari.json poate sa nu existe in backup - nicio problema
+      }
+      recoveredFromSafetyBackup = true
+      log.error(
+        `[fileStore] ATENTIE: folderul principal de date era gol - restaurat automat din backup-ul de siguranta (${safetyDir}): ${n1} fise, ${n2} drafturi`
+      )
+    }
+  }
 }
 
 // Rezolvarea locatiei (primary vs fallback) se face o singura data per pornire
@@ -64,18 +194,27 @@ let baseDirPromise = null
 function resolveBaseDir() {
   if (!baseDirPromise) {
     baseDirPromise = (async () => {
+      let dir
       try {
         await tryUseDir(primaryDir())
         usingFallback = false
-        return primaryDir()
+        dir = primaryDir()
       } catch (err) {
         log.warn(
           `[fileStore] folderul "${primaryDir()}" nu e scriptibil, revin la folderul de date standard (AppData)`,
           err
         )
         usingFallback = true
-        return fallbackDir()
+        dir = fallbackDir()
       }
+      try {
+        await migrateAndRecover(dir)
+      } catch (err) {
+        // Migrarea/recuperarea sunt masuri suplimentare - un esec aici nu
+        // trebuie sa opreasca aplicatia, doar sa fie logat clar.
+        log.error('[fileStore] migrare/recuperare automata esuata', err)
+      }
+      return dir
     })()
   }
   return baseDirPromise
@@ -430,24 +569,31 @@ export async function listRecentFise(limit = 8) {
 // copiem din nou fisierele deja backup-uite intr-un folder datat nou in
 // fiecare zi (asta insemna, dupa 30 de zile, pana la 30x duplicare a
 // aceluiasi continut) - copiem doar ce lipseste din oglinda.
+// Doua straturi de backup, actualizate incremental (doar ce lipseste, nu
+// suprascrie nimic) la fiecare apel:
+//  1) "mirror" local, langa datele principale - convenabil de gasit/copiat
+//     manual, dar dispare odata cu ele daca folderul principal e sters.
+//  2) "safety-backup", intotdeauna in AppData, complet independent de unde e
+//     folderul principal (implicit sau ales de utilizator) - asta e plasa
+//     reala de siguranta, si e cea folosita de migrateAndRecover() daca
+//     folderul principal e vreodata gasit gol la pornire.
 export async function backupNow() {
   await ensureDirs()
-  const dest = path.join(getBackupDir(), 'mirror')
+  const localMirror = path.join(getBackupDir(), 'mirror')
+  const safetyDir = getSafetyBackupDir()
   try {
-    await fs.mkdir(dest, { recursive: true })
-    const files = await fs.readdir(getFiseDir())
-    let copiate = 0
-    for (const f of files) {
-      const destPath = path.join(dest, f)
+    let total = 0
+    for (const dest of [localMirror, safetyDir]) {
+      total += await copyMissing(getFiseDir(), path.join(dest, 'fise'))
+      total += await copyMissing(getDraftsDir(), path.join(dest, 'drafturi'))
       try {
-        await fs.access(destPath)
+        await fs.copyFile(settingsFilePath(), path.join(dest, 'setari.json'))
       } catch {
-        await fs.copyFile(path.join(getFiseDir(), f), destPath)
-        copiate++
+        // setari.json poate sa nu existe inca - nicio problema
       }
     }
-    log.info(`[fileStore] backup actualizat: ${dest} (${copiate} fisiere noi din ${files.length} totale)`)
-    return dest
+    log.info(`[fileStore] backup actualizat (local + safety-backup): ${total} fisiere noi copiate`)
+    return safetyDir
   } catch (err) {
     // Backup-ul e o plasa de siguranta secundara - un esec aici nu trebuie sa
     // opreasca aplicatia, doar sa fie logat clar.
