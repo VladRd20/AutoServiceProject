@@ -277,6 +277,10 @@ button,
   align-items: center;
   margin-bottom: 16px;
   gap: 12px;
+  /* Cardurile de mai jos au padding intern de 20px - fara asta, titlul si
+     butoanele se aliniaza cu marginea EXTERIOARA a cardului, nu cu textul
+     din interior (Client, Nume client etc.), si pare nealiniat cu restul. */
+  padding: 0 20px;
 }
 
 .topbar-actions {
