@@ -32,6 +32,22 @@ function emptyFisa() {
   }
 }
 
+// Fisa nu are inca niciun continut real introdus - folosit ca sa nu cream un
+// nou draft gol daca utilizatorul e deja pe unul (ar duplica "Fisa noua" in
+// sidebar de fiecare data cand apasa butonul, fara sa isi dea seama).
+function isFisaEmpty(f) {
+  return (
+    !f.client?.nume?.trim() &&
+    !f.client?.telefon?.trim() &&
+    !f.auto?.nrInmatriculare?.trim() &&
+    !f.auto?.marca?.trim() &&
+    !f.auto?.model?.trim() &&
+    !f.auto?.vin?.trim() &&
+    (f.piese?.length ?? 0) === 0 &&
+    (f.lucrari?.length ?? 0) === 0
+  )
+}
+
 export default function App() {
   const [fisa, setFisa] = useState(emptyFisa)
   const [drafts, setDrafts] = useState([])
@@ -41,6 +57,12 @@ export default function App() {
   const [pdfRetry, setPdfRetry] = useState(null) // { fisa, baseName }
   const saveTimerRef = useRef(null)
   const hasSavedOnceRef = useRef(false)
+  // Creste de fiecare data cand comutam pe alta fisa (noua/deschisa/editata).
+  // Un autosave in curs cand utilizatorul comuta poate raspunde DUPA ce fisa
+  // curenta s-a schimbat deja - fara acest gard, i-ar "lipi" id-ul vechi
+  // peste fisa noua (arata ca "nu pot crea o fisa noua, tot in cea veche
+  // raman"). Rezultatul unei salvari e aplicat doar daca generatia se potriveste.
+  const fisaGenRef = useRef(0)
   const manualUpdateCheckRef = useRef(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -141,11 +163,13 @@ export default function App() {
   useEffect(() => {
     const isFirstSave = !fisa.id && !hasSavedOnceRef.current
     const delay = isFirstSave ? 0 : AUTOSAVE_DEBOUNCE_MS
+    const gen = fisaGenRef.current
 
     saveTimerRef.current = setTimeout(async () => {
       hasSavedOnceRef.current = true
       setSaveState('saving')
       const res = await window.serviceAuto.fisa.saveDraft(fisa)
+      if (fisaGenRef.current !== gen) return // utilizatorul a comutat deja pe alta fisa - ignoram rezultatul
       if (res.ok) {
         if (!fisa.id) setFisa((f) => (f.id ? f : { ...f, id: res.data }))
         setSaveState('saved')
@@ -161,6 +185,7 @@ export default function App() {
 
   const resetToNewFisa = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    fisaGenRef.current += 1
     hasSavedOnceRef.current = false
     setSaveState('idle')
     setFisa(emptyFisa())
@@ -170,6 +195,8 @@ export default function App() {
     async (id) => {
       const res = await window.serviceAuto.fisa.loadDraft(id)
       if (res.ok) {
+        fisaGenRef.current += 1
+        hasSavedOnceRef.current = true
         setFisa(res.data)
         setErrors({})
         setPdfRetry(null)
@@ -223,10 +250,17 @@ export default function App() {
   }
 
   const handleNewFisa = useCallback(() => {
+    // Daca fisa curenta e deja o fisa noua, goala, nu mai cream inca una -
+    // ar duplica "Fisa noua" in sidebar la fiecare click. Citim din ref (nu
+    // din state) ca handleNewFisa sa ramana stabil intre randari.
+    if (isFisaEmpty(draftBackupRef.current)) {
+      showToast('success', 'Ești deja pe o fișă nouă, goală.')
+      return
+    }
     resetToNewFisa()
     setErrors({})
     setPdfRetry(null)
-  }, [resetToNewFisa])
+  }, [resetToNewFisa, showToast])
 
   async function handleRelease() {
     const { valid, errors: localErrors } = validateFisa(fisa)
@@ -293,6 +327,7 @@ export default function App() {
   // date, ca istoricul deja finalizat sa ramana intact.
   const handleEditRecent = useCallback((finalizedFisa) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    fisaGenRef.current += 1
     hasSavedOnceRef.current = false
     setSaveState('idle')
     const { _file, id, status, finalizedAt, ...rest } = finalizedFisa
