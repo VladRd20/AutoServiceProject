@@ -22,7 +22,7 @@ import {
   getDefaultDataPath,
   changeDataPath
 } from './fileStore'
-import { generatePdf } from './pdfGenerator'
+import { generatePdf, printPdf } from './pdfGenerator'
 import { checkForUpdatesSafe, downloadUpdateNow, installUpdateNow } from './updater'
 import { isActivated, activate } from './license'
 
@@ -161,6 +161,14 @@ export function registerIpcHandlers() {
       if (result) throw new Error(result)
       return pdfPath
     }, 'openPdf')
+  )
+
+  ipcMain.handle('fise:printPdf', (e, fileName) =>
+    wrapLicensed(async () => {
+      const baseName = String(fileName || '').replace(/\.json$/, '')
+      await printPdf(getPdfPath(baseName))
+      return true
+    }, 'printPdf')
   )
 
   ipcMain.handle('fise:getLocationInfo', () =>

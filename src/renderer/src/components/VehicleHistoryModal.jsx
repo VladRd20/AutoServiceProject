@@ -42,9 +42,9 @@ export default function VehicleHistoryModal({ nrInmatriculare, onClose, onOpenPd
         </div>
 
         <div className="search-results">
-          {loading && <p className="hint">Se încarcă...</p>}
+          {loading && <p className="hint">Se incarca...</p>}
           {!loading && results.length === 0 && (
-            <p className="hint">Nicio fișă finalizată anterior pentru acest număr de înmatriculare.</p>
+            <p className="hint">Nicio fisa finalizata anterior pentru acest numar de inmatriculare.</p>
           )}
           {!loading &&
             results.map((fisa) => {
@@ -57,7 +57,7 @@ export default function VehicleHistoryModal({ nrInmatriculare, onClose, onOpenPd
                   <div className="search-result-main">
                     <strong>{formatData(fisa.data)}</strong>
                     <span>{fisa.client?.nume}</span>
-                    <span>{denumiri.length > 0 ? denumiri.join(', ') : 'Fără piese/lucrări'}</span>
+                    <span>{denumiri.length > 0 ? denumiri.join(', ') : 'Fara piese/lucrari'}</span>
                   </div>
                   <div className="search-result-meta">
                     <span>{t.totalFinal.toFixed(2)} lei</span>

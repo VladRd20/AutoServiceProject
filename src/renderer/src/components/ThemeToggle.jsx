@@ -28,7 +28,7 @@ export default function ThemeToggle() {
       type="button"
       className="theme-toggle"
       onClick={toggle}
-      title={effective === 'dark' ? 'Comută la tema deschisă' : 'Comută la tema închisă'}
+      title={effective === 'dark' ? 'Comuta la tema deschisa' : 'Comuta la tema inchisa'}
     >
       {effective === 'dark' ? '☀️' : '🌙'}
     </button>

@@ -1,7 +1,7 @@
 import path from 'path'
 import fs from 'fs'
 import PdfPrinter from 'pdfmake'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { calcTotaluri, calcLinieTotal } from '../shared/calculations'
 import { toAppError, AppError } from './errors'
 import { getSettings } from './fileStore'
@@ -226,5 +226,38 @@ export async function generatePdf(fisa, destPath) {
       log.error('[pdfGenerator] generare esuata', err)
       reject(toAppError(err, 'Generarea PDF-ului a esuat.'))
     }
+  })
+}
+
+// Trimite PDF-ul direct la dialogul de printare, fara sa fie nevoie sa fie
+// deschis intr-un viewer extern intai. Foloseste o fereastra ascunsa care
+// randeaza PDF-ul (viewer-ul PDF nativ al Chromium trebuie activat explicit
+// prin webPreferences.plugins - e dezactivat implicit in Electron).
+export function printPdf(pdfPath) {
+  return new Promise((resolve, reject) => {
+    const printWin = new BrowserWindow({ show: false, webPreferences: { plugins: true, sandbox: true } })
+
+    function cleanup() {
+      if (!printWin.isDestroyed()) printWin.destroy()
+    }
+
+    printWin
+      .loadFile(pdfPath)
+      .then(() => {
+        printWin.webContents.print({ silent: false, printBackground: true }, (success, errorType) => {
+          cleanup()
+          if (success) {
+            resolve()
+          } else if (errorType === 'cancelled') {
+            resolve() // utilizatorul a inchis dialogul de printare - nu e o eroare
+          } else {
+            reject(toAppError(new Error(errorType), 'Printarea a esuat.'))
+          }
+        })
+      })
+      .catch((err) => {
+        cleanup()
+        reject(toAppError(err, 'Nu s-a putut deschide PDF-ul pentru printare.'))
+      })
   })
 }

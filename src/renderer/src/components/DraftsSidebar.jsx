@@ -11,7 +11,17 @@ function formatData(dataISO) {
 // recente) raman neschimbate in timpul editarii. Are efect real doar daca
 // handler-ele primite ca props (onOpen, onDelete etc) au referinta stabila
 // intre randari - vezi useCallback-urile din App.jsx.
-function DraftsSidebar({ drafts, currentId, onOpen, onDelete, onNew, recentFise, onEditRecent, onOpenPdf }) {
+function DraftsSidebar({
+  drafts,
+  currentId,
+  onOpen,
+  onDelete,
+  onNew,
+  recentFise,
+  onEditRecent,
+  onOpenPdf,
+  onPrintPdf
+}) {
   return (
     <aside className="sidebar">
       <button type="button" className="btn-primary" onClick={onNew}>
@@ -59,6 +69,9 @@ function DraftsSidebar({ drafts, currentId, onOpen, onDelete, onNew, recentFise,
               </button>
               <button type="button" title="Deschide PDF" onClick={() => onOpenPdf(f._file)}>
                 PDF
+              </button>
+              <button type="button" title="Printeaza" onClick={() => onPrintPdf(f._file)}>
+                Printeaza
               </button>
             </div>
           </li>

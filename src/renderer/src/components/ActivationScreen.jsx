@@ -23,7 +23,7 @@ export default function ActivationScreen({ onActivated }) {
     <div className="activation-screen">
       <div className="activation-card">
         <h1>Activare Service Auto</h1>
-        <p>Introdu cheia de licență primită pentru a folosi aplicația.</p>
+        <p>Introdu cheia de licenta primita pentru a folosi aplicatia.</p>
         <form onSubmit={handleActivate}>
           <textarea
             value={key}
@@ -33,7 +33,7 @@ export default function ActivationScreen({ onActivated }) {
           />
           {error && <p className="activation-error">{error}</p>}
           <button type="submit" className="btn-primary" disabled={activating || !key.trim()}>
-            {activating ? 'Se activează...' : 'Activează'}
+            {activating ? 'Se activeaza...' : 'Activeaza'}
           </button>
         </form>
       </div>

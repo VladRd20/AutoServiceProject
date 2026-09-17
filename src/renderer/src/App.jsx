@@ -79,13 +79,40 @@ export default function App() {
   const [autocomplete, setAutocomplete] = useState({ marci: [], modelePerMarca: {}, piese: [], lucrari: [] })
   const [saveState, setSaveState] = useState('idle') // idle | saving | saved
   const [exportingLogs, setExportingLogs] = useState(false)
+  // Blocheaza autosave-ul "instant" de la pornire pana stim daca exista deja
+  // un draft gol de refolosit - altfel castiga cursa cu IPC-ul de listDrafts
+  // si salveaza un draft nou inainte sa apucam sa-l refolosim pe cel vechi.
+  const [initialCheckDone, setInitialCheckDone] = useState(false)
+
+  const draftsRef = useRef([])
 
   const showToast = useCallback((type, message, action) => setToast({ type, message, action }), [])
 
+  // Daca exista mai multe drafturi goale simultan (acumulate din pornirile
+  // anterioare, inainte de acest fix), pastram doar cel mai recent si stergem
+  // restul - nu are rost sa tinem 5 "Fisa noua" identice si goale.
+  async function dedupeEmptyDrafts(allDrafts, keepId) {
+    const goale = allDrafts.filter((d) => isFisaEmpty(d) && d.id !== keepId)
+    if (goale.length <= 1) return allDrafts
+    const sorted = [...goale].sort((a, b) => (b.id || '').localeCompare(a.id || ''))
+    const deStars = sorted.slice(1)
+    for (const d of deStars) {
+      await window.serviceAuto.fisa.deleteDraft(d.id)
+    }
+    const idsSterse = new Set(deStars.map((d) => d.id))
+    return allDrafts.filter((d) => !idsSterse.has(d.id))
+  }
+
   const refreshDrafts = useCallback(async () => {
     const res = await window.serviceAuto.fisa.listDrafts()
-    if (res.ok) setDrafts(res.data)
-    else showToast('error', res.error.message)
+    if (!res.ok) {
+      showToast('error', res.error.message)
+      return []
+    }
+    const deduped = await dedupeEmptyDrafts(res.data, draftBackupRef.current?.id)
+    draftsRef.current = deduped
+    setDrafts(deduped)
+    return deduped
   }, [showToast])
 
   const refreshRecentFise = useCallback(async () => {
@@ -102,7 +129,19 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    refreshDrafts()
+    // Refolosim un draft gol existent in loc sa cream automat unul nou la
+    // fiecare pornire a aplicatiei - altfel se acumuleaza cate o "Fisa noua"
+    // goala de fiecare data cand deschizi/repornesti aplicatia.
+    refreshDrafts().then((deduped) => {
+      const golExistent = deduped.find((d) => isFisaEmpty(d))
+      if (golExistent) {
+        fisaGenRef.current += 1
+        hasSavedOnceRef.current = true
+        setFisa(golExistent)
+        setSaveState('saved')
+      }
+      setInitialCheckDone(true)
+    })
     refreshRecentFise()
     refreshAutocomplete()
     window.serviceAuto.fise.getLocationInfo().then((res) => {
@@ -144,12 +183,12 @@ export default function App() {
       if (!manualUpdateCheckRef.current) return
       manualUpdateCheckRef.current = false
 
+      // Doar starea butonului "Verifica actualizari" - fara toast in plus,
+      // ar duplica exact acelasi mesaj de doua ori pe ecran.
       if (evt.type === 'not-available') {
-        showToast('success', 'Ai deja cea mai recenta versiune.')
         setUpdateFlash('no-update')
         setTimeout(() => setUpdateFlash(null), 3000)
       } else if (evt.type === 'error') {
-        showToast('error', `Verificarea actualizarilor a esuat: ${evt.message || 'eroare necunoscuta'}.`)
         setUpdateFlash('error')
         setTimeout(() => setUpdateFlash(null), 3000)
       }
@@ -161,15 +200,15 @@ export default function App() {
   // sa vada in orice moment ce se intampla efectiv (verifica, nu a gasit
   // nimic, descarca cu procent, gata de instalat), nu doar un text static.
   function getUpdateButtonState() {
-    if (checkingUpdates) return { text: 'Se verifică...', variant: 'info' }
+    if (checkingUpdates) return { text: 'Se verifica...', variant: 'info' }
     if (updateInfo.status === 'downloading') {
-      return { text: `Se descarcă... ${updateInfo.percent ?? 0}%`, variant: 'info' }
+      return { text: `Se descarca... ${updateInfo.percent ?? 0}%`, variant: 'info' }
     }
     if (updateInfo.status === 'downloaded') return { text: 'Gata de instalat ✓', variant: 'success' }
-    if (updateInfo.status === 'available') return { text: `Versiune nouă: v${updateInfo.version}`, variant: 'accent' }
-    if (updateFlash === 'no-update') return { text: 'Ești la zi ✓', variant: 'success' }
-    if (updateFlash === 'error') return { text: 'Verificare eșuată', variant: 'error' }
-    return { text: 'Verifică actualizări', variant: null }
+    if (updateInfo.status === 'available') return { text: `Versiune noua: v${updateInfo.version}`, variant: 'accent' }
+    if (updateFlash === 'no-update') return { text: 'Esti la zi ✓', variant: 'success' }
+    if (updateFlash === 'error') return { text: 'Verificare esuata', variant: 'error' }
+    return { text: 'Verifica actualizari', variant: null }
   }
 
   function handleCheckForUpdates() {
@@ -189,6 +228,8 @@ export default function App() {
   // chiar goala, sub o denumire generica), salvarile urmatoare sunt
   // debounce-uite ca sa nu scriem pe disc la fiecare apasare de tasta.
   useEffect(() => {
+    if (!initialCheckDone) return undefined
+
     const isFirstSave = !fisa.id && !hasSavedOnceRef.current
     const delay = isFirstSave ? 0 : AUTOSAVE_DEBOUNCE_MS
     const gen = fisaGenRef.current
@@ -209,7 +250,7 @@ export default function App() {
     }, delay)
 
     return () => clearTimeout(saveTimerRef.current)
-  }, [fisa, refreshDrafts, showToast])
+  }, [fisa, refreshDrafts, showToast, initialCheckDone])
 
   const resetToNewFisa = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
@@ -258,18 +299,9 @@ export default function App() {
   async function goToNextDraftOrNew() {
     refreshRecentFise()
     refreshAutocomplete()
-    const res = await window.serviceAuto.fisa.listDrafts()
-    if (!res.ok) {
-      showToast('error', res.error.message)
-      resetToNewFisa()
-      setErrors({})
-      setPdfRetry(null)
-      return
-    }
-
-    setDrafts(res.data)
-    if (res.data.length > 0) {
-      await handleOpenDraft(res.data[0].id)
+    const deduped = await refreshDrafts()
+    if (deduped.length > 0) {
+      await handleOpenDraft(deduped[0].id)
     } else {
       resetToNewFisa()
       setErrors({})
@@ -282,13 +314,20 @@ export default function App() {
     // ar duplica "Fisa noua" in sidebar la fiecare click. Citim din ref (nu
     // din state) ca handleNewFisa sa ramana stabil intre randari.
     if (isFisaEmpty(draftBackupRef.current)) {
-      showToast('success', 'Ești deja pe o fișă nouă, goală.')
+      showToast('success', 'Esti deja pe o fisa noua, goala.')
+      return
+    }
+    // Sau, daca exista deja un draft gol NEFOLOSIT in lista (creat mai
+    // devreme si abandonat), il redeschidem in loc sa cream un altul.
+    const golExistent = draftsRef.current.find((d) => isFisaEmpty(d))
+    if (golExistent) {
+      handleOpenDraft(golExistent.id)
       return
     }
     resetToNewFisa()
     setErrors({})
     setPdfRetry(null)
-  }, [resetToNewFisa, showToast])
+  }, [resetToNewFisa, showToast, handleOpenDraft])
 
   async function handleRelease() {
     const { valid, errors: localErrors } = validateFisa(fisa)
@@ -309,8 +348,11 @@ export default function App() {
     }
 
     if (res.data.pdfSaved) {
-      showToast('success', `Fisa finalizata si PDF salvat: ${res.data.baseName}.pdf`)
-      window.serviceAuto.fise.openPdf(res.data.baseName)
+      showToast(
+        'success',
+        `Fisa finalizata si PDF salvat: ${res.data.baseName}.pdf`,
+        { label: 'Printeaza', onClick: () => handlePrintPdf(res.data.baseName) }
+      )
       await goToNextDraftOrNew()
     } else {
       setPdfRetry({ fisa: res.data.fisa, baseName: res.data.baseName })
@@ -323,11 +365,18 @@ export default function App() {
     }
   }
 
+  async function handlePrintPdf(baseName) {
+    const res = await window.serviceAuto.fise.printPdf(baseName)
+    if (!res.ok) showToast('error', res.error.message)
+  }
+
   async function handleRetryPdf(finalFisa, baseName) {
     const res = await window.serviceAuto.fisa.retryPdf({ fisa: finalFisa, baseName })
     if (res.ok) {
-      showToast('success', `PDF salvat: ${baseName}.pdf`)
-      window.serviceAuto.fise.openPdf(baseName)
+      showToast('success', `PDF salvat: ${baseName}.pdf`, {
+        label: 'Printeaza',
+        onClick: () => handlePrintPdf(baseName)
+      })
       setPdfRetry(null)
       await goToNextDraftOrNew()
     } else {
@@ -376,6 +425,14 @@ export default function App() {
     [showToast]
   )
 
+  const handlePrintPdfFromList = useCallback(
+    async (fileName) => {
+      const res = await window.serviceAuto.fise.printPdf(fileName)
+      if (!res.ok) showToast('error', res.error.message)
+    },
+    [showToast]
+  )
+
   const updateBtn = getUpdateButtonState()
 
   return (
@@ -389,6 +446,7 @@ export default function App() {
         recentFise={recentFise}
         onEditRecent={handleEditRecent}
         onOpenPdf={handleOpenPdfFromSearch}
+        onPrintPdf={handlePrintPdfFromList}
       />
 
       <main className="main">
@@ -404,7 +462,7 @@ export default function App() {
           <h1>Fisa de service auto</h1>
           <div className="topbar-actions">
             <button type="button" onClick={() => setSearchOpen(true)}>
-              Caută clienți
+              Cauta clienti
             </button>
             <button
               type="button"
@@ -417,9 +475,9 @@ export default function App() {
             <OverflowMenu
               items={[
                 { label: 'Rapoarte', onClick: () => setReportsOpen(true) },
-                { label: 'Deschide folderul cu fișe', onClick: handleOpenFolder },
-                { label: exportingLogs ? 'Se exportă...' : 'Exportă loguri', onClick: handleExportLogs },
-                { label: 'Setări', onClick: () => setSettingsOpen(true) }
+                { label: 'Deschide folderul cu fise', onClick: handleOpenFolder },
+                { label: exportingLogs ? 'Se exporta...' : 'Exporta loguri', onClick: handleExportLogs },
+                { label: 'Setari', onClick: () => setSettingsOpen(true) }
               ]}
             />
             <ThemeToggle />
@@ -465,7 +523,7 @@ export default function App() {
 
         <div className="release-bar">
           <span className={`autosave-status ${saveState === 'saved' ? 'saved' : ''}`}>
-            {saveState === 'saving' && '⏳ Se salvează...'}
+            {saveState === 'saving' && '⏳ Se salveaza...'}
             {saveState === 'saved' && '✓ Salvat'}
           </span>
           <div className="release-bar-actions">

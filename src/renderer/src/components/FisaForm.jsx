@@ -52,7 +52,7 @@ export default function FisaForm({ fisa, onChange, errors, autocomplete, onShowV
               onClick={() => onShowVehicleHistory?.(fisa.auto.nrInmatriculare)}
               title="Vezi fisele anterioare pentru acest numar de inmatriculare"
             >
-              Istoric mașină
+              Istoric masina
             </button>
           )}
         </div>

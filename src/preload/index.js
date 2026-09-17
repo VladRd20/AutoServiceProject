@@ -24,6 +24,7 @@ const api = {
   fise: {
     openFolder: () => ipcRenderer.invoke('fise:openFolder'),
     openPdf: (fileName) => ipcRenderer.invoke('fise:openPdf', fileName),
+    printPdf: (fileName) => ipcRenderer.invoke('fise:printPdf', fileName),
     getLocationInfo: () => ipcRenderer.invoke('fise:getLocationInfo')
   },
   settings: {
