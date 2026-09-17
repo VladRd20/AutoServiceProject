@@ -7,13 +7,14 @@ function formatData(dataISO) {
   return y && m && d ? `${d}.${m}.${y}` : dataISO || '-'
 }
 
-export default function VehicleHistoryModal({ nrInmatriculare, onClose, onOpenPdf, onPrintPdf, showToast }) {
+export default function VehicleHistoryModal({ vin, nrInmatriculare, onClose, onOpenPdf, onPrintPdf, showToast }) {
   const [loading, setLoading] = useState(true)
   const [results, setResults] = useState([])
+  const titlu = nrInmatriculare?.trim() || vin?.trim() || ''
 
   useEffect(() => {
     let cancelled = false
-    window.serviceAuto.fisa.getVehicleHistory(nrInmatriculare).then((res) => {
+    window.serviceAuto.fisa.getVehicleHistory(vin, nrInmatriculare).then((res) => {
       if (cancelled) return
       setLoading(false)
       if (res.ok) {
@@ -25,7 +26,7 @@ export default function VehicleHistoryModal({ nrInmatriculare, onClose, onOpenPd
     return () => {
       cancelled = true
     }
-  }, [nrInmatriculare, showToast])
+  }, [vin, nrInmatriculare, showToast])
 
   function handleKeyDown(e) {
     if (e.key === 'Escape') onClose()
@@ -35,7 +36,7 @@ export default function VehicleHistoryModal({ nrInmatriculare, onClose, onOpenPd
     <div className="modal-overlay" onClick={onClose} onKeyDown={handleKeyDown}>
       <div className="modal search-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Istoric {nrInmatriculare}</h2>
+          <h2>Istoric {titlu}</h2>
           <button type="button" className="btn-remove" onClick={onClose}>
             ✕
           </button>
@@ -44,7 +45,7 @@ export default function VehicleHistoryModal({ nrInmatriculare, onClose, onOpenPd
         <div className="search-results">
           {loading && <p className="hint">Se incarca...</p>}
           {!loading && results.length === 0 && (
-            <p className="hint">Nicio fisa finalizata anterior pentru acest numar de inmatriculare.</p>
+            <p className="hint">Nicio fisa finalizata anterior pentru acest VIN sau numar de inmatriculare.</p>
           )}
           {!loading &&
             results.map((fisa) => {

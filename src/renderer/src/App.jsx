@@ -72,7 +72,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [reportsOpen, setReportsOpen] = useState(false)
-  const [vehicleHistoryPlate, setVehicleHistoryPlate] = useState(null)
+  const [vehicleHistoryQuery, setVehicleHistoryQuery] = useState(null) // { vin, nrInmatriculare }
   const [recentFise, setRecentFise] = useState([])
   const [updateInfo, setUpdateInfo] = useState({ status: 'idle' })
   const [updateFlash, setUpdateFlash] = useState(null) // 'no-update' | 'error' - dispare singur dupa cateva secunde
@@ -500,7 +500,7 @@ export default function App() {
           onChange={setFisa}
           errors={errors}
           autocomplete={autocomplete}
-          onShowVehicleHistory={(nr) => setVehicleHistoryPlate(nr)}
+          onShowVehicleHistory={(vin, nr) => setVehicleHistoryQuery({ vin, nrInmatriculare: nr })}
         />
 
         <ListaItems
@@ -565,10 +565,11 @@ export default function App() {
 
       {reportsOpen && <ReportsModal onClose={() => setReportsOpen(false)} showToast={showToast} />}
 
-      {vehicleHistoryPlate && (
+      {vehicleHistoryQuery && (
         <VehicleHistoryModal
-          nrInmatriculare={vehicleHistoryPlate}
-          onClose={() => setVehicleHistoryPlate(null)}
+          vin={vehicleHistoryQuery.vin}
+          nrInmatriculare={vehicleHistoryQuery.nrInmatriculare}
+          onClose={() => setVehicleHistoryQuery(null)}
           onOpenPdf={handleOpenPdfFromSearch}
           onPrintPdf={handlePrintPdfFromList}
           showToast={showToast}

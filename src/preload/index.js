@@ -23,7 +23,8 @@ const api = {
     search: (query) => ipcRenderer.invoke('fisa:search', query),
     listRecent: (limit) => ipcRenderer.invoke('fisa:listRecent', limit),
     getAutocompleteData: () => ipcRenderer.invoke('fisa:getAutocompleteData'),
-    getVehicleHistory: (nrInmatriculare) => ipcRenderer.invoke('fisa:getVehicleHistory', nrInmatriculare),
+    getVehicleHistory: (vin, nrInmatriculare) =>
+      ipcRenderer.invoke('fisa:getVehicleHistory', vin, nrInmatriculare),
     getRapoarte: (period) => ipcRenderer.invoke('fisa:getRapoarte', period)
   },
   fise: {

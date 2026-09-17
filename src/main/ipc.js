@@ -128,8 +128,8 @@ export function registerIpcHandlers() {
     wrapLicensed(() => getAutocompleteData(), 'getAutocompleteData')
   )
 
-  ipcMain.handle('fisa:getVehicleHistory', (e, nrInmatriculare) =>
-    wrapLicensed(() => getVehicleHistory(nrInmatriculare), 'getVehicleHistory')
+  ipcMain.handle('fisa:getVehicleHistory', (e, vin, nrInmatriculare) =>
+    wrapLicensed(() => getVehicleHistory(vin, nrInmatriculare), 'getVehicleHistory')
   )
 
   ipcMain.handle('fisa:getRapoarte', (e, period) => wrapLicensed(() => getRapoarte(period), 'getRapoarte'))

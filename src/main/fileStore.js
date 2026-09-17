@@ -630,13 +630,22 @@ export async function saveSettings(settings) {
 
 // Toate fisele finalizate pentru un numar de inmatriculare exact - "ce s-a
 // mai facut la masina asta" inainte de a incepe o lucrare noua.
-export async function getVehicleHistory(nrInmatriculare) {
+// Cauta dupa VIN SAU numar de inmatriculare (oricare se potriveste) - o
+// masina revanduta/reinmatriculata isi schimba numarul, dar VIN-ul ramane
+// acelasi; invers, VIN-ul lipseste adesea pe fise mai vechi, dar numarul e
+// aproape mereu completat. Impreuna acopera ambele cazuri.
+export async function getVehicleHistory(vin, nrInmatriculare) {
   await ensureDirs()
-  const key = foldForMatch(nrInmatriculare)
-  if (!key) return []
+  const vinKey = foldForMatch(vin)
+  const nrKey = foldForMatch(nrInmatriculare)
+  if (!vinKey && !nrKey) return []
   const all = await readAllFiseFinalizate()
   return all
-    .filter((f) => foldForMatch(f.auto?.nrInmatriculare) === key)
+    .filter(
+      (f) =>
+        (vinKey && foldForMatch(f.auto?.vin) === vinKey) ||
+        (nrKey && foldForMatch(f.auto?.nrInmatriculare) === nrKey)
+    )
     .sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || ''))
 }
 

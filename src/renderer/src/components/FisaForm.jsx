@@ -46,11 +46,11 @@ export default function FisaForm({ fisa, onChange, errors, autocomplete, onShowV
       <section className="card">
         <div className="card-header">
           <h2>Automobil</h2>
-          {fisa.auto.nrInmatriculare?.trim() && (
+          {(fisa.auto.vin?.trim() || fisa.auto.nrInmatriculare?.trim()) && (
             <button
               type="button"
-              onClick={() => onShowVehicleHistory?.(fisa.auto.nrInmatriculare)}
-              title="Vezi fisele anterioare pentru acest numar de inmatriculare"
+              onClick={() => onShowVehicleHistory?.(fisa.auto.vin, fisa.auto.nrInmatriculare)}
+              title="Vezi fisele anterioare pentru acest VIN sau numar de inmatriculare"
             >
               Istoric masina
             </button>
