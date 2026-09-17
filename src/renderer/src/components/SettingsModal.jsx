@@ -6,6 +6,7 @@ export default function SettingsModal({ onClose, showToast }) {
   const [settings, setSettings] = useState({ numeService: '', adresa: '', telefon: '', cui: '' })
   const [pathInfo, setPathInfo] = useState(null) // { current, default }
   const [changingPath, setChangingPath] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
 
   useEffect(() => {
     window.serviceAuto.settings.get().then((res) => {
@@ -15,6 +16,9 @@ export default function SettingsModal({ onClose, showToast }) {
     })
     window.serviceAuto.settings.getDataPathInfo().then((res) => {
       if (res.ok) setPathInfo(res.data)
+    })
+    window.serviceAuto.app.getVersion().then((res) => {
+      if (res.ok) setAppVersion(res.data)
     })
   }, [showToast])
 
@@ -141,7 +145,7 @@ export default function SettingsModal({ onClose, showToast }) {
             </div>
 
             <div className="release-bar" style={{ marginTop: 18 }}>
-              <span />
+              <span className="hint">{appVersion && `Versiune: ${appVersion}`}</span>
               <div className="release-bar-actions">
                 <button type="button" className="btn-primary" disabled={saving} onClick={handleSave}>
                   {saving ? 'Se salveaza...' : 'Salveaza'}
