@@ -7,7 +7,7 @@ function formatData(dataISO) {
   return y && m && d ? `${d}.${m}.${y}` : dataISO || '-'
 }
 
-export default function VehicleHistoryModal({ nrInmatriculare, onClose, onOpenPdf, showToast }) {
+export default function VehicleHistoryModal({ nrInmatriculare, onClose, onOpenPdf, onPrintPdf, showToast }) {
   const [loading, setLoading] = useState(true)
   const [results, setResults] = useState([])
 
@@ -62,9 +62,14 @@ export default function VehicleHistoryModal({ nrInmatriculare, onClose, onOpenPd
                   <div className="search-result-meta">
                     <span>{t.totalFinal.toFixed(2)} lei</span>
                   </div>
-                  <button type="button" onClick={() => onOpenPdf(fisa._file)}>
-                    Deschide PDF
-                  </button>
+                  <div className="search-result-actions">
+                    <button type="button" onClick={() => onOpenPdf(fisa._file)}>
+                      Deschide PDF
+                    </button>
+                    <button type="button" onClick={() => onPrintPdf(fisa._file)}>
+                      Printeaza
+                    </button>
+                  </div>
                 </div>
               )
             })}

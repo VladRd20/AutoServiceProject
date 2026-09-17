@@ -9,7 +9,7 @@ function formatData(dataISO) {
   return y && m && d ? `${d}.${m}.${y}` : dataISO || '-'
 }
 
-export default function SearchModal({ onClose, onOpenPdf, showToast }) {
+export default function SearchModal({ onClose, onOpenPdf, onPrintPdf, showToast }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [searching, setSearching] = useState(false)
@@ -89,9 +89,14 @@ export default function SearchModal({ onClose, onOpenPdf, showToast }) {
                     <span>{formatData(fisa.data)}</span>
                     <span>{t.totalFinal.toFixed(2)} lei</span>
                   </div>
-                  <button type="button" onClick={() => onOpenPdf(fisa._file)}>
-                    Deschide PDF
-                  </button>
+                  <div className="search-result-actions">
+                    <button type="button" onClick={() => onOpenPdf(fisa._file)}>
+                      Deschide PDF
+                    </button>
+                    <button type="button" onClick={() => onPrintPdf(fisa._file)}>
+                      Printeaza
+                    </button>
+                  </div>
                 </div>
               )
             })}

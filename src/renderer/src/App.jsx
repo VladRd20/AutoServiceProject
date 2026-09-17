@@ -556,6 +556,7 @@ export default function App() {
         <SearchModal
           onClose={() => setSearchOpen(false)}
           onOpenPdf={handleOpenPdfFromSearch}
+          onPrintPdf={handlePrintPdfFromList}
           showToast={showToast}
         />
       )}
@@ -569,6 +570,7 @@ export default function App() {
           nrInmatriculare={vehicleHistoryPlate}
           onClose={() => setVehicleHistoryPlate(null)}
           onOpenPdf={handleOpenPdfFromSearch}
+          onPrintPdf={handlePrintPdfFromList}
           showToast={showToast}
         />
       )}

@@ -1,7 +1,52 @@
+/* ===== Fonturi: incluse local (nu de pe Google Fonts) ca aplicatia sa
+   ramana complet functionala offline, la fel ca restul produsului. Sora
+   pentru titluri/butoane (personalitate, nu fontul implicit de sistem),
+   Source Sans 3 pentru text, IBM Plex Mono pentru orice e "date" -
+   sume, numere de inmatriculare, date calendaristice, VIN. */
+@font-face {
+  font-family: 'Sora';
+  src: url('./assets/fonts/Sora-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('./assets/fonts/SourceSans3-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('./assets/fonts/IBMPlexMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('./assets/fonts/IBMPlexMono-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('./assets/fonts/IBMPlexMono-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ===== Tokens: paleta light (implicita) + dark, comutabile prin
    [data-theme] sau prin preferinta sistemului cand nu exista alegere
    explicita. Toate culorile din restul fisierului folosesc doar var(--...). */
 :root {
+  --font-heading: 'Sora', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
+
   --bg: #f4f5f7;
   --surface: #ffffff;
   --surface-hover: #f3f4f6;
@@ -18,8 +63,8 @@
   --sidebar-hover: #2d3341;
   --sidebar-active: #374151;
 
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
+  --accent: #1c3552;
+  --accent-hover: #142639;
   --accent-ink: #ffffff;
 
   --success: #15803d;
@@ -59,9 +104,9 @@
     --sidebar-hover: #1a1d23;
     --sidebar-active: #262a32;
 
-    --accent: #3b82f6;
-    --accent-hover: #60a5fa;
-    --accent-ink: #0b1220;
+    --accent: #7fa8cf;
+    --accent-hover: #9dbfe0;
+    --accent-ink: #0d1b2a;
 
     --success: #4ade80;
     --success-bg: #14291c;
@@ -100,9 +145,9 @@
   --sidebar-hover: #1a1d23;
   --sidebar-active: #262a32;
 
-  --accent: #3b82f6;
-  --accent-hover: #60a5fa;
-  --accent-ink: #0b1220;
+  --accent: #7fa8cf;
+  --accent-hover: #9dbfe0;
+  --accent-ink: #0d1b2a;
 
   --success: #4ade80;
   --success-bg: #14291c;
@@ -129,9 +174,18 @@
 
 body {
   margin: 0;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-body);
   background: var(--bg);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 /* Tranzitii scurte, doar pe culoare/fundal - nicio miscare/scalare, ca sa
@@ -240,6 +294,8 @@ button,
 .recent-info strong {
   font-size: 13px;
   color: var(--sidebar-text);
+  font-family: var(--font-mono);
+  font-weight: 600;
 }
 
 .recent-info span {
@@ -255,14 +311,18 @@ button,
 .recent-actions button {
   flex: 1;
   font-size: 11px;
-  padding: 4px 6px;
+  font-weight: 600;
+  letter-spacing: 0;
+  padding: 5px 4px;
   background: var(--sidebar-bg);
   color: var(--sidebar-text);
   border: 1px solid var(--sidebar-active);
+  box-shadow: none;
 }
 
 .recent-actions button:hover {
   background: var(--sidebar-active);
+  border-color: var(--sidebar-active);
 }
 
 .main {
@@ -290,14 +350,21 @@ button,
 }
 
 .theme-toggle {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   padding: 0;
+  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 15px;
   line-height: 1;
+  box-shadow: none;
+}
+
+.theme-toggle:hover {
+  border-color: var(--text-faint);
+  box-shadow: var(--shadow-sm);
 }
 
 .autosave-status {
@@ -441,9 +508,9 @@ button,
 
 .field input,
 .field textarea {
-  padding: 8px 10px;
+  padding: 9px 11px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   width: 100%;
   background: var(--surface);
@@ -534,6 +601,7 @@ button,
   font-weight: 600;
   padding-top: 8px;
   font-size: 14px;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -560,6 +628,7 @@ button,
   justify-content: space-between;
   padding: 4px 0;
   font-size: 14px;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -578,9 +647,10 @@ button,
   width: 80px;
   padding: 6px 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--surface);
   color: var(--text);
+  font-family: var(--font-mono);
 }
 
 .reducere-valoare {
@@ -614,18 +684,41 @@ button {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  border-radius: 6px;
-  padding: 8px 14px;
-  font-size: 14px;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow-sm);
+  /* Doar apasarea (1px, instant) da feedback tactil la click - nu e o
+     animatie in sensul interzis mai sus, e un raspuns imediat la actiune. */
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    transform 80ms ease;
 }
 
 button:hover {
   background: var(--surface-hover);
+  border-color: var(--text-faint);
+}
+
+button:active {
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+button:disabled:active {
+  transform: none;
 }
 
 button:focus-visible,
@@ -640,15 +733,19 @@ textarea:focus-visible,
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .btn-primary:hover {
   background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.16);
 }
 
 .btn-release {
-  padding: 10px 22px;
+  padding: 11px 26px;
   font-size: 15px;
+  letter-spacing: 0.015em;
 }
 
 /* Stari dinamice pentru butoane care reflecta un proces in fundal (ex.
@@ -763,7 +860,7 @@ textarea:focus-visible,
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   margin-bottom: 14px;
   background: var(--surface);
@@ -795,11 +892,25 @@ textarea:focus-visible,
 
 .search-result-main strong {
   font-size: 14px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .search-result-main span {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.search-result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.search-result-actions button {
+  font-size: 12px;
+  padding: 6px 12px;
 }
 
 .search-result-meta {
@@ -810,6 +921,7 @@ textarea:focus-visible,
   font-size: 12px;
   color: var(--text-muted);
   min-width: 100px;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -860,9 +972,9 @@ textarea:focus-visible,
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   resize: vertical;
   margin-bottom: 12px;
   background: var(--surface);
