@@ -9,16 +9,14 @@ function formatData(dataISO) {
   return y && m && d ? `${d}.${m}.${y}` : dataISO || '-'
 }
 
-export default function SearchModal({ onClose, onOpenPdf, onPrintPdf, showToast }) {
-  const [query, setQuery] = useState('')
+// Panoul de rezultate pentru cautarea din bara de sus - textbox-ul propriu-zis
+// traieste in App.jsx (topbar), nu aici; panoul asta doar afiseaza rezultatele
+// pentru query-ul primit ca prop, si se deschide/inchide automat cand query-ul
+// devine ne-gol/gol (vezi App.jsx).
+export default function SearchModal({ query, onClose, onOpenPdf, onPrintPdf, showToast }) {
   const [results, setResults] = useState(null)
   const [searching, setSearching] = useState(false)
   const timerRef = useRef(null)
-  const inputRef = useRef(null)
-
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
@@ -52,20 +50,11 @@ export default function SearchModal({ onClose, onOpenPdf, onPrintPdf, showToast 
     <div className="modal-overlay" onClick={onClose} onKeyDown={handleKeyDown}>
       <div className="modal search-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Cauta clienti</h2>
+          <h2>Rezultate cautare</h2>
           <button type="button" className="btn-remove" onClick={onClose}>
             ✕
           </button>
         </div>
-
-        <input
-          ref={inputRef}
-          type="text"
-          className="search-input"
-          placeholder="Nume, telefon, numar inmatriculare, marca, model, VIN..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
 
         <div className="search-results">
           {searching && <p className="hint">Se cauta...</p>}

@@ -349,6 +349,29 @@ button,
   gap: 10px;
 }
 
+.topbar-search {
+  width: 180px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 400;
+  letter-spacing: normal;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: none;
+  transition: width 150ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+.topbar-search:focus-visible {
+  width: 240px;
+}
+
+.topbar-search::placeholder {
+  color: var(--text-faint);
+}
+
 .theme-toggle {
   width: 36px;
   height: 36px;

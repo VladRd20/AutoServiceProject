@@ -69,7 +69,7 @@ export default function App() {
   const fisaGenRef = useRef(0)
   const manualUpdateCheckRef = useRef(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [reportsOpen, setReportsOpen] = useState(false)
   const [vehicleHistoryQuery, setVehicleHistoryQuery] = useState(null) // { vin, nrInmatriculare }
@@ -472,9 +472,16 @@ export default function App() {
         <header className="topbar">
           <h1>Fisa de service auto</h1>
           <div className="topbar-actions">
-            <button type="button" onClick={() => setSearchOpen(true)}>
-              Cauta clienti
-            </button>
+            <input
+              type="text"
+              className="topbar-search"
+              placeholder="Cauta"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setSearchQuery('')
+              }}
+            />
             <button
               type="button"
               className={updateBtn.variant ? `btn-status-${updateBtn.variant}` : ''}
@@ -552,9 +559,10 @@ export default function App() {
 
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      {searchOpen && (
+      {searchQuery.trim() && (
         <SearchModal
-          onClose={() => setSearchOpen(false)}
+          query={searchQuery}
+          onClose={() => setSearchQuery('')}
           onOpenPdf={handleOpenPdfFromSearch}
           onPrintPdf={handlePrintPdfFromList}
           showToast={showToast}
