@@ -1,6 +1,6 @@
 {
   "name": "service-auto",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Aplicatie de gestiune fise de service auto",
   "main": "./out/main/index.js",
   "author": "ServiceAuto",
