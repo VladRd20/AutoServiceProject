@@ -12,7 +12,7 @@ function Field({ label, error, children }) {
   )
 }
 
-export default function FisaForm({ fisa, onChange, errors, autocomplete }) {
+export default function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }) {
   const setClient = (patch) => onChange({ ...fisa, client: { ...fisa.client, ...patch } })
   const setAuto = (patch) => onChange({ ...fisa, auto: { ...fisa.auto, ...patch } })
 
@@ -44,7 +44,18 @@ export default function FisaForm({ fisa, onChange, errors, autocomplete }) {
       </section>
 
       <section className="card">
-        <h2>Automobil</h2>
+        <div className="card-header">
+          <h2>Automobil</h2>
+          {fisa.auto.nrInmatriculare?.trim() && (
+            <button
+              type="button"
+              onClick={() => onShowVehicleHistory?.(fisa.auto.nrInmatriculare)}
+              title="Vezi fisele anterioare pentru acest numar de inmatriculare"
+            >
+              Istoric mașină
+            </button>
+          )}
+        </div>
         <div className="grid-2">
           <Field label="Numar de inmatriculare" error={errors['auto.nrInmatriculare']}>
             <input

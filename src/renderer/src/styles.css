@@ -493,6 +493,17 @@ button,
   color: var(--accent-hover);
 }
 
+.overflow-menu {
+  width: auto;
+}
+
+.overflow-menu .autocomplete-dropdown {
+  left: auto;
+  right: 0;
+  min-width: 220px;
+  white-space: nowrap;
+}
+
 .field-error {
   color: var(--danger);
   font-size: 12px;

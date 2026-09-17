@@ -7,6 +7,10 @@ import DraftsSidebar from './components/DraftsSidebar'
 import SearchModal from './components/SearchModal'
 import UpdateBanner from './components/UpdateBanner'
 import ThemeToggle from './components/ThemeToggle'
+import SettingsModal from './components/SettingsModal'
+import ReportsModal from './components/ReportsModal'
+import VehicleHistoryModal from './components/VehicleHistoryModal'
+import OverflowMenu from './components/OverflowMenu'
 import { validateFisa } from '../../shared/calculations'
 import { draftBackupRef } from './draftBackup'
 
@@ -66,6 +70,9 @@ export default function App() {
   const manualUpdateCheckRef = useRef(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [reportsOpen, setReportsOpen] = useState(false)
+  const [vehicleHistoryPlate, setVehicleHistoryPlate] = useState(null)
   const [recentFise, setRecentFise] = useState([])
   const [updateInfo, setUpdateInfo] = useState({ status: 'idle' })
   const [updateFlash, setUpdateFlash] = useState(null) // 'no-update' | 'error' - dispare singur dupa cateva secunde
@@ -303,6 +310,7 @@ export default function App() {
 
     if (res.data.pdfSaved) {
       showToast('success', `Fisa finalizata si PDF salvat: ${res.data.baseName}.pdf`)
+      window.serviceAuto.fise.openPdf(res.data.baseName)
       await goToNextDraftOrNew()
     } else {
       setPdfRetry({ fisa: res.data.fisa, baseName: res.data.baseName })
@@ -319,6 +327,7 @@ export default function App() {
     const res = await window.serviceAuto.fisa.retryPdf({ fisa: finalFisa, baseName })
     if (res.ok) {
       showToast('success', `PDF salvat: ${baseName}.pdf`)
+      window.serviceAuto.fise.openPdf(baseName)
       setPdfRetry(null)
       await goToNextDraftOrNew()
     } else {
@@ -395,7 +404,7 @@ export default function App() {
           <h1>Fisa de service auto</h1>
           <div className="topbar-actions">
             <button type="button" onClick={() => setSearchOpen(true)}>
-              Cauta clienti
+              Caută clienți
             </button>
             <button
               type="button"
@@ -405,22 +414,25 @@ export default function App() {
             >
               {updateBtn.text}
             </button>
-            <button type="button" onClick={handleOpenFolder}>
-              Deschide folderul cu fise
-            </button>
-            <button
-              type="button"
-              title="Exporta fisierele de log pe Desktop, pentru debugging"
-              disabled={exportingLogs}
-              onClick={handleExportLogs}
-            >
-              {exportingLogs ? 'Se exportă...' : 'Exportă loguri'}
-            </button>
+            <OverflowMenu
+              items={[
+                { label: 'Rapoarte', onClick: () => setReportsOpen(true) },
+                { label: 'Deschide folderul cu fișe', onClick: handleOpenFolder },
+                { label: exportingLogs ? 'Se exportă...' : 'Exportă loguri', onClick: handleExportLogs },
+                { label: 'Setări', onClick: () => setSettingsOpen(true) }
+              ]}
+            />
             <ThemeToggle />
           </div>
         </header>
 
-        <FisaForm fisa={fisa} onChange={setFisa} errors={errors} autocomplete={autocomplete} />
+        <FisaForm
+          fisa={fisa}
+          onChange={setFisa}
+          errors={errors}
+          autocomplete={autocomplete}
+          onShowVehicleHistory={(nr) => setVehicleHistoryPlate(nr)}
+        />
 
         <ListaItems
           titlu="Piese"
@@ -474,6 +486,19 @@ export default function App() {
       {searchOpen && (
         <SearchModal
           onClose={() => setSearchOpen(false)}
+          onOpenPdf={handleOpenPdfFromSearch}
+          showToast={showToast}
+        />
+      )}
+
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} showToast={showToast} />}
+
+      {reportsOpen && <ReportsModal onClose={() => setReportsOpen(false)} showToast={showToast} />}
+
+      {vehicleHistoryPlate && (
+        <VehicleHistoryModal
+          nrInmatriculare={vehicleHistoryPlate}
+          onClose={() => setVehicleHistoryPlate(null)}
           onOpenPdf={handleOpenPdfFromSearch}
           showToast={showToast}
         />

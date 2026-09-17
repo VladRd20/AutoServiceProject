@@ -1,0 +1,105 @@
+import React, { useEffect, useState } from 'react'
+
+const PERIOADE = [
+  { key: 'azi', label: 'Azi' },
+  { key: 'saptamana', label: 'Săptămâna asta' },
+  { key: 'luna', label: 'Luna asta' },
+  { key: 'tot', label: 'Tot' }
+]
+
+export default function ReportsModal({ onClose, showToast }) {
+  const [period, setPeriod] = useState('luna')
+  const [loading, setLoading] = useState(true)
+  const [raport, setRaport] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    window.serviceAuto.fisa.getRapoarte(period).then((res) => {
+      if (cancelled) return
+      setLoading(false)
+      if (res.ok) setRaport(res.data)
+      else showToast('error', res.error.message)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [period, showToast])
+
+  function handleKeyDown(e) {
+    if (e.key === 'Escape') onClose()
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose} onKeyDown={handleKeyDown}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Rapoarte</h2>
+          <button type="button" className="btn-remove" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        <div className="topbar-actions" style={{ marginBottom: 16 }}>
+          {PERIOADE.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              className={p.key === period ? 'btn-primary' : ''}
+              onClick={() => setPeriod(p.key)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {loading || !raport ? (
+          <p className="hint">Se calculează...</p>
+        ) : (
+          <>
+            <div className="totaluri" style={{ marginBottom: 16 }}>
+              <div className="rand">
+                <span>Fișe finalizate</span>
+                <span>{raport.numarFise}</span>
+              </div>
+              <div className="rand rand-final">
+                <span>Total încasat</span>
+                <span>{raport.totalIncasat.toFixed(2)} lei</span>
+              </div>
+            </div>
+
+            <div className="search-results">
+              <h3 style={{ margin: '4px 0' }}>Cele mai cerute piese</h3>
+              {raport.topPiese.length === 0 && <p className="hint">Fără date pentru această perioadă.</p>}
+              {raport.topPiese.map((p) => (
+                <div className="search-result" key={p.denumire}>
+                  <div className="search-result-main">
+                    <strong>{p.denumire}</strong>
+                  </div>
+                  <div className="search-result-meta">
+                    <span>{p.count}x</span>
+                    <span>{p.valoare.toFixed(2)} lei</span>
+                  </div>
+                </div>
+              ))}
+
+              <h3 style={{ margin: '12px 0 4px' }}>Cele mai cerute lucrări</h3>
+              {raport.topLucrari.length === 0 && <p className="hint">Fără date pentru această perioadă.</p>}
+              {raport.topLucrari.map((l) => (
+                <div className="search-result" key={l.denumire}>
+                  <div className="search-result-main">
+                    <strong>{l.denumire}</strong>
+                  </div>
+                  <div className="search-result-meta">
+                    <span>{l.count}x</span>
+                    <span>{l.valoare.toFixed(2)} lei</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

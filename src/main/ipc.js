@@ -1,4 +1,4 @@
-import { ipcMain, shell, app } from 'electron'
+import { ipcMain, shell, app, dialog, BrowserWindow } from 'electron'
 import log, { exportLogs } from './logger'
 import { validateFisa } from '../shared/calculations'
 import {
@@ -13,7 +13,14 @@ import {
   isUsingFallbackLocation,
   searchFise,
   listRecentFise,
-  getAutocompleteData
+  getAutocompleteData,
+  getSettings,
+  saveSettings,
+  getVehicleHistory,
+  getRapoarte,
+  getCurrentDataPath,
+  getDefaultDataPath,
+  changeDataPath
 } from './fileStore'
 import { generatePdf } from './pdfGenerator'
 import { checkForUpdatesSafe, downloadUpdateNow, installUpdateNow } from './updater'
@@ -110,6 +117,40 @@ export function registerIpcHandlers() {
 
   ipcMain.handle('fisa:getAutocompleteData', () =>
     wrapLicensed(() => getAutocompleteData(), 'getAutocompleteData')
+  )
+
+  ipcMain.handle('fisa:getVehicleHistory', (e, nrInmatriculare) =>
+    wrapLicensed(() => getVehicleHistory(nrInmatriculare), 'getVehicleHistory')
+  )
+
+  ipcMain.handle('fisa:getRapoarte', (e, period) => wrapLicensed(() => getRapoarte(period), 'getRapoarte'))
+
+  ipcMain.handle('settings:get', () => wrapLicensed(() => getSettings(), 'settings:get'))
+  ipcMain.handle('settings:save', (e, settings) =>
+    wrapLicensed(() => saveSettings(settings), 'settings:save')
+  )
+
+  ipcMain.handle('settings:getDataPathInfo', () =>
+    wrapLicensed(
+      () => ({ current: getCurrentDataPath(), default: getDefaultDataPath() }),
+      'settings:getDataPathInfo'
+    )
+  )
+
+  ipcMain.handle('settings:pickDataFolder', async (e) =>
+    wrapLicensed(async () => {
+      const win = BrowserWindow.fromWebContents(e.sender)
+      const result = await dialog.showOpenDialog(win, {
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Alege folderul pentru fisele de service'
+      })
+      if (result.canceled || result.filePaths.length === 0) return null
+      return result.filePaths[0]
+    }, 'settings:pickDataFolder')
+  )
+
+  ipcMain.handle('settings:changeDataPath', (e, newPath) =>
+    wrapLicensed(() => changeDataPath(newPath), 'settings:changeDataPath')
   )
 
   ipcMain.handle('fise:openPdf', (e, fileName) =>

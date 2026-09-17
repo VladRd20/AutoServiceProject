@@ -3,17 +3,24 @@ import path from 'path'
 import fs from 'fs/promises'
 import log from './logger'
 import { toAppError, AppError } from './errors'
-import { foldForMatch } from '../shared/calculations'
+import { foldForMatch, calcTotaluri, calcLinieTotal, round2 } from '../shared/calculations'
 import { SEED_MARCI_MODELE, SEED_PIESE, SEED_LUCRARI } from '../shared/seedData'
+import { getDataPathOverride, setDataPathOverride } from './appConfig'
 
-// Locatia principala: folderul "date" langa aplicatie (portabil, usor de gasit
+// Locatia implicita: folderul "date" langa aplicatie (portabil, usor de gasit
 // si de facut backup manual) - in dev, langa proiect; in build, langa exe.
+// Configurabila din Setari - daca utilizatorul a ales explicit alt folder,
+// acela are prioritate (vezi getDataPathOverride).
+export function getDefaultDataPath() {
+  const root = app.isPackaged ? path.dirname(process.execPath) : app.getAppPath()
+  return path.join(root, 'date')
+}
+
 // Daca acel folder nu e scriptibil (ex: aplicatia instalata in Program Files
 // fara drepturi de admin), revenim automat la folderul de date standard al
 // utilizatorului (AppData), ca aplicatia sa functioneze oricum.
 function primaryDir() {
-  const root = app.isPackaged ? path.dirname(process.execPath) : app.getAppPath()
-  return path.join(root, 'date')
+  return getDataPathOverride() || getDefaultDataPath()
 }
 
 function fallbackDir() {
@@ -93,6 +100,45 @@ export async function ensureDirs() {
     }
   }
   dirsEnsured = true
+}
+
+export function getCurrentDataPath() {
+  return resolvedBaseDir
+}
+
+// Schimba folderul de date catre o locatie aleasa explicit de utilizator.
+// Copiaza (nu muta) fisele/drafturile/backup-ul/setarile existente in noua
+// locatie inainte sa comute pointer-ul - originalul ramane intact, ca sa nu
+// existe niciun risc de pierdere daca ceva merge prost la copiere.
+export async function changeDataPath(newBasePath) {
+  await ensureDirs()
+  const oldBase = resolvedBaseDir
+  const resolvedNew = path.resolve(newBasePath)
+
+  if (path.resolve(oldBase) === resolvedNew) {
+    return { changed: false, path: oldBase }
+  }
+
+  try {
+    await tryUseDir(resolvedNew)
+  } catch (err) {
+    throw toAppError(err, 'Folderul ales nu este scriptibil. Alege alt folder.')
+  }
+
+  try {
+    await fs.cp(oldBase, resolvedNew, { recursive: true, force: false, errorOnExist: false })
+  } catch (err) {
+    throw toAppError(err, 'Copierea datelor existente in noul folder a esuat. Nimic nu a fost schimbat.')
+  }
+
+  setDataPathOverride(resolvedNew)
+  resolvedBaseDir = resolvedNew
+  usingFallback = false
+  baseDirPromise = Promise.resolve(resolvedNew)
+  dirsEnsured = false
+
+  log.info(`[fileStore] folder de date schimbat: ${oldBase} -> ${resolvedNew}`)
+  return { changed: true, path: resolvedNew, oldPath: oldBase }
 }
 
 function sanitizeSegment(value) {
@@ -407,6 +453,103 @@ export async function backupNow() {
     // opreasca aplicatia, doar sa fie logat clar.
     log.error('[fileStore] backup esuat', err)
     throw toAppError(err, 'Backup-ul automat a esuat. Datele originale sunt intacte.')
+  }
+}
+
+// Setarile firmei (nume, adresa, telefon, CUI/IDNO) - afisate pe PDF, langa
+// datele clientului. Salvate in date/ (portabile odata cu restul datelor de
+// business), nu in profilul Windows.
+const DEFAULT_SETTINGS = { numeService: '', adresa: '', telefon: '', cui: '' }
+
+function settingsFilePath() {
+  return path.join(resolvedBaseDir, 'setari.json')
+}
+
+export async function getSettings() {
+  await ensureDirs()
+  try {
+    const raw = await fs.readFile(settingsFilePath(), 'utf-8')
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+  } catch {
+    return { ...DEFAULT_SETTINGS }
+  }
+}
+
+export async function saveSettings(settings) {
+  await ensureDirs()
+  const merged = { ...DEFAULT_SETTINGS, ...settings }
+  await writeJsonAtomic(settingsFilePath(), merged)
+  return merged
+}
+
+// Toate fisele finalizate pentru un numar de inmatriculare exact - "ce s-a
+// mai facut la masina asta" inainte de a incepe o lucrare noua.
+export async function getVehicleHistory(nrInmatriculare) {
+  await ensureDirs()
+  const key = foldForMatch(nrInmatriculare)
+  if (!key) return []
+  const all = await readAllFiseFinalizate()
+  return all
+    .filter((f) => foldForMatch(f.auto?.nrInmatriculare) === key)
+    .sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || ''))
+}
+
+function periodStart(period) {
+  const start = new Date()
+  if (period === 'azi') {
+    start.setHours(0, 0, 0, 0)
+  } else if (period === 'saptamana') {
+    const zi = (start.getDay() + 6) % 7 // luni = 0
+    start.setDate(start.getDate() - zi)
+    start.setHours(0, 0, 0, 0)
+  } else if (period === 'luna') {
+    start.setDate(1)
+    start.setHours(0, 0, 0, 0)
+  } else {
+    return null // 'tot' - fara filtrare de data
+  }
+  return start
+}
+
+// Raport simplu: total incasat si cele mai cerute piese/lucrari intr-o
+// perioada. Calculat din fisele finalizate, nu tinut separat - mereu
+// consistent cu ce s-a salvat efectiv.
+export async function getRapoarte(period) {
+  await ensureDirs()
+  const all = await readAllFiseFinalizate()
+  const start = periodStart(period)
+  const filtered = start ? all.filter((f) => f.finalizedAt && new Date(f.finalizedAt) >= start) : all
+
+  let totalIncasat = 0
+  const pieseMap = new Map()
+  const lucrariMap = new Map()
+
+  function upsertAgregat(map, denumireRaw, cantitate, valoare) {
+    const denumire = denumireRaw?.trim()
+    if (!denumire) return
+    const key = foldForMatch(denumire)
+    const entry = map.get(key) || { denumire, count: 0, valoare: 0 }
+    entry.count += Number(cantitate) || 0
+    entry.valoare = round2(entry.valoare + valoare)
+    map.set(key, entry)
+  }
+
+  for (const fisa of filtered) {
+    const t = calcTotaluri(fisa.piese, fisa.lucrari, fisa.reducerePercent)
+    totalIncasat += t.totalFinal
+    for (const p of fisa.piese || []) {
+      upsertAgregat(pieseMap, p.denumire, p.cantitate, calcLinieTotal(p.cantitate, p.pretUnitar))
+    }
+    for (const l of fisa.lucrari || []) {
+      upsertAgregat(lucrariMap, l.denumire, l.cantitate, calcLinieTotal(l.cantitate, l.pret))
+    }
+  }
+
+  return {
+    numarFise: filtered.length,
+    totalIncasat: round2(totalIncasat),
+    topPiese: [...pieseMap.values()].sort((a, b) => b.count - a.count).slice(0, 5),
+    topLucrari: [...lucrariMap.values()].sort((a, b) => b.count - a.count).slice(0, 5)
   }
 }
 

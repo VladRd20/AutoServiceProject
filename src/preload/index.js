@@ -17,12 +17,21 @@ const api = {
     retryPdf: (payload) => ipcRenderer.invoke('fisa:retryPdf', payload),
     search: (query) => ipcRenderer.invoke('fisa:search', query),
     listRecent: (limit) => ipcRenderer.invoke('fisa:listRecent', limit),
-    getAutocompleteData: () => ipcRenderer.invoke('fisa:getAutocompleteData')
+    getAutocompleteData: () => ipcRenderer.invoke('fisa:getAutocompleteData'),
+    getVehicleHistory: (nrInmatriculare) => ipcRenderer.invoke('fisa:getVehicleHistory', nrInmatriculare),
+    getRapoarte: (period) => ipcRenderer.invoke('fisa:getRapoarte', period)
   },
   fise: {
     openFolder: () => ipcRenderer.invoke('fise:openFolder'),
     openPdf: (fileName) => ipcRenderer.invoke('fise:openPdf', fileName),
     getLocationInfo: () => ipcRenderer.invoke('fise:getLocationInfo')
+  },
+  settings: {
+    get: () => ipcRenderer.invoke('settings:get'),
+    save: (settings) => ipcRenderer.invoke('settings:save', settings),
+    getDataPathInfo: () => ipcRenderer.invoke('settings:getDataPathInfo'),
+    pickDataFolder: () => ipcRenderer.invoke('settings:pickDataFolder'),
+    changeDataPath: (newPath) => ipcRenderer.invoke('settings:changeDataPath', newPath)
   },
   backup: {
     now: () => ipcRenderer.invoke('backup:now')

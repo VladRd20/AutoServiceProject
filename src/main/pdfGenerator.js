@@ -4,6 +4,7 @@ import PdfPrinter from 'pdfmake'
 import { app } from 'electron'
 import { calcTotaluri, calcLinieTotal } from '../shared/calculations'
 import { toAppError, AppError } from './errors'
+import { getSettings } from './fileStore'
 import log from './logger'
 
 // build/fonts in dev, resources/fonts dupa build (vezi extraResources in package.json)
@@ -96,11 +97,21 @@ function tabelLucrari(lucrari) {
   return body
 }
 
-function buildDocDefinition(fisa) {
+function buildDocDefinition(fisa, settings) {
   const totals = calcTotaluri(fisa.piese, fisa.lucrari, fisa.reducerePercent)
 
+  const antetService = [settings?.adresa, settings?.telefon, settings?.cui && `CUI/IDNO: ${settings.cui}`]
+    .filter(Boolean)
+    .join(' · ')
+
   const content = [
-    { text: 'Fisa de service auto', style: 'titlu' },
+    settings?.numeService
+      ? { text: settings.numeService, style: 'firma' }
+      : { text: 'Fisa de service auto', style: 'titlu' },
+    settings?.numeService && antetService ? { text: antetService, style: 'firmaSub' } : null,
+    settings?.numeService
+      ? { text: 'Fisa de service auto', style: 'sectiune', margin: [0, 10, 0, 2] }
+      : null,
     { text: `Data interventiei: ${formatDataAfisare(fisa)}`, margin: [0, 0, 0, 12] },
 
     { text: 'Client', style: 'sectiune' },
@@ -164,6 +175,8 @@ function buildDocDefinition(fisa) {
     content,
     styles: {
       titlu: { fontSize: 18, bold: true, margin: [0, 0, 0, 10] },
+      firma: { fontSize: 16, bold: true, margin: [0, 0, 0, 2] },
+      firmaSub: { fontSize: 9, color: '#555555', margin: [0, 0, 0, 4] },
       sectiune: { fontSize: 13, bold: true, margin: [0, 6, 0, 4] },
       totalFinal: { fontSize: 14, bold: true, margin: [0, 4, 0, 0] }
     },
@@ -173,11 +186,20 @@ function buildDocDefinition(fisa) {
 
 // Genereaza PDF-ul si il scrie la calea data. Rezolva/respinge cand streamul
 // e complet inchis pe disc (nu doar cand pdfkit termina de generat continutul).
-export function generatePdf(fisa, destPath) {
+export async function generatePdf(fisa, destPath) {
+  let settings = null
+  try {
+    settings = await getSettings()
+  } catch (err) {
+    // Fara datele firmei PDF-ul tot iese, doar cu antetul generic - nu are
+    // rost sa blocam generarea documentului pentru asta.
+    log.warn('[pdfGenerator] nu s-au putut citi setarile firmei', err)
+  }
+
   return new Promise((resolve, reject) => {
     try {
       const printer = new PdfPrinter(getFonts())
-      const docDefinition = buildDocDefinition(fisa)
+      const docDefinition = buildDocDefinition(fisa, settings)
       const pdfDoc = printer.createPdfKitDocument(docDefinition)
 
       const tmpPath = `${destPath}.tmp-${process.pid}-${Date.now()}`
