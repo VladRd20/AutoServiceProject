@@ -2,7 +2,7 @@ import path from 'path'
 import fs from 'fs'
 import PdfPrinter from 'pdfmake'
 import { app, BrowserWindow } from 'electron'
-import { calcTotaluri, calcLinieTotal } from '../shared/calculations'
+import { calcTotaluri, calcLinieTotal, reduceriDinFisa } from '../shared/calculations'
 import { toAppError, AppError } from './errors'
 import { getSettings } from './fileStore'
 import log from './logger'
@@ -98,7 +98,8 @@ function tabelLucrari(lucrari) {
 }
 
 function buildDocDefinition(fisa, settings) {
-  const totals = calcTotaluri(fisa.piese, fisa.lucrari, fisa.reducerePercent)
+  const reduceri = reduceriDinFisa(fisa)
+  const totals = calcTotaluri(fisa.piese, fisa.lucrari, reduceri.piese, reduceri.lucrari)
 
   const antetService = [settings?.adresa, settings?.telefon, settings?.cui && `CUI/IDNO: ${settings.cui}`]
     .filter(Boolean)
@@ -146,7 +147,15 @@ function buildDocDefinition(fisa, settings) {
           margin: [0, 0, 0, 6]
         }
       : { text: 'Nicio piesa adaugata.', italics: true, margin: [0, 0, 0, 6] },
-    { text: `Total piese: ${formatBani(totals.totalPiese)}`, alignment: 'right', margin: [0, 0, 0, 10] },
+    { text: `Total piese: ${formatBani(totals.totalPiese)}`, alignment: 'right' },
+    totals.procentReducerePiese > 0
+      ? {
+          text: `Reducere piese (${totals.procentReducerePiese}%): -${formatBani(totals.valoareReducerePiese)}`,
+          alignment: 'right',
+          color: '#15803d',
+          margin: [0, 0, 0, 10]
+        }
+      : { text: '', margin: [0, 0, 0, 10] },
 
     { text: 'Lucrari', style: 'sectiune' },
     (fisa.lucrari?.length ?? 0) > 0
@@ -156,18 +165,19 @@ function buildDocDefinition(fisa, settings) {
           margin: [0, 0, 0, 6]
         }
       : { text: 'Nicio lucrare adaugata.', italics: true, margin: [0, 0, 0, 6] },
-    { text: `Total lucrari: ${formatBani(totals.totalLucrari)}`, alignment: 'right', margin: [0, 0, 0, 10] },
+    { text: `Total lucrari: ${formatBani(totals.totalLucrari)}`, alignment: 'right' },
+    totals.procentReducereLucrari > 0
+      ? {
+          text: `Reducere lucrari (${totals.procentReducereLucrari}%): -${formatBani(totals.valoareReducereLucrari)}`,
+          alignment: 'right',
+          color: '#15803d',
+          margin: [0, 0, 0, 10]
+        }
+      : { text: '', margin: [0, 0, 0, 10] },
 
     { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#cccccc' }], margin: [0, 0, 0, 10] },
 
     { text: `Total general: ${formatBani(totals.totalGeneral)}`, alignment: 'right' },
-    totals.procentReducere > 0
-      ? {
-          text: `Reducere (${totals.procentReducere}%): -${formatBani(totals.valoareReducere)}`,
-          alignment: 'right',
-          color: '#15803d'
-        }
-      : null,
     { text: `Total final: ${formatBani(totals.totalFinal)}`, alignment: 'right', style: 'totalFinal' }
   ].filter(Boolean)
 

@@ -3,7 +3,7 @@ import path from 'path'
 import fs from 'fs/promises'
 import log from './logger'
 import { toAppError, AppError } from './errors'
-import { foldForMatch, calcTotaluri, calcLinieTotal, round2 } from '../shared/calculations'
+import { foldForMatch, calcTotaluri, calcLinieTotal, round2, reduceriDinFisa } from '../shared/calculations'
 import { SEED_MARCI_MODELE, SEED_PIESE, SEED_LUCRARI } from '../shared/seedData'
 import { getDataPathOverride, setDataPathOverride } from './appConfig'
 
@@ -690,7 +690,8 @@ export async function getRapoarte(period) {
   }
 
   for (const fisa of filtered) {
-    const t = calcTotaluri(fisa.piese, fisa.lucrari, fisa.reducerePercent)
+    const reduceri = reduceriDinFisa(fisa)
+    const t = calcTotaluri(fisa.piese, fisa.lucrari, reduceri.piese, reduceri.lucrari)
     totalIncasat += t.totalFinal
     for (const p of fisa.piese || []) {
       upsertAgregat(pieseMap, p.denumire, p.cantitate, calcLinieTotal(p.cantitate, p.pretUnitar))

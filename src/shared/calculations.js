@@ -30,23 +30,44 @@ export function calcListaTotal(items, pretKey) {
   )
 }
 
-export function calcTotaluri(piese, lucrari, reducerePercent) {
+export function calcTotaluri(piese, lucrari, reducerePiesePercent, reducereLucrariPercent) {
   const totalPiese = calcListaTotal(piese || [], 'pretUnitar')
   const totalLucrari = calcListaTotal(lucrari || [], 'pret')
   const totalGeneral = round2(totalPiese + totalLucrari)
 
-  const procent = Math.min(100, Math.max(0, toNumber(reducerePercent)))
-  const valoareReducere = round2((totalGeneral * procent) / 100)
+  const procentPiese = Math.min(100, Math.max(0, toNumber(reducerePiesePercent)))
+  const procentLucrari = Math.min(100, Math.max(0, toNumber(reducereLucrariPercent)))
+  const valoareReducerePiese = round2((totalPiese * procentPiese) / 100)
+  const valoareReducereLucrari = round2((totalLucrari * procentLucrari) / 100)
+  const valoareReducere = round2(valoareReducerePiese + valoareReducereLucrari)
   const totalFinal = round2(totalGeneral - valoareReducere)
 
   return {
     totalPiese,
     totalLucrari,
     totalGeneral,
-    procentReducere: procent,
+    procentReducerePiese: procentPiese,
+    procentReducereLucrari: procentLucrari,
+    valoareReducerePiese,
+    valoareReducereLucrari,
     valoareReducere,
     totalFinal
   }
+}
+
+// Fisele salvate inainte de separarea reducerii in piese/lucrari au un singur
+// camp `reducerePercent` aplicat pe totalul general. Il aplicam identic pe
+// ambele liste la deschidere, ca totalul unei fise vechi sa nu se schimbe
+// retroactiv doar pentru ca a fost redeschisa.
+export function reduceriDinFisa(fisa) {
+  if (fisa?.reducerePiesePercent !== undefined || fisa?.reducereLucrariPercent !== undefined) {
+    return {
+      piese: fisa.reducerePiesePercent ?? 0,
+      lucrari: fisa.reducereLucrariPercent ?? 0
+    }
+  }
+  const legacy = fisa?.reducerePercent ?? 0
+  return { piese: legacy, lucrari: legacy }
 }
 
 export function validateFisa(fisa) {

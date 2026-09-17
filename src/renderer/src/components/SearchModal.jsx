@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { calcTotaluri } from '../../../shared/calculations'
+import { calcTotaluri, reduceriDinFisa } from '../../../shared/calculations'
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -63,7 +63,8 @@ export default function SearchModal({ query, onClose, onOpenPdf, onPrintPdf, sho
           )}
           {!searching &&
             results?.map((fisa) => {
-              const t = calcTotaluri(fisa.piese, fisa.lucrari, fisa.reducerePercent)
+              const reduceri = reduceriDinFisa(fisa)
+              const t = calcTotaluri(fisa.piese, fisa.lucrari, reduceri.piese, reduceri.lucrari)
               return (
                 <div className="search-result" key={fisa._file}>
                   <div className="search-result-main">

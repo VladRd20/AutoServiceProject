@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { calcTotaluri } from '../../../shared/calculations'
+import { calcTotaluri, reduceriDinFisa } from '../../../shared/calculations'
 
 function formatData(dataISO) {
   const datePart = String(dataISO || '').slice(0, 10)
@@ -49,7 +49,8 @@ export default function VehicleHistoryModal({ vin, nrInmatriculare, onClose, onO
           )}
           {!loading &&
             results.map((fisa) => {
-              const t = calcTotaluri(fisa.piese, fisa.lucrari, fisa.reducerePercent)
+              const reduceri = reduceriDinFisa(fisa)
+              const t = calcTotaluri(fisa.piese, fisa.lucrari, reduceri.piese, reduceri.lucrari)
               const denumiri = [...(fisa.piese || []), ...(fisa.lucrari || [])]
                 .map((it) => it.denumire)
                 .filter(Boolean)

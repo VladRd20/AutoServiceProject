@@ -11,7 +11,7 @@ import SettingsModal from './components/SettingsModal'
 import ReportsModal from './components/ReportsModal'
 import VehicleHistoryModal from './components/VehicleHistoryModal'
 import OverflowMenu from './components/OverflowMenu'
-import { validateFisa } from '../../shared/calculations'
+import { validateFisa, reduceriDinFisa } from '../../shared/calculations'
 import { draftBackupRef } from './draftBackup'
 
 // Prima salvare (cand fisa capata continut) e instanta, ca sa apara imediat
@@ -32,8 +32,21 @@ function emptyFisa() {
     dataCurenta: true,
     piese: [],
     lucrari: [],
-    reducerePercent: 0
+    reducerePiesePercent: 0,
+    reducereLucrariPercent: 0
   }
+}
+
+// Fisele salvate inainte de separarea reducerii in piese/lucrari au un singur
+// camp `reducerePercent`. Il migram la deschidere in cele doua campuri noi,
+// ca formularul si PDF-ul sa lucreze mereu cu aceeasi forma de date.
+function normalizeFisa(f) {
+  if (!f) return f
+  if (f.reducerePiesePercent !== undefined || f.reducereLucrariPercent !== undefined) return f
+  if (f.reducerePercent === undefined) return f
+  const { reducerePercent, ...rest } = f
+  const r = reduceriDinFisa(f)
+  return { ...rest, reducerePiesePercent: r.piese, reducereLucrariPercent: r.lucrari }
 }
 
 // Fisa nu are inca niciun continut real introdus - folosit ca sa nu cream un
@@ -137,7 +150,7 @@ export default function App() {
       if (golExistent) {
         fisaGenRef.current += 1
         hasSavedOnceRef.current = true
-        setFisa(golExistent)
+        setFisa(normalizeFisa(golExistent))
         setSaveState('saved')
       }
       setInitialCheckDone(true)
@@ -277,7 +290,7 @@ export default function App() {
       if (res.ok) {
         fisaGenRef.current += 1
         hasSavedOnceRef.current = true
-        setFisa(res.data)
+        setFisa(normalizeFisa(res.data))
         setErrors({})
         setPdfRetry(null)
         setSaveState('saved')
@@ -423,7 +436,7 @@ export default function App() {
     hasSavedOnceRef.current = false
     setSaveState('idle')
     const { _file, id, status, finalizedAt, ...rest } = finalizedFisa
-    setFisa({ ...rest, id: null })
+    setFisa(normalizeFisa({ ...rest, id: null }))
     setErrors({})
     setPdfRetry(null)
   }, [])
@@ -535,8 +548,10 @@ export default function App() {
         <Totaluri
           piese={fisa.piese}
           lucrari={fisa.lucrari}
-          reducerePercent={fisa.reducerePercent}
-          onChangeReducere={(v) => setFisa({ ...fisa, reducerePercent: v })}
+          reducerePiesePercent={fisa.reducerePiesePercent}
+          reducereLucrariPercent={fisa.reducereLucrariPercent}
+          onChangeReducerePiese={(v) => setFisa({ ...fisa, reducerePiesePercent: v })}
+          onChangeReducereLucrari={(v) => setFisa({ ...fisa, reducereLucrariPercent: v })}
         />
 
         <div className="release-bar">
