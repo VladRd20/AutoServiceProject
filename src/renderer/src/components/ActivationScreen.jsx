@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-export default function ActivationScreen({ onActivated }) {
+export default function ActivationScreen({ onActivated, revoked }) {
   const [key, setKey] = useState('')
   const [error, setError] = useState('')
   const [activating, setActivating] = useState(false)
@@ -23,7 +23,13 @@ export default function ActivationScreen({ onActivated }) {
     <div className="activation-screen">
       <div className="activation-card">
         <h1>Activare Service Auto</h1>
-        <p>Introdu cheia de licenta primita pentru a folosi aplicatia.</p>
+        {revoked ? (
+          <p className="activation-error">
+            Licenta curenta a fost revocata. Daca ai primit o cheie noua, introdu-o mai jos.
+          </p>
+        ) : (
+          <p>Introdu cheia de licenta primita pentru a folosi aplicatia.</p>
+        )}
         <form onSubmit={handleActivate}>
           <textarea
             value={key}

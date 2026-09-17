@@ -1,10 +1,19 @@
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
+import https from 'https'
 import { execSync } from 'child_process'
 import os from 'os'
 import { app } from 'electron'
 import log from './logger'
+
+// Lista publica de id-uri de licenta revocate, gazduita chiar in acest repo
+// (fisier simplu, doar id-uri opace - fara nume de client sau chei). Un
+// "purge"/revoke facut cu scripts/license-admin.js modifica local acest
+// fisier; abia dupa commit+push devine vizibil aici si ajunge la clienti.
+const REVOKED_LIST_URL =
+  'https://raw.githubusercontent.com/VladRd20/AutoServiceProject/main/license/revoked.json'
+const REVOCATION_CHECK_TIMEOUT_MS = 5000
 
 // Cheia publica corespunzatoare cheii private din keys/private.pem (NU intra
 // in git - vezi .gitignore). Doar cu acea cheie privata se pot genera chei
@@ -96,6 +105,8 @@ function licenseFilePath() {
 }
 
 let cachedActivated = null
+let cachedPayload = null
+let cachedRevoked = false
 
 // Adevarat doar daca exista o inregistrare de activare valida, criptata cu
 // o cheie derivata din fingerprint-ul ACESTEI masini - copiat pe alt
@@ -108,10 +119,59 @@ export function isActivated() {
     const fingerprint = getMachineFingerprint()
     const record = decryptRecord(raw, deriveKey(fingerprint))
     cachedActivated = record?.fingerprint === fingerprint && !!record?.payload
+    cachedPayload = cachedActivated ? record.payload : null
   } catch (err) {
     cachedActivated = false
   }
   return cachedActivated
+}
+
+// True doar dupa ce checkRevocationOnline() a confirmat ca id-ul curent e in
+// lista publica de revocari. Ramane false (nu blocheaza nimic) pana la primul
+// rezultat de succes al verificarii, si la orice eroare de retea - aplicatia
+// trebuie sa functioneze normal si offline, revocarea e un bonus "best-effort".
+export function isRevoked() {
+  return cachedRevoked
+}
+
+// Verificare best-effort, o singura data la pornire (apelata din main/index.js).
+// Chei vechi, emise inainte sa existe campul "id" in payload, nu au id - nu
+// pot fi revocate de la distanta, raman valabile cat timp semnatura e buna.
+export async function checkRevocationOnline() {
+  if (!isActivated() || !cachedPayload?.id) return
+  try {
+    const revokedIds = await fetchRevokedList()
+    if (revokedIds.includes(cachedPayload.id)) {
+      cachedRevoked = true
+      log.warn(`[license] licenta revocata de la distanta (id: ${cachedPayload.id})`)
+    }
+  } catch (err) {
+    log.warn('[license] verificarea revocarii a esuat (probabil offline) - ignorata', err)
+  }
+}
+
+function fetchRevokedList() {
+  return new Promise((resolve, reject) => {
+    const req = https.get(REVOKED_LIST_URL, { timeout: REVOCATION_CHECK_TIMEOUT_MS }, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume()
+        reject(new Error(`status ${res.statusCode}`))
+        return
+      }
+      let body = ''
+      res.on('data', (chunk) => (body += chunk))
+      res.on('end', () => {
+        try {
+          const ids = JSON.parse(body)
+          resolve(Array.isArray(ids) ? ids : [])
+        } catch (err) {
+          reject(err)
+        }
+      })
+    })
+    req.on('timeout', () => req.destroy(new Error('timeout')))
+    req.on('error', reject)
+  })
 }
 
 // Activeaza aplicatia cu o cheie de licenta noua - verifica semnatura, apoi
@@ -131,6 +191,8 @@ export function activate(keyString) {
   fs.mkdirSync(path.dirname(licenseFilePath()), { recursive: true })
   fs.writeFileSync(licenseFilePath(), encrypted, 'utf-8')
   cachedActivated = true
+  cachedPayload = payload
+  cachedRevoked = false
   log.info('[license] activare reusita')
   return payload
 }

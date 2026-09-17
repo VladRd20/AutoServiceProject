@@ -5,7 +5,12 @@ import { contextBridge, ipcRenderer } from 'electron'
 const api = {
   license: {
     getStatus: () => ipcRenderer.invoke('license:getStatus'),
-    activate: (key) => ipcRenderer.invoke('license:activate', key)
+    activate: (key) => ipcRenderer.invoke('license:activate', key),
+    onRevoked: (callback) => {
+      const listener = () => callback()
+      ipcRenderer.on('license:revoked', listener)
+      return () => ipcRenderer.removeListener('license:revoked', listener)
+    }
   },
   fisa: {
     saveDraft: (fisa) => ipcRenderer.invoke('fisa:saveDraft', fisa),

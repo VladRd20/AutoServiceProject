@@ -24,7 +24,7 @@ import {
 } from './fileStore'
 import { generatePdf, printPdf } from './pdfGenerator'
 import { checkForUpdatesSafe, downloadUpdateNow, installUpdateNow } from './updater'
-import { isActivated, activate } from './license'
+import { isActivated, isRevoked, activate } from './license'
 
 // Orice eroare e prinsa aici si transformata intr-un rezultat {ok:false, error}
 // serializabil - nu lasam niciodata o exceptie bruta sa traverseze IPC catre UI,
@@ -53,12 +53,19 @@ function wrapLicensed(fn, context) {
       err.code = 'NOT_LICENSED'
       throw err
     }
+    if (isRevoked()) {
+      const err = new Error('Aceasta licenta a fost revocata. Contacteaza dezvoltatorul pentru o cheie noua.')
+      err.code = 'REVOKED'
+      throw err
+    }
     return fn()
   }, context)
 }
 
 export function registerIpcHandlers() {
-  ipcMain.handle('license:getStatus', () => wrap(() => ({ activated: isActivated() }), 'license:getStatus'))
+  ipcMain.handle('license:getStatus', () =>
+    wrap(() => ({ activated: isActivated() && !isRevoked(), revoked: isActivated() && isRevoked() }), 'license:getStatus')
+  )
   ipcMain.handle('license:activate', (e, key) =>
     wrap(() => {
       const payload = activate(key)

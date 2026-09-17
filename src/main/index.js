@@ -5,6 +5,7 @@ import log from './logger'
 import { ensureDirs, backupNow } from './fileStore'
 import { registerIpcHandlers } from './ipc'
 import { initUpdater } from './updater'
+import { checkRevocationOnline, isRevoked } from './license'
 
 let mainWindow = null
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000 // o data pe zi
@@ -64,6 +65,15 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
   createWindow()
   initUpdater(mainWindow)
+
+  // Best-effort, o singura data la pornire - daca gaseste id-ul curent in
+  // lista publica de revocari, anunta imediat renderer-ul (altfel ramanea
+  // ascuns pana la urmatoarea actiune care da eroare REVOKED prin IPC).
+  checkRevocationOnline().then(() => {
+    if (isRevoked() && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('license:revoked')
+    }
+  })
 
   // Backup zilnic, best-effort - nu blocheaza si nu opreste aplicatia daca esueaza.
   backupNow().catch((err) => log.warn('[main] backup initial esuat', err))
