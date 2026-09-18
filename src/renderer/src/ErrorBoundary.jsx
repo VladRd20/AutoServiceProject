@@ -26,12 +26,12 @@ export default class ErrorBoundary extends React.Component {
 
     return (
       <div className="crash-screen">
-        <h1>A aparut o problema neasteptata</h1>
+        <h1>A apărut o problemă neașteptată</h1>
         <p>
-          Aplicatia a intampinat o eroare. Am incercat sa salvam automat fisa la care lucrai
-          inainte de repornire.
+          Aplicația a întâmpinat o eroare. Am încercat să salvăm automat fișa la care lucrai
+          înainte de repornire.
         </p>
-        <button onClick={this.handleRestart}>Reporneste aplicatia</button>
+        <button onClick={this.handleRestart}>Repornește aplicația</button>
       </div>
     )
   }

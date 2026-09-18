@@ -1,4 +1,5 @@
 import React from 'react'
+import Icon from './Icon'
 
 // Randat o singura data la nivel de App (vezi confirmAction/confirmState),
 // controlat prin `state`: null cand nu e nimic de confirmat, altfel
@@ -8,7 +9,7 @@ import React from 'react'
 export default function ConfirmDialog({ state, onResult }) {
   if (!state) return null
 
-  const { message, confirmLabel = 'Confirma', cancelLabel = 'Anuleaza', danger = true } = state
+  const { message, confirmLabel = 'Confirmă', cancelLabel = 'Anulează', danger = true } = state
 
   function handleKeyDown(e) {
     if (e.key === 'Escape') onResult(false)
@@ -17,7 +18,12 @@ export default function ConfirmDialog({ state, onResult }) {
   return (
     <div className="confirm-overlay" onClick={() => onResult(false)} onKeyDown={handleKeyDown}>
       <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
-        <p className="confirm-message">{message}</p>
+        <div className="confirm-body">
+          <span className={`confirm-icon ${danger ? 'danger' : ''}`}>
+            <Icon name={danger ? 'alert' : 'info'} size={20} />
+          </span>
+          <p className="confirm-message">{message}</p>
+        </div>
         <div className="confirm-actions">
           {/* Focus implicit pe Anuleaza, nu pe actiunea distructiva - un Enter
               reflex (obisnuinta din alte dialoguri) nu trebuie sa confirme

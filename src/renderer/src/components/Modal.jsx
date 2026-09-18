@@ -36,7 +36,7 @@ export default function Modal({ title, onClose, className = '', children, autoFo
       <div className={`modal ${className}`.trim()} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{title}</h2>
-          <button type="button" className="btn-remove" onClick={onClose} title="Inchide">
+          <button type="button" className="btn-remove" onClick={onClose} title="Închide">
             ✕
           </button>
         </div>

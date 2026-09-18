@@ -37,7 +37,7 @@ function getFonts() {
     } catch (err) {
       throw new AppError(
         'FONT_MISSING',
-        'Fisierele de font lipsesc din instalare. Reinstaleaza aplicatia.',
+        'Fișierele de font lipsesc din instalare. Reinstalează aplicația.',
         err
       )
     }
@@ -48,7 +48,19 @@ function getFonts() {
 }
 
 function formatBani(n) {
-  return `${n.toFixed(2)} lei`
+  const [int, dec] = Math.abs(n).toFixed(2).split('.')
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+  return `${n < 0 ? '-' : ''}${grouped},${dec} lei`
+}
+
+// Tabel cu antet colorat si linii subtiri - mai lizibil decat implicitul.
+const tableLayout = {
+  hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length ? 0.8 : 0.4),
+  vLineWidth: () => 0,
+  hLineColor: (i) => (i <= 1 ? '#1c3552' : '#dddddd'),
+  fillColor: (row) => (row === 0 ? '#eef2f7' : null),
+  paddingTop: () => 4,
+  paddingBottom: () => 4
 }
 
 function formatDataAfisare(fisa) {
@@ -71,27 +83,31 @@ function formatDataAfisare(fisa) {
   return dataStr
 }
 
+function hdr(cols) {
+  return cols.map((text, i) => ({ text, bold: true, color: '#1c3552', alignment: i === 0 ? 'left' : 'right' }))
+}
+
 function tabelPiese(piese) {
-  const body = [['Denumire', 'Cant.', 'Pret unitar', 'Pret total']]
+  const body = [hdr(['Denumire', 'Cant.', 'Preț unitar', 'Preț total'])]
   for (const p of piese || []) {
     body.push([
       p.denumire || '-',
-      String(p.cantitate ?? '-'),
-      formatBani(Number(p.pretUnitar) || 0),
-      formatBani(calcLinieTotal(p.cantitate, p.pretUnitar))
+      { text: String(p.cantitate ?? '-'), alignment: 'right' },
+      { text: formatBani(Number(p.pretUnitar) || 0), alignment: 'right' },
+      { text: formatBani(calcLinieTotal(p.cantitate, p.pretUnitar)), alignment: 'right' }
     ])
   }
   return body
 }
 
 function tabelLucrari(lucrari) {
-  const body = [['Denumire', 'Cant.', 'Pret', 'Pret total']]
+  const body = [hdr(['Denumire', 'Cant.', 'Preț', 'Preț total'])]
   for (const l of lucrari || []) {
     body.push([
       l.denumire || '-',
-      String(l.cantitate ?? '-'),
-      formatBani(Number(l.pret) || 0),
-      formatBani(calcLinieTotal(l.cantitate, l.pret))
+      { text: String(l.cantitate ?? '-'), alignment: 'right' },
+      { text: formatBani(Number(l.pret) || 0), alignment: 'right' },
+      { text: formatBani(calcLinieTotal(l.cantitate, l.pret)), alignment: 'right' }
     ])
   }
   return body
@@ -106,14 +122,15 @@ function buildDocDefinition(fisa, settings) {
     .join(' · ')
 
   const content = [
+    { canvas: [{ type: 'rect', x: 0, y: 0, w: 515, h: 4, color: '#1c3552' }], margin: [0, 0, 0, 10] },
     settings?.numeService
       ? { text: settings.numeService, style: 'firma' }
-      : { text: 'Fisa de service auto', style: 'titlu' },
+      : { text: 'Fișă de service auto', style: 'titlu' },
     settings?.numeService && antetService ? { text: antetService, style: 'firmaSub' } : null,
     settings?.numeService
-      ? { text: 'Fisa de service auto', style: 'sectiune', margin: [0, 10, 0, 2] }
+      ? { text: 'Fișă de service auto', style: 'sectiune', margin: [0, 10, 0, 2] }
       : null,
-    { text: `Data interventiei: ${formatDataAfisare(fisa)}`, margin: [0, 0, 0, 12] },
+    { text: `Data intervenției: ${formatDataAfisare(fisa)}`, margin: [0, 0, 0, 12] },
 
     { text: 'Client', style: 'sectiune' },
     {
@@ -127,8 +144,8 @@ function buildDocDefinition(fisa, settings) {
     { text: 'Automobil', style: 'sectiune' },
     {
       columns: [
-        { text: `Nr. inmatriculare: ${fisa.auto?.nrInmatriculare || '-'}` },
-        { text: `An fabricatie: ${fisa.auto?.an || '-'}` }
+        { text: `Nr. înmatriculare: ${fisa.auto?.nrInmatriculare || '-'}` },
+        { text: `An fabricație: ${fisa.auto?.an || '-'}` }
       ]
     },
     {
@@ -143,10 +160,10 @@ function buildDocDefinition(fisa, settings) {
     (fisa.piese?.length ?? 0) > 0
       ? {
           table: { headerRows: 1, widths: ['*', 'auto', 'auto', 'auto'], body: tabelPiese(fisa.piese) },
-          layout: 'lightHorizontalLines',
+          layout: tableLayout,
           margin: [0, 0, 0, 6]
         }
-      : { text: 'Nicio piesa adaugata.', italics: true, margin: [0, 0, 0, 6] },
+      : { text: 'Nicio piesă adăugată.', italics: true, margin: [0, 0, 0, 6] },
     { text: `Total piese: ${formatBani(totals.totalPiese)}`, alignment: 'right' },
     totals.procentReducerePiese > 0
       ? {
@@ -157,18 +174,18 @@ function buildDocDefinition(fisa, settings) {
         }
       : { text: '', margin: [0, 0, 0, 10] },
 
-    { text: 'Lucrari', style: 'sectiune' },
+    { text: 'Lucrări', style: 'sectiune' },
     (fisa.lucrari?.length ?? 0) > 0
       ? {
           table: { headerRows: 1, widths: ['*', 'auto', 'auto', 'auto'], body: tabelLucrari(fisa.lucrari) },
-          layout: 'lightHorizontalLines',
+          layout: tableLayout,
           margin: [0, 0, 0, 6]
         }
-      : { text: 'Nicio lucrare adaugata.', italics: true, margin: [0, 0, 0, 6] },
-    { text: `Total lucrari: ${formatBani(totals.totalLucrari)}`, alignment: 'right' },
+      : { text: 'Nicio lucrare adăugată.', italics: true, margin: [0, 0, 0, 6] },
+    { text: `Total lucrări: ${formatBani(totals.totalLucrari)}`, alignment: 'right' },
     totals.procentReducereLucrari > 0
       ? {
-          text: `Reducere lucrari (${totals.procentReducereLucrari}%): -${formatBani(totals.valoareReducereLucrari)}`,
+          text: `Reducere lucrări (${totals.procentReducereLucrari}%): -${formatBani(totals.valoareReducereLucrari)}`,
           alignment: 'right',
           color: '#15803d',
           margin: [0, 0, 0, 10]
@@ -178,19 +195,45 @@ function buildDocDefinition(fisa, settings) {
     { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#cccccc' }], margin: [0, 0, 0, 10] },
 
     { text: `Total general: ${formatBani(totals.totalGeneral)}`, alignment: 'right' },
-    { text: `Total final: ${formatBani(totals.totalFinal)}`, alignment: 'right', style: 'totalFinal' }
+    { text: `Total final: ${formatBani(totals.totalFinal)}`, alignment: 'right', style: 'totalFinal' },
+
+    {
+      unbreakable: true,
+      margin: [0, 40, 0, 0],
+      columns: [
+        {
+          stack: [
+            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 200, y2: 0, lineWidth: 0.8, lineColor: '#888888' }] },
+            { text: 'Semnătura service', fontSize: 9, color: '#666666', margin: [0, 4, 0, 0] }
+          ]
+        },
+        {
+          stack: [
+            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 200, y2: 0, lineWidth: 0.8, lineColor: '#888888' }] },
+            { text: 'Semnătura client', fontSize: 9, color: '#666666', margin: [0, 4, 0, 0] }
+          ],
+          alignment: 'right'
+        }
+      ]
+    }
   ].filter(Boolean)
 
   return {
     content,
+    footer: (currentPage, pageCount) => ({
+      columns: [
+        { text: settings?.numeService || 'Service Auto', fontSize: 8, color: '#888888', margin: [40, 0, 0, 0] },
+        { text: `Pagina ${currentPage} / ${pageCount}`, alignment: 'right', fontSize: 8, color: '#888888', margin: [0, 0, 40, 0] }
+      ]
+    }),
     styles: {
       titlu: { fontSize: 18, bold: true, margin: [0, 0, 0, 10] },
       firma: { fontSize: 16, bold: true, margin: [0, 0, 0, 2] },
       firmaSub: { fontSize: 9, color: '#555555', margin: [0, 0, 0, 4] },
-      sectiune: { fontSize: 13, bold: true, margin: [0, 6, 0, 4] },
+      sectiune: { fontSize: 12, bold: true, color: '#1c3552', margin: [0, 6, 0, 4] },
       totalFinal: { fontSize: 14, bold: true, margin: [0, 4, 0, 0] }
     },
-    defaultStyle: { font: 'Roboto', fontSize: 10 }
+    defaultStyle: { font: 'Roboto', fontSize: 10, lineHeight: 1.15 }
   }
 }
 
@@ -217,7 +260,7 @@ export async function generatePdf(fisa, destPath) {
 
       stream.on('error', (err) => {
         log.error('[pdfGenerator] scriere esuata', err)
-        reject(toAppError(err, 'Nu s-a putut scrie fisierul PDF pe disc.'))
+        reject(toAppError(err, 'Nu s-a putut scrie fișierul PDF pe disc.'))
       })
 
       stream.on('finish', () => {
@@ -234,7 +277,7 @@ export async function generatePdf(fisa, destPath) {
       pdfDoc.end()
     } catch (err) {
       log.error('[pdfGenerator] generare esuata', err)
-      reject(toAppError(err, 'Generarea PDF-ului a esuat.'))
+      reject(toAppError(err, 'Generarea PDF-ului a eșuat.'))
     }
   })
 }
@@ -251,9 +294,16 @@ export function printPdf(pdfPath) {
       if (!printWin.isDestroyed()) printWin.destroy()
     }
 
-    printWin
-      .loadFile(pdfPath)
+    // Incarcarea PDF-ului n-are voie sa astepte la nesfarsit (doar dialogul
+    // de printare, unde asteapta utilizatorul, ramane fara timeout).
+    let loadTimer
+    const loadTimeout = new Promise((_, rej) => {
+      loadTimer = setTimeout(() => rej(new Error('timeout la incarcarea PDF-ului')), 20000)
+    })
+
+    Promise.race([printWin.loadFile(pdfPath), loadTimeout])
       .then(() => {
+        clearTimeout(loadTimer)
         printWin.webContents.print({ silent: false, printBackground: true }, (success, errorType) => {
           cleanup()
           if (success) {
@@ -261,11 +311,12 @@ export function printPdf(pdfPath) {
           } else if (errorType === 'cancelled') {
             resolve() // utilizatorul a inchis dialogul de printare - nu e o eroare
           } else {
-            reject(toAppError(new Error(errorType), 'Printarea a esuat.'))
+            reject(toAppError(new Error(errorType), 'Printarea a eșuat.'))
           }
         })
       })
       .catch((err) => {
+        clearTimeout(loadTimer)
         cleanup()
         reject(toAppError(err, 'Nu s-a putut deschide PDF-ul pentru printare.'))
       })

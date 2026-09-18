@@ -1,10 +1,21 @@
-import React, { memo } from 'react'
-import { isFisaEmpty } from '../../../shared/calculations'
+import React, { memo, useEffect, useState } from 'react'
+import { isFisaEmpty, calcTotaluri, reduceriDinFisa } from '../../../shared/calculations'
+import { formatLei } from '../format'
+import Icon from './Icon'
 
 function formatData(dataISO) {
   const datePart = String(dataISO || '').slice(0, 10)
   const [y, m, d] = datePart.split('-')
   return y && m && d ? `${d}.${m}.${y}` : dataISO || '-'
+}
+
+function totalFisa(f) {
+  try {
+    const r = reduceriDinFisa(f)
+    return calcTotaluri(f.piese, f.lucrari, r.piese, r.lucrari).totalFinal
+  } catch {
+    return 0
+  }
 }
 
 // Randat cu React.memo: fara asta, s-ar re-randa la fiecare litera tastata
@@ -26,14 +37,31 @@ function DraftsSidebar({
   onOpenSettings,
   confirm
 }) {
+  const [version, setVersion] = useState('')
+  useEffect(() => {
+    Promise.resolve(window.serviceAuto.app.getVersion?.())
+      .then((res) => res?.ok && setVersion(res.data))
+      .catch(() => {})
+  }, [])
+
   return (
     <aside className="sidebar">
-      <button type="button" className="btn-primary" onClick={onNew}>
-        + Fisa noua
+      <div className="brand">
+        <span className="brand-mark">
+          <Icon name="wrench" size={18} />
+        </span>
+        <span className="brand-name">Service Auto</span>
+      </div>
+
+      <button type="button" className="btn-primary btn-new" onClick={onNew} title="Fișă nouă (Ctrl+N)">
+        <Icon name="plus" /> Fișă nouă
+        <kbd>Ctrl+N</kbd>
       </button>
 
       <div className="sidebar-scroll">
-        <h3>Fise in lucru</h3>
+        <h3>
+          În lucru <span className="count-badge">{drafts.length}</span>
+        </h3>
         {drafts.length === 0 && <p className="hint">Niciuna momentan.</p>}
         <ul className="drafts-list">
           {drafts.map((d) => {
@@ -42,32 +70,37 @@ function DraftsSidebar({
             // aceasta, ca sa nu stearga fara confirmare un draft cu date
             // reale in alte campuri (telefon, marca/model, VIN, piese/lucrari).
             const goala = !d.auto?.nrInmatriculare?.trim() && !d.client?.nume?.trim()
+            const total = totalFisa(d)
             return (
               <li key={d.id} className={d.id === currentId ? 'active' : ''}>
                 <button type="button" onClick={() => onOpen(d.id)}>
                   {goala ? (
-                    <strong>Fisa noua</strong>
+                    <strong>Fișă nouă</strong>
                   ) : (
                     <>
-                      <strong>{d.auto?.nrInmatriculare || 'Fara numar'}</strong>
-                      <span>{d.client?.nume || 'Fara nume client'}</span>
+                      <span className="draft-row">
+                        <strong className="plate-sm">{d.auto?.nrInmatriculare || 'Fără număr'}</strong>
+                        {total > 0 && <em>{formatLei(total)}</em>}
+                      </span>
+                      <span>{d.client?.nume || 'Fără nume client'}</span>
                     </>
                   )}
                 </button>
                 <button
                   type="button"
                   className="btn-remove"
-                  title="Sterge"
+                  title="Șterge"
+                  aria-label="Șterge fișa în lucru"
                   onClick={async () => {
                     // O fisa noua, goala, nu are ce pierde - confirmarea ar fi
                     // doar friction. Una cu date reale introduse (client, auto,
                     // piese/lucrari) e stearsa definitiv, fara undo - un
-                    // misclick pe "✕" nu trebuie sa poata rade continut real
+                    // misclick nu trebuie sa poata rade continut real
                     // fara nicio sansa de a te razgandi.
                     if (
                       !isFisaEmpty(d) &&
-                      !(await confirm('Stergi definitiv aceasta fisa in lucru? Continutul introdus se pierde.', {
-                        confirmLabel: 'Sterge'
+                      !(await confirm('Ștergi definitiv această fișă în lucru? Conținutul introdus se pierde.', {
+                        confirmLabel: 'Șterge'
                       }))
                     ) {
                       return
@@ -75,45 +108,52 @@ function DraftsSidebar({
                     onDelete(d.id)
                   }}
                 >
-                  ✕
+                  <Icon name="x" />
                 </button>
               </li>
             )
           })}
         </ul>
 
-        <h3>Lucrari recente</h3>
-        {recentFise.length === 0 && <p className="hint">Nicio fisa finalizata inca.</p>}
+        <h3>
+          Recente <span className="count-badge">{recentFise.length}</span>
+        </h3>
+        {recentFise.length === 0 && <p className="hint">Nicio fișă finalizată încă.</p>}
         <ul className="recent-list">
           {recentFise.map((f) => (
             <li key={f._file}>
               <div className="recent-info">
-                <strong>{f.auto?.nrInmatriculare || 'Fara numar'}</strong>
+                <span className="draft-row">
+                  <strong className="plate-sm">{f.auto?.nrInmatriculare || 'Fără număr'}</strong>
+                  <em>{formatLei(totalFisa(f))}</em>
+                </span>
                 <span>
-                  {f.client?.nume || 'Fara nume'} · {formatData(f.data)}
+                  {f.client?.nume || 'Fără nume'} · {formatData(f.data)}
                 </span>
               </div>
               <div className="recent-actions">
                 <button
                   type="button"
-                  title="Editeaza (la Finalizare, inlocuieste aceasta fisa - nu creeaza una noua)"
+                  title="Editează (la finalizare, înlocuiește această fișă - nu creează una nouă)"
+                  aria-label="Editează"
                   onClick={() => onEditRecent(f)}
                 >
-                  Editeaza
+                  <Icon name="edit" size={14} />
                 </button>
-                <button type="button" title="Deschide PDF" onClick={() => onOpenPdf(f._file)}>
-                  PDF
+                <button type="button" title="Deschide PDF" aria-label="Deschide PDF" onClick={() => onOpenPdf(f._file)}>
+                  <Icon name="file" size={14} />
                 </button>
-                <button type="button" title="Printeaza" onClick={() => onPrintPdf(f._file)}>
-                  Printeaza
+                <button type="button" title="Printează" aria-label="Printează" onClick={() => onPrintPdf(f._file)}>
+                  <Icon name="printer" size={14} />
                 </button>
                 <button
                   type="button"
-                  className="btn-remove"
-                  title="Sterge definitiv"
+                  className="danger-hover"
+                  title="Șterge definitiv"
+                  aria-label="Șterge definitiv"
                   onClick={() => onDeleteFinalized(f._file)}
                 >
-                  ✕
+                  <Icon name="trash" size={14} />
                 </button>
               </div>
             </li>
@@ -122,7 +162,8 @@ function DraftsSidebar({
       </div>
 
       <button type="button" className="sidebar-settings-btn" onClick={onOpenSettings}>
-        ⚙ Setari
+        <Icon name="settings" /> Setări
+        {version && <span className="version">v{version}</span>}
       </button>
     </aside>
   )

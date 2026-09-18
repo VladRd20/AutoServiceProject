@@ -43,7 +43,7 @@ export default function SettingsModal({ onClose, showToast }) {
       if (res.data.changed) {
         showToast(
           'success',
-          `Fisele au fost copiate in noul folder. Locatia veche (${res.data.oldPath}) a ramas neatinsa - o poti sterge manual dupa ce verifici.`
+          `Fișierele au fost copiate în noul folder. Locația veche (${res.data.oldPath}) a rămas neatinsă - o poți șterge manual după ce verifici.`
         )
       }
     } else {
@@ -60,7 +60,7 @@ export default function SettingsModal({ onClose, showToast }) {
     const res = await window.serviceAuto.settings.save(settings)
     setSaving(false)
     if (res.ok) {
-      showToast('success', 'Datele service-ului au fost salvate. Vor aparea pe fisele generate de acum.')
+      showToast('success', 'Datele service-ului au fost salvate. Vor apărea pe fișele generate de acum.')
       onClose()
     } else {
       showToast('error', res.error.message)
@@ -70,11 +70,11 @@ export default function SettingsModal({ onClose, showToast }) {
   return (
     <Modal title="Datele service-ului" onClose={onClose}>
       {loading ? (
-        <p className="hint">Se incarca...</p>
+        <p className="hint">Se încarcă...</p>
       ) : (
         <>
           <p className="hint" style={{ marginBottom: 14 }}>
-            Aceste date apar pe antetul fiselor PDF generate, langa datele clientului.
+            Aceste date apar pe antetul fișelor PDF generate, lângă datele clientului.
           </p>
           <div className="field" style={{ marginBottom: 12 }}>
             <label>Nume service</label>
@@ -86,10 +86,10 @@ export default function SettingsModal({ onClose, showToast }) {
             />
           </div>
           <div className="field" style={{ marginBottom: 12 }}>
-            <label>Adresa</label>
+            <label>Adresă</label>
             <input
               type="text"
-              placeholder="str. Exemplu 10, Chisinau"
+              placeholder="str. Exemplu 10, Chișinău"
               value={settings.adresa}
               onChange={(e) => setField({ adresa: e.target.value })}
             />
@@ -116,18 +116,18 @@ export default function SettingsModal({ onClose, showToast }) {
           </div>
 
           <div className="field" style={{ marginTop: 16, marginBottom: 4 }}>
-            <label>Locatia fiselor</label>
+            <label>Locația fișelor</label>
             <div className="hint" style={{ wordBreak: 'break-all', marginBottom: 8 }}>
-              {pathInfo?.current || 'Se incarca...'}
+              {pathInfo?.current || 'Se încarcă...'}
               {pathInfo && pathInfo.current === pathInfo.default && ' (implicit)'}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" disabled={changingPath} onClick={handlePickFolder}>
-                {changingPath ? 'Se copiaza...' : 'Schimba folderul...'}
+                {changingPath ? 'Se copiază...' : 'Schimbă folderul...'}
               </button>
               {pathInfo && pathInfo.current !== pathInfo.default && (
                 <button type="button" disabled={changingPath} onClick={handleResetFolder}>
-                  Reseteaza la implicit
+                  Resetează la implicit
                 </button>
               )}
             </div>
@@ -137,7 +137,7 @@ export default function SettingsModal({ onClose, showToast }) {
             <span className="hint">{appVersion && `Versiune: ${appVersion}`}</span>
             <div className="release-bar-actions">
               <button type="button" className="btn-primary" disabled={saving} onClick={handleSave}>
-                {saving ? 'Se salveaza...' : 'Salveaza'}
+                {saving ? 'Se salvează...' : 'Salvează'}
               </button>
             </div>
           </div>

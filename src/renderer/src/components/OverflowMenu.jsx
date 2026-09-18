@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
+import Icon from './Icon'
 
-// Meniu compact pentru actiuni rar folosite - fara el, topbar-ul se umple
-// de butoane si titlul/actiunile principale (cautare, actualizari) se pierd
-// in aglomeratie de fiecare data cand mai adaugam o functie noua.
+// Meniu compact pentru acțiuni rar folosite - fără el, topbar-ul se umple
+// de butoane și titlul/acțiunile principale (căutare, actualizări) se pierd
+// în aglomerație de fiecare dată când mai adăugăm o funcție nouă.
 export default function OverflowMenu({ items }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -23,20 +24,31 @@ export default function OverflowMenu({ items }) {
         if (e.key === 'Escape') setOpen(false)
       }}
     >
-      <button type="button" onClick={() => setOpen((o) => !o)} title="Mai multe actiuni">
-        ⋯ Mai multe
+      <button
+        type="button"
+        className="icon-btn"
+        onClick={() => setOpen((o) => !o)}
+        title="Mai multe acțiuni"
+        aria-label="Mai multe acțiuni"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <Icon name="more" size={18} />
       </button>
       {open && (
-        <ul className="autocomplete-dropdown">
+        <ul className="autocomplete-dropdown" role="menu">
           {items.map((item) => (
             <li key={item.label}>
               <button
                 type="button"
+                role="menuitem"
+                disabled={item.disabled}
                 onClick={() => {
                   setOpen(false)
                   item.onClick()
                 }}
               >
+                {item.icon && <Icon name={item.icon} />}
                 {item.label}
               </button>
             </li>

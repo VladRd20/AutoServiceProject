@@ -4,9 +4,9 @@ export default function UpdateBanner({ status, version, percent, onDownload, onI
   if (status === 'available') {
     return (
       <div className="update-banner">
-        <span>🆕 Versiune noua disponibila: v{version}</span>
+        <span>🆕 Versiune nouă disponibilă: v{version}</span>
         <button type="button" onClick={onDownload}>
-          Descarca
+          Descarcă
         </button>
       </div>
     )
@@ -15,7 +15,7 @@ export default function UpdateBanner({ status, version, percent, onDownload, onI
   if (status === 'downloading') {
     return (
       <div className="update-banner">
-        <span>⬇️ Se descarca actualizarea v{version}... {percent ?? 0}%</span>
+        <span>⬇️ Se descarcă actualizarea v{version}... {percent ?? 0}%</span>
         <div className="update-progress">
           <div className="update-progress-fill" style={{ width: `${percent ?? 0}%` }} />
         </div>
@@ -26,9 +26,9 @@ export default function UpdateBanner({ status, version, percent, onDownload, onI
   if (status === 'downloaded') {
     return (
       <div className="update-banner update-banner-ready">
-        <span>✅ Actualizare v{version} pregatita</span>
+        <span>✅ Actualizare v{version} pregătită</span>
         <button type="button" onClick={onInstall}>
-          Reporneste acum
+          Repornește acum
         </button>
       </div>
     )

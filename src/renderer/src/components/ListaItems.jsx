@@ -1,6 +1,8 @@
 import React, { memo, useEffect, useMemo, useRef } from 'react'
-import { calcLinieTotal, foldForMatch } from '../../../shared/calculations'
+import { calcLinieTotal, calcListaTotal, foldForMatch } from '../../../shared/calculations'
 import Autocomplete from './Autocomplete'
+import Icon from './Icon'
+import { formatLei } from '../format'
 
 // crypto.randomUUID() e disponibil in runtime-ul Chromium al Electron - mult
 // mai sigur decat un contor de modul care se reseteaza la fiecare pornire a
@@ -14,7 +16,7 @@ export function newItemId() {
 // handlePieseChange/handleLucrariChange) - fara alte props instabile,
 // comparatia shallow a memo() evita re-randarea listei de piese la fiecare
 // litera tastata in campurile de client/auto, sau in lista de lucrari.
-function ListaItems({ titlu, items, onChange, priceKey, priceLabel, errorPrefix, errors, suggestions, confirm }) {
+function ListaItems({ titlu, singular, items, onChange, priceKey, priceLabel, errorPrefix, errors, suggestions, confirm }) {
   // Referinta stabila intre randari (cat timp `suggestions` nu s-a schimbat
   // efectiv) - altfel Autocomplete.jsx primeste un array nou la fiecare
   // randare si memo-ul lui pe `options` nu prinde niciodata cache.
@@ -50,6 +52,8 @@ function ListaItems({ titlu, items, onChange, priceKey, priceLabel, errorPrefix,
     }
   }
 
+  const subtotal = items.reduce((sum, it) => sum + calcLinieTotal(it.cantitate, it[priceKey]), 0)
+
   function addItem() {
     const id = newItemId()
     focusIdRef.current = id
@@ -62,7 +66,7 @@ function ListaItems({ titlu, items, onChange, priceKey, priceLabel, errorPrefix,
     // confirmare doar cand exista deja continut real, ca un clic gresit pe
     // "✕" sa nu poata rade instant o linie completata, fara nicio sansa de
     // a te razgandi.
-    if (item?.denumire?.trim() && !(await confirm(`Stergi linia "${item.denumire}"?`, { confirmLabel: 'Sterge' }))) {
+    if (item?.denumire?.trim() && !(await confirm(`Ștergi linia "${item.denumire}"?`, { confirmLabel: 'Șterge' }))) {
       return
     }
     onChange(items.filter((it) => it.id !== id))
@@ -78,13 +82,34 @@ function ListaItems({ titlu, items, onChange, priceKey, priceLabel, errorPrefix,
   return (
     <section className="card">
       <div className="card-header">
-        <h2>{titlu}</h2>
-        <button type="button" onClick={addItem}>
-          + Adauga
-        </button>
+        <h2>
+          {titlu}
+          {items.length > 0 && <span className="count-badge">{items.length}</span>}
+        </h2>
+        <div className="card-header-right">
+          {items.length > 0 && <span className="subtotal">{formatLei(subtotal)}</span>}
+          <button type="button" className="btn-sm" onClick={addItem}>
+            <Icon name="plus" /> Adaugă
+          </button>
+        </div>
       </div>
 
-      {items.length === 0 && <p className="hint">Nicio linie adaugata inca.</p>}
+      {items.length === 0 ? (
+        <div className="empty-state">
+          <p>Nicio linie adăugată încă.</p>
+          <button type="button" className="btn-sm" onClick={addItem}>
+            <Icon name="plus" /> Adaugă {singular}
+          </button>
+        </div>
+      ) : (
+        <div className="linie linie-head" aria-hidden="true">
+          <span className="field-grow">Denumire</span>
+          <span className="field-small">Cant.</span>
+          <span className="field-small">{priceLabel}</span>
+          <span className="linie-total">Total</span>
+          <span className="btn-remove-spacer" />
+        </div>
+      )}
 
       {items.map((item, i) => {
         const err = (field) => errors?.[`${errorPrefix}.${i}.${field}`]
@@ -108,7 +133,7 @@ function ListaItems({ titlu, items, onChange, priceKey, priceLabel, errorPrefix,
                 type="number"
                 min="0"
                 step="1"
-                placeholder="Cant."
+                placeholder="Cant." aria-label="Cantitate"
                 value={item.cantitate}
                 onChange={(e) => updateItem(item.id, { cantitate: e.target.value })}
               />
@@ -120,14 +145,15 @@ function ListaItems({ titlu, items, onChange, priceKey, priceLabel, errorPrefix,
                 min="0"
                 step="0.01"
                 placeholder={priceLabel}
+                aria-label={priceLabel}
                 value={item[priceKey]}
                 onChange={(e) => updateItem(item.id, { [priceKey]: e.target.value })}
               />
               {err(priceKey) && <span className="field-error">{err(priceKey)}</span>}
             </div>
-            <div className="linie-total">{calcLinieTotal(item.cantitate, item[priceKey]).toFixed(2)} lei</div>
-            <button type="button" className="btn-remove" onClick={() => removeItem(item.id)} title="Sterge">
-              ✕
+            <div className="linie-total">{formatLei(calcLinieTotal(item.cantitate, item[priceKey]))}</div>
+            <button type="button" className="btn-remove" onClick={() => removeItem(item.id)} title="Șterge" aria-label="Șterge linia">
+              <Icon name="x" />
             </button>
           </div>
         )

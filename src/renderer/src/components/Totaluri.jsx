@@ -1,5 +1,6 @@
 import React, { memo } from 'react'
 import { calcTotaluri } from '../../../shared/calculations'
+import { formatLei } from '../format'
 
 function Totaluri({
   piese,
@@ -11,68 +12,76 @@ function Totaluri({
 }) {
   const t = calcTotaluri(piese, lucrari, reducerePiesePercent, reducereLucrariPercent)
 
+  const randuri = [
+    {
+      key: 'piese',
+      label: 'Piese',
+      subtotal: t.totalPiese,
+      reducere: t.valoareReducerePiese,
+      percent: reducerePiesePercent,
+      onChange: onChangeReducerePiese
+    },
+    {
+      key: 'lucrari',
+      label: 'Lucrări',
+      subtotal: t.totalLucrari,
+      reducere: t.valoareReducereLucrari,
+      percent: reducereLucrariPercent,
+      onChange: onChangeReducereLucrari
+    }
+  ]
+
   return (
     <section className="card totaluri">
-      <div className="rand">
-        <span>Total piese</span>
-        <span>{t.totalPiese.toFixed(2)} lei</span>
+      <h2>Sumar</h2>
+      <div className="totaluri-grid">
+        <span className="th">Categorie</span>
+        <span className="th">Subtotal</span>
+        <span className="th">Reducere</span>
+        <span className="th">Valoare reducere</span>
+        <span className="th">Total</span>
+        {randuri.map((r) => (
+          <React.Fragment key={r.key}>
+            <span className="td-label">{r.label}</span>
+            <span className="td-num">{formatLei(r.subtotal)}</span>
+            <span className="td-input">
+              <input
+                id={`reducere-${r.key}`}
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                aria-label={`Reducere ${r.label.toLowerCase()} (%)`}
+                value={r.percent}
+                onChange={(e) => r.onChange(e.target.value)}
+              />
+              <span className="unit">%</span>
+            </span>
+            <span className={`td-num ${r.reducere > 0 ? 'reducere-valoare' : 'muted'}`}>
+              {r.reducere > 0 ? `−${formatLei(r.reducere)}` : '—'}
+            </span>
+            <span className="td-num strong">{formatLei(r.subtotal - r.reducere)}</span>
+          </React.Fragment>
+        ))}
       </div>
-      <div className="rand reducere-rand">
-        <label htmlFor="reducere-piese">Reducere piese (%)</label>
-        <input
-          id="reducere-piese"
-          type="number"
-          min="0"
-          max="100"
-          step="1"
-          value={reducerePiesePercent}
-          onChange={(e) => onChangeReducerePiese(e.target.value)}
-        />
-      </div>
-      {t.procentReducerePiese > 0 && (
-        <div className="rand reducere-valoare">
-          <span>Valoare reducere piese</span>
-          <span>-{t.valoareReducerePiese.toFixed(2)} lei</span>
-        </div>
-      )}
 
-      <div className="rand">
-        <span>Total lucrari</span>
-        <span>{t.totalLucrari.toFixed(2)} lei</span>
-      </div>
-      <div className="rand reducere-rand">
-        <label htmlFor="reducere-lucrari">Reducere lucrari (%)</label>
-        <input
-          id="reducere-lucrari"
-          type="number"
-          min="0"
-          max="100"
-          step="1"
-          value={reducereLucrariPercent}
-          onChange={(e) => onChangeReducereLucrari(e.target.value)}
-        />
-      </div>
-      {t.procentReducereLucrari > 0 && (
-        <div className="rand reducere-valoare">
-          <span>Valoare reducere lucrari</span>
-          <span>-{t.valoareReducereLucrari.toFixed(2)} lei</span>
+      <div className="totaluri-final">
+        {t.valoareReducere > 0 && (
+          <>
+            <div className="rand">
+              <span>Total general</span>
+              <span>{formatLei(t.totalGeneral)}</span>
+            </div>
+            <div className="rand reducere-valoare">
+              <span>Reducere totală</span>
+              <span>−{formatLei(t.valoareReducere)}</span>
+            </div>
+          </>
+        )}
+        <div className="rand rand-final">
+          <span>Total final</span>
+          <span>{formatLei(t.totalFinal)}</span>
         </div>
-      )}
-
-      <div className="rand rand-general">
-        <span>Total general</span>
-        <span>{t.totalGeneral.toFixed(2)} lei</span>
-      </div>
-      {t.valoareReducere > 0 && (
-        <div className="rand reducere-valoare">
-          <span>Valoare reducere totala</span>
-          <span>-{t.valoareReducere.toFixed(2)} lei</span>
-        </div>
-      )}
-
-      <div className="rand rand-final">
-        <span>Total final</span>
-        <span>{t.totalFinal.toFixed(2)} lei</span>
       </div>
     </section>
   )

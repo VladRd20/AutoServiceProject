@@ -62,13 +62,13 @@ export default function SearchModal({ query, onClose, onOpenPdf, onPrintPdf, onD
   return (
     <div className="search-panel" onClick={(e) => e.stopPropagation()}>
       <div className="search-panel-header">
-        <h3>Rezultate cautare</h3>
-        <button type="button" className="btn-remove" onClick={onClose} title="Inchide">
+        <h3>Rezultate căutare</h3>
+        <button type="button" className="btn-remove" onClick={onClose} title="Închide">
           ✕
         </button>
       </div>
       <div className="search-results">
-        {searching && <p className="hint">Se cauta...</p>}
+        {searching && <p className="hint">Se caută...</p>}
         {!searching && results && results.length === 0 && (
           <p className="hint">Niciun rezultat pentru "{query}".</p>
         )}
@@ -79,7 +79,7 @@ export default function SearchModal({ query, onClose, onOpenPdf, onPrintPdf, onD
             return (
               <div className="search-result" key={fisa._file}>
                 <div className="search-result-main">
-                  <strong>{fisa.auto?.nrInmatriculare || 'Fara numar'}</strong>
+                  <strong>{fisa.auto?.nrInmatriculare || 'Fără număr'}</strong>
                   <span>
                     {fisa.auto?.marca} {fisa.auto?.model}
                   </span>
@@ -95,9 +95,9 @@ export default function SearchModal({ query, onClose, onOpenPdf, onPrintPdf, onD
                     Deschide PDF
                   </button>
                   <button type="button" onClick={() => onPrintPdf(fisa._file)}>
-                    Printeaza
+                    Printează
                   </button>
-                  <button type="button" className="btn-remove" title="Sterge definitiv" onClick={() => handleDelete(fisa._file)}>
+                  <button type="button" className="btn-remove" title="Șterge definitiv" onClick={() => handleDelete(fisa._file)}>
                     ✕
                   </button>
                 </div>

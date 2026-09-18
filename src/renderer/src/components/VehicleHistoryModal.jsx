@@ -45,9 +45,9 @@ export default function VehicleHistoryModal({
   return (
     <Modal title={`Istoric ${titlu}`} onClose={onClose} className="search-modal">
       <div className="search-results">
-        {loading && <p className="hint">Se incarca...</p>}
+        {loading && <p className="hint">Se încarcă...</p>}
         {!loading && results.length === 0 && (
-          <p className="hint">Nicio fisa finalizata anterior pentru acest VIN sau numar de inmatriculare.</p>
+          <p className="hint">Nicio fișă finalizată anterior pentru acest VIN sau număr de înmatriculare.</p>
         )}
         {!loading &&
           results.map((fisa) => {
@@ -61,7 +61,7 @@ export default function VehicleHistoryModal({
                 <div className="search-result-main">
                   <strong>{formatData(fisa.data)}</strong>
                   <span>{fisa.client?.nume}</span>
-                  <span>{denumiri.length > 0 ? denumiri.join(', ') : 'Fara piese/lucrari'}</span>
+                  <span>{denumiri.length > 0 ? denumiri.join(', ') : 'Fără piese/lucrări'}</span>
                 </div>
                 <div className="search-result-meta">
                   <span>{t.totalFinal.toFixed(2)} lei</span>
@@ -71,9 +71,9 @@ export default function VehicleHistoryModal({
                     Deschide PDF
                   </button>
                   <button type="button" onClick={() => onPrintPdf(fisa._file)}>
-                    Printeaza
+                    Printează
                   </button>
-                  <button type="button" className="btn-remove" title="Sterge definitiv" onClick={() => handleDelete(fisa._file)}>
+                  <button type="button" className="btn-remove" title="Șterge definitiv" onClick={() => handleDelete(fisa._file)}>
                     ✕
                   </button>
                 </div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import Icon from './Icon'
 import { getStoredTheme, setStoredTheme, applyTheme, getEffectiveTheme } from '../theme'
 
 export default function ThemeToggle() {
@@ -26,11 +27,11 @@ export default function ThemeToggle() {
   return (
     <button
       type="button"
-      className="theme-toggle"
+      className="theme-toggle icon-btn" aria-label="Schimbă tema"
       onClick={toggle}
-      title={effective === 'dark' ? 'Comuta la tema deschisa' : 'Comuta la tema inchisa'}
+      title={effective === 'dark' ? 'Temă deschisă' : 'Temă închisă'}
     >
-      {effective === 'dark' ? '☀️' : '🌙'}
+      <Icon name={effective === 'dark' ? 'sun' : 'moon'} size={17} />
     </button>
   )
 }

@@ -2,7 +2,7 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import https from 'https'
-import { execSync } from 'child_process'
+import { execFile, execSync } from 'child_process'
 import os from 'os'
 import { app } from 'electron'
 import log from './logger'
@@ -81,11 +81,28 @@ function verifyLicenseKey(keyString) {
 // Fingerprint stabil al masinii Windows - MachineGuid e generat o singura
 // data la instalarea Windows-ului si nu se schimba intre restarturi/update-uri
 // de aplicatie, dar difera garantat intre doua calculatoare diferite.
+let cachedFingerprint = null
+
+// Citeste MachineGuid fara sa blocheze procesul principal; apelata o data la
+// pornire (index.js). getMachineFingerprint() foloseste rezultatul memorat.
+export function warmFingerprint() {
+  return new Promise((resolve) => {
+    execFile('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], { timeout: 5000 }, (err, stdout) => {
+      if (!err) {
+        const match = String(stdout).match(/MachineGuid\s+REG_SZ\s+([0-9a-fA-F-]+)/)
+        if (match) cachedFingerprint = match[1].trim()
+      }
+      resolve()
+    })
+  })
+}
+
 function getMachineFingerprint() {
+  if (cachedFingerprint) return cachedFingerprint
   try {
     const out = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid').toString()
     const match = out.match(/MachineGuid\s+REG_SZ\s+([0-9a-fA-F-]+)/)
-    if (match) return match[1].trim()
+    if (match) return (cachedFingerprint = match[1].trim())
   } catch (err) {
     log.warn('[license] nu s-a putut citi MachineGuid, folosesc fallback', err)
   }
@@ -177,7 +194,11 @@ function fetchRevokedList() {
         return
       }
       let body = ''
-      res.on('data', (chunk) => (body += chunk))
+      res.on('data', (chunk) => {
+        body += chunk
+        // Lista de id-uri revocate e mica; un raspuns urias nu e legitim.
+        if (body.length > 1024 * 1024) req.destroy(new Error('raspuns prea mare'))
+      })
       res.on('end', () => {
         try {
           const ids = JSON.parse(body)
@@ -200,7 +221,7 @@ function fetchRevokedList() {
 export async function activate(keyString) {
   const payload = verifyLicenseKey(keyString)
   if (!payload) {
-    const err = new Error('Cheia de licenta este invalida.')
+    const err = new Error('Cheia de licență este invalidă.')
     err.code = 'INVALID_KEY'
     throw err
   }
@@ -209,7 +230,7 @@ export async function activate(keyString) {
   try {
     const revokedIds = await fetchRevokedList()
     if (revokedIds.includes(id)) {
-      const err = new Error('Aceasta cheie de licenta a fost revocata. Contacteaza dezvoltatorul pentru o cheie noua.')
+      const err = new Error('Această cheie de licență a fost revocată. Contactează dezvoltatorul pentru o cheie nouă.')
       err.code = 'REVOKED'
       throw err
     }
@@ -227,7 +248,10 @@ export async function activate(keyString) {
   const encrypted = encryptRecord(record, deriveKey(fingerprint))
 
   fs.mkdirSync(path.dirname(licenseFilePath()), { recursive: true })
-  fs.writeFileSync(licenseFilePath(), encrypted, 'utf-8')
+  // Scriere atomica: un crash la mijloc nu trebuie sa lase un license.dat trunchiat.
+  const tmp = `${licenseFilePath()}.tmp-${process.pid}`
+  fs.writeFileSync(tmp, encrypted, 'utf-8')
+  fs.renameSync(tmp, licenseFilePath())
   cachedActivated = true
   cachedPayload = payload
   cachedRevoked = false

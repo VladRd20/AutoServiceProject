@@ -5,10 +5,11 @@ import log, { setMainWindow } from './logger'
 import { ensureDirs, backupNow } from './fileStore'
 import { registerIpcHandlers } from './ipc'
 import { initUpdater } from './updater'
-import { checkRevocationOnline, isRevoked } from './license'
+import { checkRevocationOnline, isRevoked, warmFingerprint } from './license'
 
 let mainWindow = null
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000 // o data pe zi
+const REVOCATION_RECHECK_MS = 24 * 60 * 60 * 1000
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -20,7 +21,7 @@ function createWindow() {
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -30,8 +31,19 @@ function createWindow() {
 
   // Linkurile externe se deschid in browser, nu in fereastra aplicatiei
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    // Doar https - nu lasam un link sa deschida protocoale arbitrare
+    // (file:, ms-msdt:, etc) prin shell.
+    if (/^https:\/\//i.test(details.url)) shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+
+  // Fereastra principala nu navigheaza niciodata in afara aplicatiei.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowed = is.dev && process.env['ELECTRON_RENDERER_URL'] ? url.startsWith(process.env['ELECTRON_RENDERER_URL']) : url.startsWith('file://')
+    if (!allowed) {
+      event.preventDefault()
+      if (/^https:\/\//i.test(url)) shell.openExternal(url)
+    }
   })
 
   mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
@@ -55,12 +67,16 @@ app.whenReady().then(async () => {
     log.error('[main] initializare foldere esuata', err)
     const { dialog } = await import('electron')
     dialog.showErrorBox(
-      'Nu s-a putut porni aplicatia',
-      err.userMessage || 'Nu s-a putut crea folderul de date. Verifica permisiunile de scriere pe disc.'
+      'Nu s-a putut porni aplicația',
+      err.userMessage || 'Nu s-a putut crea folderul de date. Verifică permisiunile de scriere pe disc.'
     )
     app.quit()
     return
   }
+
+  // Citeste MachineGuid asincron, o singura data, inainte de prima verificare
+  // de licenta - altfel execSync bloca procesul principal la pornire.
+  await warmFingerprint()
 
   registerIpcHandlers()
   createWindow()
@@ -70,11 +86,17 @@ app.whenReady().then(async () => {
   // Best-effort, o singura data la pornire - daca gaseste id-ul curent in
   // lista publica de revocari, anunta imediat renderer-ul (altfel ramanea
   // ascuns pana la urmatoarea actiune care da eroare REVOKED prin IPC).
-  checkRevocationOnline().then(() => {
-    if (isRevoked() && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('license:revoked')
-    }
-  })
+  function recheckRevocation() {
+    checkRevocationOnline().then(() => {
+      if (isRevoked() && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('license:revoked')
+      }
+    })
+  }
+  recheckRevocation()
+  // O aplicatie lasata deschisa zile in sir trebuie sa prinda si ea o
+  // revocare aparuta intre timp, nu doar la urmatoarea pornire.
+  setInterval(recheckRevocation, REVOCATION_RECHECK_MS)
 
   // Backup zilnic, best-effort - nu blocheaza si nu opreste aplicatia daca esueaza.
   backupNow().catch((err) => log.warn('[main] backup initial esuat', err))

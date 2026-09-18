@@ -95,34 +95,34 @@ export function validateFisa(fisa) {
   const errors = {}
 
   if (!fisa.client?.nume?.trim()) errors['client.nume'] = 'Numele clientului este obligatoriu'
-  if (!fisa.client?.telefon?.trim()) errors['client.telefon'] = 'Numarul de telefon este obligatoriu'
+  if (!fisa.client?.telefon?.trim()) errors['client.telefon'] = 'Numărul de telefon este obligatoriu'
   else if (!/^[0-9+()\-\s]{7,20}$/.test(fisa.client.telefon.trim()))
-    errors['client.telefon'] = 'Numar de telefon invalid'
+    errors['client.telefon'] = 'Număr de telefon invalid'
 
   if (!fisa.auto?.nrInmatriculare?.trim())
-    errors['auto.nrInmatriculare'] = 'Numarul de inmatriculare este obligatoriu'
+    errors['auto.nrInmatriculare'] = 'Numărul de înmatriculare este obligatoriu'
   if (!fisa.auto?.marca?.trim()) errors['auto.marca'] = 'Marca este obligatorie'
   if (!fisa.auto?.model?.trim()) errors['auto.model'] = 'Modelul este obligatoriu'
   if (fisa.auto?.vin?.trim() && fisa.auto.vin.trim().length !== 17)
-    errors['auto.vin'] = 'VIN-ul trebuie sa aiba exact 17 caractere'
+    errors['auto.vin'] = 'VIN-ul trebuie să aibă exact 17 caractere'
   if (
     fisa.auto?.an &&
     (toNumber(fisa.auto.an) < 1950 || toNumber(fisa.auto.an) > new Date().getFullYear() + 1)
   )
-    errors['auto.an'] = 'An fabricatie invalid'
+    errors['auto.an'] = 'An fabricație invalid'
 
-  if (!fisa.dataCurenta && !fisa.data) errors['data'] = 'Data interventiei este obligatorie'
+  if (!fisa.dataCurenta && !fisa.data) errors['data'] = 'Data intervenției este obligatorie'
 
   ;(fisa.piese || []).forEach((p, i) => {
     if (!p.denumire?.trim()) errors[`piese.${i}.denumire`] = 'Denumirea piesei este obligatorie'
-    if (toNumber(p.cantitate) <= 0) errors[`piese.${i}.cantitate`] = 'Cantitate invalida'
-    if (toNumber(p.pretUnitar) < 0) errors[`piese.${i}.pretUnitar`] = 'Pret invalid'
+    if (toNumber(p.cantitate) <= 0) errors[`piese.${i}.cantitate`] = 'Cantitate invalidă'
+    if (toNumber(p.pretUnitar) < 0) errors[`piese.${i}.pretUnitar`] = 'Preț invalid'
   })
 
   ;(fisa.lucrari || []).forEach((l, i) => {
-    if (!l.denumire?.trim()) errors[`lucrari.${i}.denumire`] = 'Denumirea lucrarii este obligatorie'
-    if (toNumber(l.cantitate) <= 0) errors[`lucrari.${i}.cantitate`] = 'Cantitate invalida'
-    if (toNumber(l.pret) < 0) errors[`lucrari.${i}.pret`] = 'Pret invalid'
+    if (!l.denumire?.trim()) errors[`lucrari.${i}.denumire`] = 'Denumirea lucrării este obligatorie'
+    if (toNumber(l.cantitate) <= 0) errors[`lucrari.${i}.cantitate`] = 'Cantitate invalidă'
+    if (toNumber(l.pret) < 0) errors[`lucrari.${i}.pret`] = 'Preț invalid'
   })
 
   return { valid: Object.keys(errors).length === 0, errors }

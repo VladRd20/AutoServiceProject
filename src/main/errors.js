@@ -10,17 +10,17 @@ export class AppError extends Error {
 }
 
 const MESAJE = {
-  ENOSPC: 'Nu mai este spatiu liber pe disc. Elibereaza spatiu si incearca din nou.',
-  EACCES: 'Acces refuzat la fisier/folder. Verifica permisiunile sau ruleaza ca administrator.',
-  EPERM: 'Acces refuzat la fisier/folder. Verifica permisiunile sau ruleaza ca administrator.',
-  ENOENT: 'Fisierul sau folderul nu a fost gasit.',
-  EBUSY: 'Fisierul este folosit de alt program. Inchide-l si incearca din nou.'
+  ENOSPC: 'Nu mai este spațiu liber pe disc. Eliberează spațiu și încearcă din nou.',
+  EACCES: 'Acces refuzat la fișier/folder. Verifică permisiunile sau rulează ca administrator.',
+  EPERM: 'Acces refuzat la fișier/folder. Verifică permisiunile sau rulează ca administrator.',
+  ENOENT: 'Fișierul sau folderul nu a fost găsit.',
+  EBUSY: 'Fișierul este folosit de alt program. Închide-l și încearcă din nou.'
 }
 
 // Transforma o eroare bruta de Node (fs, etc) intr-un AppError cu mesaj uman.
 export function toAppError(err, fallbackMessage) {
   if (err instanceof AppError) return err
   const code = err?.code
-  const userMessage = MESAJE[code] || fallbackMessage || 'A aparut o problema neasteptata.'
+  const userMessage = MESAJE[code] || fallbackMessage || 'A apărut o problemă neașteptată.'
   return new AppError(code || 'UNKNOWN', userMessage, err)
 }

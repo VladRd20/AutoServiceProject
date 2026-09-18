@@ -21,7 +21,7 @@ function notifyRendererFatalError(err) {
   try {
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
       mainWindowRef.webContents.send('app:fatalError', {
-        message: err?.message || String(err) || 'Eroare neasteptata'
+        message: err?.message || String(err) || 'Eroare neașteptată'
       })
     }
   } catch {

@@ -1,6 +1,7 @@
 import { ipcMain, shell, app, dialog, BrowserWindow } from 'electron'
 import log, { exportLogs } from './logger'
 import { validateFisa } from '../shared/calculations'
+import { sanitizeFisa } from './sanitize'
 import {
   saveDraft,
   loadDraft,
@@ -37,10 +38,14 @@ async function wrap(fn, context) {
     const data = await fn()
     return { ok: true, data }
   } catch (err) {
-    log.error(`[ipc] ${context} esuat`, err)
+    // Erorile "asteptate" (validare, licenta) nu sunt defecte - warn, nu error,
+    // ca sa nu acopere problemele reale din loguri.
+    const expected = ['VALIDATION', 'NOT_LICENSED', 'REVOKED', 'INVALID_KEY', 'INVALID_ID']
+    if (expected.includes(err.code)) log.warn(`[ipc] ${context}: ${err.code}`)
+    else log.error(`[ipc] ${context} esuat`, err)
     return {
       ok: false,
-      error: { code: err.code || 'UNKNOWN', message: err.userMessage || err.message || 'Eroare necunoscuta.' }
+      error: { code: err.code || 'UNKNOWN', message: err.userMessage || err.message || 'Eroare necunoscută.' }
     }
   }
 }
@@ -52,12 +57,12 @@ async function wrap(fn, context) {
 function wrapLicensed(fn, context) {
   return wrap(() => {
     if (!isActivated()) {
-      const err = new Error('Aplicatia nu este activata. Introdu cheia de licenta.')
+      const err = new Error('Aplicația nu este activată. Introdu cheia de licență.')
       err.code = 'NOT_LICENSED'
       throw err
     }
     if (isRevoked()) {
-      const err = new Error('Aceasta licenta a fost revocata. Contacteaza dezvoltatorul pentru o cheie noua.')
+      const err = new Error('Această licență a fost revocată. Contactează dezvoltatorul pentru o cheie nouă.')
       err.code = 'REVOKED'
       throw err
     }
@@ -76,7 +81,7 @@ export function registerIpcHandlers() {
     }, 'license:activate')
   )
 
-  ipcMain.handle('fisa:saveDraft', (e, fisa) => wrapLicensed(() => saveDraft(fisa), 'saveDraft'))
+  ipcMain.handle('fisa:saveDraft', (e, fisa) => wrapLicensed(() => saveDraft(sanitizeFisa(fisa)), 'saveDraft'))
   ipcMain.handle('fisa:loadDraft', (e, id) => wrapLicensed(() => loadDraft(id), 'loadDraft'))
   ipcMain.handle('fisa:listDrafts', () => wrapLicensed(() => listDrafts(), 'listDrafts'))
   ipcMain.handle('fisa:deleteDraft', (e, id) => wrapLicensed(() => deleteDraft(id), 'deleteDraft'))
@@ -88,10 +93,10 @@ export function registerIpcHandlers() {
       // _replaceBaseName e un camp tehnic adaugat de App.jsx cand fisa vine
       // din "Editeaza" pe o lucrare deja finalizata - nu face parte din
       // datele fisei si nu trebuie validat/persistat ca atare.
-      const { _replaceBaseName, ...fisaData } = fisa
+      const { _replaceBaseName, ...fisaData } = sanitizeFisa(fisa)
       const { valid, errors } = validateFisa(fisaData)
       if (!valid) {
-        const err = new Error('Fisa contine campuri invalide sau incomplete.')
+        const err = new Error('Fișa conține câmpuri invalide sau incomplete.')
         err.code = 'VALIDATION'
         err.fields = errors
         throw err
@@ -125,7 +130,7 @@ export function registerIpcHandlers() {
   ipcMain.handle('fisa:retryPdf', (e, { fisa, baseName }) =>
     wrapLicensed(async () => {
       const pdfPath = getPdfPath(baseName)
-      await generatePdf(fisa, pdfPath)
+      await generatePdf(sanitizeFisa(fisa), pdfPath)
       return { pdfSaved: true, pdfPath }
     }, 'retryPdf')
   )
@@ -165,7 +170,7 @@ export function registerIpcHandlers() {
       const win = BrowserWindow.fromWebContents(e.sender)
       const result = await dialog.showOpenDialog(win, {
         properties: ['openDirectory', 'createDirectory'],
-        title: 'Alege folderul pentru fisele de service'
+        title: 'Alege folderul pentru fișele de service'
       })
       if (result.canceled || result.filePaths.length === 0) return null
       return result.filePaths[0]

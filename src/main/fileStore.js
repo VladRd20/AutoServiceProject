@@ -235,7 +235,7 @@ export async function ensureDirs() {
     } catch (err) {
       // Daca nu putem crea directoarele de baza nici in fallback, aplicatia nu
       // poate functiona - aruncam un AppError explicit, prins la nivel de UI la pornire.
-      throw toAppError(err, 'Nu s-a putut crea folderul de date al aplicatiei.')
+      throw toAppError(err, 'Nu s-a putut crea folderul de date al aplicației.')
     }
   }
   dirsEnsured = true
@@ -267,7 +267,7 @@ export async function changeDataPath(newBasePath) {
   try {
     await fs.cp(oldBase, resolvedNew, { recursive: true, force: false, errorOnExist: false })
   } catch (err) {
-    throw toAppError(err, 'Copierea datelor existente in noul folder a esuat. Nimic nu a fost schimbat.')
+    throw toAppError(err, 'Copierea datelor existente în noul folder a eșuat. Nimic nu a fost schimbat.')
   }
 
   setDataPathOverride(resolvedNew)
@@ -276,9 +276,23 @@ export async function changeDataPath(newBasePath) {
   baseDirPromise = Promise.resolve(resolvedNew)
   dirsEnsured = false
   invalidateFiseCache()
+  invalidateDraftsCache()
 
   log.info(`[fileStore] folder de date schimbat: ${oldBase} -> ${resolvedNew}`)
   return { changed: true, path: resolvedNew, oldPath: oldBase }
+}
+
+// Data/ora LOCALA in format ISO fara sufix de fus orar ("2026-09-18T00:30:00").
+// toISOString() e mereu UTC - intre 00:00 si ora offset-ului local, data din
+// numele fisierului/PDF ar fi iesit cu o zi in urma, desi ora afisata era
+// cea locala.
+export function toLocalISO(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+function tmpSuffix() {
+  return `.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 function sanitizeSegment(value) {
@@ -306,7 +320,7 @@ export function fisaBaseName(fisa) {
 // Scriere atomica: scrie intr-un fisier temporar, apoi redenumeste.
 // Evita fisiere corupte/trunchiate daca aplicatia crapa sau curentul pica la mijloc.
 async function writeJsonAtomic(filePath, data) {
-  const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`
+  const tmpPath = `${filePath}${tmpSuffix()}`
   try {
     await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf-8')
     await fs.rename(tmpPath, filePath)
@@ -317,7 +331,7 @@ async function writeJsonAtomic(filePath, data) {
     } catch {
       /* nu exista sau deja curatat - ignoram */
     }
-    throw toAppError(err, 'Nu s-a putut salva fisa pe disc.')
+    throw toAppError(err, 'Nu s-a putut salva fișa pe disc.')
   }
 }
 
@@ -328,16 +342,79 @@ async function writeJsonAtomic(filePath, data) {
 // corupta/editata manual) nu trebuie sa poata iesi din folderul de drafturi.
 function assertSafeId(id) {
   if (!/^[\w-]+$/.test(String(id || ''))) {
-    throw new AppError('INVALID_ID', 'Identificator de fisa invalid.')
+    throw new AppError('INVALID_ID', 'Identificator de fișă invalid.')
   }
+}
+
+// Lista drafturilor tinuta in memorie (Map id -> draft): autosave-ul apeleaza
+// listDrafts dupa fiecare salvare, iar recitirea si reparsarea tuturor
+// fisierelor de pe disc de fiecare data era inutila - singurul care scrie in
+// folderul de drafturi e acest proces. Se invalideaza doar la schimbarea
+// folderului de date.
+let _draftsCache = null
+let _draftsLoad = null
+
+function invalidateDraftsCache() {
+  _draftsCache = null
+  _draftsLoad = null
+}
+
+// Ruleaza `fn` pe elemente cu cel mult `limit` operatii de disc simultane -
+// mult mai rapid decat un for secvential la sute/mii de fisiere, fara sa
+// deschida mii de handle-uri deodata.
+async function mapLimit(items, limit, fn) {
+  let i = 0
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) {
+      const idx = i++
+      await fn(items[idx], idx)
+    }
+  })
+  await Promise.all(workers)
+}
+
+async function loadDraftsCache() {
+  if (_draftsCache) return _draftsCache
+  if (!_draftsLoad) {
+    const load = (async () => {
+      const map = new Map()
+      const files = (await fs.readdir(getDraftsDir())).filter((f) => f.endsWith('.json'))
+      await mapLimit(files, 32, async (f) => {
+        try {
+          const raw = await fs.readFile(path.join(getDraftsDir(), f), 'utf-8')
+          map.set(f.replace(/\.json$/, ''), JSON.parse(raw))
+        } catch (err) {
+          // Un draft corupt individual nu trebuie sa blocheze lista intreaga -
+          // il logam si il sarim.
+          log.warn(`[fileStore] draft corupt sarit: ${f}`, err)
+        }
+      })
+      return map
+    })()
+    _draftsLoad = load
+    load.then(
+      (map) => {
+        if (_draftsLoad === load) _draftsCache = map
+      },
+      () => {
+        if (_draftsLoad === load) _draftsLoad = null
+      }
+    )
+  }
+  return _draftsLoad
 }
 
 export async function saveDraft(fisa) {
   await ensureDirs()
-  const id = fisa.id || `draft-${Date.now()}`
+  // Sufixul aleator evita coliziunea a doua drafturi create in aceeasi
+  // milisecunda (ex: doua ferestre/porniri simultane).
+  const id = fisa.id || `draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   assertSafeId(id)
   const filePath = path.join(getDraftsDir(), `${id}.json`)
-  await writeJsonAtomic(filePath, { ...fisa, id, status: 'draft' })
+  const draft = { ...fisa, id, status: 'draft', updatedAt: new Date().toISOString() }
+  await writeJsonAtomic(filePath, draft)
+  if (_draftsCache) _draftsCache.set(id, draft)
+  else _draftsLoad = null // o incarcare in curs ar putea sa nu includa aceasta salvare - nu o publicam
   return id
 }
 
@@ -348,28 +425,21 @@ export async function loadDraft(id) {
     const raw = await fs.readFile(filePath, 'utf-8')
     return JSON.parse(raw)
   } catch (err) {
-    throw toAppError(err, 'Nu s-a putut incarca fisa salvata.')
+    throw toAppError(err, 'Nu s-a putut încărca fișa salvată.')
   }
 }
 
 export async function listDrafts() {
   await ensureDirs()
   try {
-    const files = await fs.readdir(getDraftsDir())
-    const drafts = []
-    for (const f of files.filter((f) => f.endsWith('.json'))) {
-      try {
-        const raw = await fs.readFile(path.join(getDraftsDir(), f), 'utf-8')
-        drafts.push(JSON.parse(raw))
-      } catch (err) {
-        // Un draft corupt individual nu trebuie sa blocheze lista intreaga -
-        // il logam si il sarim.
-        log.warn(`[fileStore] draft corupt sarit: ${f}`, err)
-      }
-    }
-    return drafts.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+    const map = await loadDraftsCache()
+    // Cel mai recent modificat primul; drafturile mai vechi, salvate inainte
+    // sa existe `updatedAt`, ajung la coada (sir gol), ordonate dupa id.
+    return [...map.values()].sort(
+      (a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '') || (b.id || '').localeCompare(a.id || '')
+    )
   } catch (err) {
-    throw toAppError(err, 'Nu s-a putut citi lista de fise in lucru.')
+    throw toAppError(err, 'Nu s-a putut citi lista de fișe în lucru.')
   }
 }
 
@@ -379,9 +449,10 @@ export async function deleteDraft(id) {
   try {
     await fs.unlink(filePath)
   } catch (err) {
-    if (err.code === 'ENOENT') return // deja sters, nu e o eroare
-    throw toAppError(err, 'Nu s-a putut sterge fisa.')
+    if (err.code !== 'ENOENT') throw toAppError(err, 'Nu s-a putut șterge fișa.')
   }
+  if (_draftsCache) _draftsCache.delete(id)
+  else _draftsLoad = null
 }
 
 // Doua fise finalizate pentru aceeasi masina in aceeasi zi sunt un caz
@@ -402,11 +473,17 @@ async function uniqueFinalBaseName(baseName, excludeBaseName) {
   for (;;) {
     if (candidate === excludeBaseName) return candidate
     try {
-      await fs.access(path.join(getFiseDir(), `${candidate}.json`))
+      // 'wx' = creeaza doar daca NU exista - verificarea si rezervarea
+      // numelui sunt o singura operatie atomica, deci doua finalizari
+      // concurente nu pot alege acelasi nume. Fisierul gol e inlocuit
+      // apoi (rename) de writeJsonAtomic.
+      const handle = await fs.open(path.join(getFiseDir(), `${candidate}.json`), 'wx')
+      await handle.close()
+      return candidate
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw toAppError(err, 'Nu s-a putut salva fișa pe disc.')
       candidate = `${baseName}-${n}`
       n++
-    } catch {
-      return candidate
     }
   }
 }
@@ -426,13 +503,19 @@ export async function finalizeFisa(fisa, options = {}) {
   const now = new Date()
   // Daca "Data curenta" e bifat, data folosita in fisa/PDF e data si ora
   // exacta a finalizarii (Release), nu momentul in care a fost bifat checkbox-ul.
-  const data = fisa.dataCurenta ? now.toISOString() : fisa.data
+  const data = fisa.dataCurenta ? toLocalISO(now) : fisa.data
   const finalFisa = { ...fisa, data, status: 'finalizata', finalizedAt: now.toISOString() }
   const replaceBaseName = options.replaceBaseName || null
   if (replaceBaseName) assertSafeId(replaceBaseName)
   const baseName = await uniqueFinalBaseName(fisaBaseName(finalFisa), replaceBaseName)
   const jsonPath = path.join(getFiseDir(), `${baseName}.json`)
-  await writeJsonAtomic(jsonPath, finalFisa)
+  try {
+    await writeJsonAtomic(jsonPath, finalFisa)
+  } catch (err) {
+    // Eliberam numele rezervat (fisier gol) daca scrierea a esuat.
+    if (baseName !== replaceBaseName) await fs.unlink(jsonPath).catch(() => {})
+    throw err
+  }
 
   if (replaceBaseName && replaceBaseName !== baseName) {
     for (const ext of ['.json', '.pdf']) {
@@ -442,8 +525,10 @@ export async function finalizeFisa(fisa, options = {}) {
         // fisierul vechi poate sa nu mai existe (ex: deja sters de altundeva) - ignoram
       }
     }
+    cacheRemove(`${replaceBaseName}.json`)
   }
-  invalidateFiseCache()
+  cacheUpsert(`${baseName}.json`, { ...finalFisa, _file: `${baseName}.json` })
+  scheduleBackup()
 
   if (fisa.id) {
     try {
@@ -475,14 +560,14 @@ export async function deleteFinalizedFisa(fileNameOrBaseName) {
       try {
         await fs.unlink(path.join(getFiseDir(), `${baseName}${ext}`))
       } catch (err) {
-        if (err.code !== 'ENOENT') throw toAppError(err, 'Nu s-a putut sterge fisa.')
+        if (err.code !== 'ENOENT') throw toAppError(err, 'Nu s-a putut șterge fișa.')
       }
     }
   } finally {
     // Chiar daca .pdf esueaza (ex: EBUSY - fisierul e deschis in alt program),
-    // .json poate fi deja sters - cache-ul trebuie invalidat oricum, altfel
+    // .json poate fi deja sters - cache-ul trebuie actualizat oricum, altfel
     // ramane o intrare "zombie" ce nu mai corespunde niciunui fisier de pe disc.
-    invalidateFiseCache()
+    cacheRemove(`${baseName}.json`)
   }
 }
 
@@ -492,58 +577,114 @@ export async function listFiseFinalizate() {
     const files = await fs.readdir(getFiseDir())
     return files.filter((f) => f.endsWith('.json'))
   } catch (err) {
-    throw toAppError(err, 'Nu s-a putut citi lista de fise finalizate.')
+    throw toAppError(err, 'Nu s-a putut citi lista de fișe finalizate.')
   }
 }
 
-// Cache in memorie a continutului tuturor fiselor finalizate - search/
-// rapoarte/autocompletare/istoric vehicul il foloseau pe fiecare apel citind
-// si parsand TOATE fisele de pe disc de fiecare data (bine la zeci-sute de
-// fise, vizibil de incet dupa cativa ani de utilizare reala, cand ajung mii).
-// Populat lazy la prima citire, invalidat explicit doar la scrierile care
-// chiar schimba continutul folderului de fise (finalizeFisa, changeDataPath)
-// - intre doua asemenea scrieri, orice numar de cautari/rapoarte refolosesc
-// aceeasi lista deja citita, in loc sa rescaneze discul de fiecare data.
-let _fiseFinalizateCache = null
-// Creste la fiecare invalidare - o citire in curs (readdir/readFile-urile de
-// mai jos sunt async, dau control altor operatii intre ele) poate termina
-// DUPA o invalidare declansata de un finalize/delete concurent; fara acest
-// gard, ar suprascrie cache-ul gol/proaspat cu snapshot-ul vechi, deja
-// invechit, pe care il ținea in memorie inainte sa inceapa citirea.
-let _fiseCacheGen = 0
+// Cache in memorie a continutului tuturor fiselor finalizate (Map nume-fisier
+// -> fisa) - search/rapoarte/autocompletare/istoric vehicul/recente il
+// folosesc, in loc sa citeasca si sa parseze TOATE fisele de pe disc la
+// fiecare apel. Populat lazy la prima citire (o singura incarcare in curs,
+// partajata de apelurile concurente). Scrierile care schimba folderul
+// (finalizare, stergere) il actualizeaza INCREMENTAL - nu il arunca - deci o
+// finalizare nu mai declanseaza rescanarea intregului folder; doar
+// changeDataPath il invalideaza complet.
+let _fiseMap = null
+let _fiseLoad = null
+let _fiseList = null // vedere sub forma de array, memorata pana la urmatoarea modificare
+// Creste la fiecare modificare/invalidare - o incarcare in curs (readFile-urile
+// sunt async si dau control altor operatii) care termina DUPA o modificare
+// concurenta ar publica un snapshot deja invechit; gardul de mai jos o previne.
+let _fiseGen = 0
+// Versiunea datelor derivate (autocomplete, totaluri) - se schimba la orice modificare.
+let _fiseVersion = 0
+let _autocompleteMemo = null
 
 function invalidateFiseCache() {
-  _fiseFinalizateCache = null
-  _fiseCacheGen += 1
+  _fiseMap = null
+  _fiseLoad = null
+  _fiseList = null
+  _fiseGen += 1
+  _fiseVersion += 1
+  _autocompleteMemo = null
 }
 
-// Citeste toate fisele finalizate de pe disc. Suficient de rapid pentru
-// volumul unui singur service auto (sute-mii de fise) - o fisa corupta
-// individual e logata si sarita, nu blocheaza restul.
+function cacheUpsert(file, fisa) {
+  _fiseGen += 1
+  _fiseVersion += 1
+  _fiseList = null
+  _autocompleteMemo = null
+  if (_fiseMap) _fiseMap.set(file, fisa)
+}
+
+function cacheRemove(file) {
+  _fiseGen += 1
+  _fiseVersion += 1
+  _fiseList = null
+  _autocompleteMemo = null
+  if (_fiseMap) _fiseMap.delete(file)
+}
+
+// Citeste toate fisele finalizate (o fisa corupta individual e logata si
+// sarita, nu blocheaza restul) si le intoarce ca array.
 async function readAllFiseFinalizate() {
-  if (_fiseFinalizateCache) return _fiseFinalizateCache
-
-  const genAtStart = _fiseCacheGen
-  let files
-  try {
-    files = (await fs.readdir(getFiseDir())).filter((f) => f.endsWith('.json'))
-  } catch (err) {
-    throw toAppError(err, 'Nu s-a putut citi lista de fise finalizate.')
-  }
-
-  const result = []
-  for (const f of files) {
-    try {
-      const raw = await fs.readFile(path.join(getFiseDir(), f), 'utf-8')
-      result.push({ ...JSON.parse(raw), _file: f })
-    } catch (err) {
-      log.warn(`[fileStore] fisa finalizata corupta sarita: ${f}`, err)
+  // Daca o modificare (finalizare/stergere) a intervenit in timpul incarcarii,
+  // snapshot-ul citit e deja invechit - reincarcam (de maxim 3 ori) in loc sa-l
+  // intoarcem ca atare, ca lista proaspat actualizata din UI sa nu-l piarda.
+  for (let attempt = 0; attempt < 3 && !_fiseMap; attempt++) {
+    if (!_fiseLoad) {
+      const genAtStart = _fiseGen
+      const load = (async () => {
+        let files
+        try {
+          files = (await fs.readdir(getFiseDir())).filter((f) => f.endsWith('.json'))
+        } catch (err) {
+          throw toAppError(err, 'Nu s-a putut citi lista de fișe finalizate.')
+        }
+        const map = new Map()
+        await mapLimit(files, 32, async (f) => {
+          try {
+            const raw = await fs.readFile(path.join(getFiseDir(), f), 'utf-8')
+            if (!raw.trim()) return // nume rezervat in curs de scriere (vezi uniqueFinalBaseName)
+            map.set(f, { ...JSON.parse(raw), _file: f })
+          } catch (err) {
+            log.warn(`[fileStore] fisa finalizata corupta sarita: ${f}`, err)
+          }
+        })
+        return map
+      })()
+      _fiseLoad = load
+      load.then(
+        (map) => {
+          // Publicam doar daca nu s-a modificat nimic cat timp citeam.
+          if (_fiseLoad === load && _fiseGen === genAtStart) _fiseMap = map
+        },
+        () => {
+          if (_fiseLoad === load) _fiseLoad = null
+        }
+      )
+    }
+    const map = await _fiseLoad
+    if (!_fiseMap) {
+      _fiseLoad = null
+      if (attempt === 2) return [...map.values()]
     }
   }
-  // Daca a intervenit o invalidare cat timp citeam, snapshot-ul de mai sus
-  // e deja invechit - nu-l publicam peste starea (mai noua) din cache.
-  if (_fiseCacheGen === genAtStart) _fiseFinalizateCache = result
-  return result
+  if (!_fiseList) _fiseList = [..._fiseMap.values()]
+  return _fiseList
+}
+
+// Totalul unei fise, calculat o singura data (WeakMap pe obiectul din cache) -
+// rapoartele il cer de mai multe ori pe aceeasi fisa.
+const _totalsMemo = new WeakMap()
+function totalsOf(fisa) {
+  let t = _totalsMemo.get(fisa)
+  if (!t) {
+    const r = reduceriDinFisa(fisa)
+    t = calcTotaluri(fisa.piese, fisa.lucrari, r.piese, r.lucrari)
+    _totalsMemo.set(fisa, t)
+  }
+  return t
 }
 
 // Date pentru auto-completare: marci/modele si denumiri de piese/lucrari
@@ -553,6 +694,8 @@ async function readAllFiseFinalizate() {
 export async function getAutocompleteData() {
   await ensureDirs()
   const all = await readAllFiseFinalizate()
+  if (_autocompleteMemo && _autocompleteMemo.version === _fiseVersion) return _autocompleteMemo.data
+  const versionAtStart = _fiseVersion
 
   const marci = new Map() // cheie lowercase -> denumire originala
   const modelePerMarca = {} // cheie lowercase marca -> Set de modele
@@ -600,7 +743,7 @@ export async function getAutocompleteData() {
     for (const l of fisa.lucrari || []) upsertItem(lucrari, l.denumire, l.pret, fisa.finalizedAt, 'pret')
   }
 
-  return {
+  const data = {
     marci: [...marci.values()].sort((a, b) => a.localeCompare(b)),
     modelePerMarca: Object.fromEntries(
       Object.entries(modelePerMarca).map(([k, set]) => [k, [...set].sort((a, b) => a.localeCompare(b))])
@@ -608,6 +751,8 @@ export async function getAutocompleteData() {
     piese: [...piese.values()].sort((a, b) => a.denumire.localeCompare(b.denumire)),
     lucrari: [...lucrari.values()].sort((a, b) => a.denumire.localeCompare(b.denumire))
   }
+  if (_fiseVersion === versionAtStart) _autocompleteMemo = { version: versionAtStart, data }
+  return data
 }
 
 function fisaHaystack(fisa) {
@@ -625,6 +770,8 @@ function fisaHaystack(fisa) {
   )
 }
 
+const SEARCH_MAX_RESULTS = 100
+
 // Cauta in toate fisele finalizate dupa client, numar de inmatriculare,
 // marca/model sau VIN.
 export async function searchFise(query) {
@@ -636,6 +783,7 @@ export async function searchFise(query) {
   return all
     .filter((fisa) => fisaHaystack(fisa).includes(q))
     .sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || ''))
+    .slice(0, SEARCH_MAX_RESULTS)
 }
 
 // Cele mai recente fise finalizate, pentru acces rapid din sidebar. Evitam
@@ -645,38 +793,9 @@ export async function searchFise(query) {
 // de incredere pentru finalizedAt) si citim continutul doar pentru candidati.
 export async function listRecentFise(limit = 8) {
   await ensureDirs()
-
-  let files
-  try {
-    files = (await fs.readdir(getFiseDir())).filter((f) => f.endsWith('.json'))
-  } catch (err) {
-    throw toAppError(err, 'Nu s-a putut citi lista de fise finalizate.')
-  }
-
-  const withMtime = await Promise.all(
-    files.map(async (f) => {
-      try {
-        const stat = await fs.stat(path.join(getFiseDir(), f))
-        return { f, mtimeMs: stat.mtimeMs }
-      } catch {
-        return { f, mtimeMs: 0 }
-      }
-    })
-  )
-
-  const candidates = withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, limit)
-
-  const result = []
-  for (const { f } of candidates) {
-    try {
-      const raw = await fs.readFile(path.join(getFiseDir(), f), 'utf-8')
-      result.push({ ...JSON.parse(raw), _file: f })
-    } catch (err) {
-      log.warn(`[fileStore] fisa finalizata corupta sarita: ${f}`, err)
-    }
-  }
-
-  return result.sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || ''))
+  const n = Math.min(Math.max(Number(limit) || 8, 1), 50)
+  const all = await readAllFiseFinalizate()
+  return [...all].sort((a, b) => (b.finalizedAt || '').localeCompare(a.finalizedAt || '')).slice(0, n)
 }
 
 // Backup: oglinda incrementala a folderului de fise, actualizata zilnic.
@@ -699,22 +818,75 @@ export async function backupNow() {
   try {
     let total = 0
     for (const dest of [localMirror, safetyDir]) {
-      total += await copyMissing(getFiseDir(), path.join(dest, 'fise'))
-      total += await copyMissing(getDraftsDir(), path.join(dest, 'drafturi'))
+      // Fisele finalizate: copiem si versiunile MODIFICATE (fluxul "Editeaza"
+      // suprascrie fisa pe loc), dar nu stergem niciodata din backup - o
+      // fisa stearsa intentionat ramane recuperabila.
+      total += await syncNewer(getFiseDir(), path.join(dest, 'fise'), { prune: false })
+      // Drafturile se schimba la fiecare autosave si dispar cand sunt
+      // finalizate/sterse: oglinda trebuie sa le urmeze, altfel o
+      // recuperare automata ar readuce drafturi "fantoma" si versiuni vechi.
+      total += await syncNewer(getDraftsDir(), path.join(dest, 'drafturi'), { prune: true })
       try {
         await fs.copyFile(settingsFilePath(), path.join(dest, 'setari.json'))
       } catch {
         // setari.json poate sa nu existe inca - nicio problema
       }
     }
-    log.info(`[fileStore] backup actualizat (local + safety-backup): ${total} fisiere noi copiate`)
+    log.info(`[fileStore] backup actualizat (local + safety-backup): ${total} fisiere copiate/actualizate`)
     return safetyDir
   } catch (err) {
     // Backup-ul e o plasa de siguranta secundara - un esec aici nu trebuie sa
     // opreasca aplicatia, doar sa fie logat clar.
     log.error('[fileStore] backup esuat', err)
-    throw toAppError(err, 'Backup-ul automat a esuat. Datele originale sunt intacte.')
+    throw toAppError(err, 'Backup-ul automat a eșuat. Datele originale sunt intacte.')
   }
+}
+
+// Sincronizeaza un folder PLAT (fise/drafturi): copiaza ce lipseste sau e mai
+// nou/diferit ca marime la sursa; cu prune, sterge din destinatie fisierele
+// care nu mai exista la sursa. Ignora fisierele temporare.
+async function syncNewer(srcDir, destDir, { prune }) {
+  await fs.mkdir(destDir, { recursive: true })
+  let changed = 0
+  const srcEntries = (await fs.readdir(srcDir, { withFileTypes: true })).filter(
+    (e) => e.isFile() && !e.name.includes('.tmp-')
+  )
+  const srcNames = new Set(srcEntries.map((e) => e.name))
+  await mapLimit(srcEntries, 16, async (entry) => {
+    const src = path.join(srcDir, entry.name)
+    const dest = path.join(destDir, entry.name)
+    try {
+      const [ss, ds] = await Promise.all([fs.stat(src), fs.stat(dest).catch(() => null)])
+      if (ds && ds.size === ss.size && ds.mtimeMs >= ss.mtimeMs) return
+      await fs.copyFile(src, dest)
+      changed++
+    } catch (err) {
+      log.warn(`[fileStore] backup: nu s-a putut copia ${entry.name}`, err)
+    }
+  })
+  // Nu curatam cand sursa e goala: un folder de date sters/golit din senin e
+  // exact cazul in care backup-ul trebuie sa PASTREZE ce avea (vezi
+  // migrateAndRecover), nu sa se goleasca odata cu sursa.
+  if (prune && srcEntries.length > 0) {
+    for (const entry of await fs.readdir(destDir, { withFileTypes: true })) {
+      if (entry.isFile() && !srcNames.has(entry.name)) {
+        await fs.unlink(path.join(destDir, entry.name)).catch(() => {})
+        changed++
+      }
+    }
+  }
+  return changed
+}
+
+// Backup declansat dupa o finalizare, cu debounce - nu asteptam pana a doua zi
+// ca o fisa proaspat emisa sa ajunga si in copia de siguranta.
+let _backupTimer = null
+export function scheduleBackup(delayMs = 5000) {
+  if (_backupTimer) clearTimeout(_backupTimer)
+  _backupTimer = setTimeout(() => {
+    _backupTimer = null
+    backupNow().catch((err) => log.warn('[fileStore] backup dupa finalizare esuat', err))
+  }, delayMs)
 }
 
 // Setarile firmei (nume, adresa, telefon, CUI/IDNO) - afisate pe PDF, langa
@@ -791,6 +963,8 @@ export async function getRapoarte(period) {
   const filtered = start ? all.filter((f) => f.finalizedAt && new Date(f.finalizedAt) >= start) : all
 
   let totalIncasat = 0
+  let totalPiese = 0
+  let totalLucrari = 0
   const pieseMap = new Map()
   const lucrariMap = new Map()
 
@@ -805,9 +979,10 @@ export async function getRapoarte(period) {
   }
 
   for (const fisa of filtered) {
-    const reduceri = reduceriDinFisa(fisa)
-    const t = calcTotaluri(fisa.piese, fisa.lucrari, reduceri.piese, reduceri.lucrari)
+    const t = totalsOf(fisa)
     totalIncasat += t.totalFinal
+    totalPiese += t.totalPiese - t.valoareReducerePiese
+    totalLucrari += t.totalLucrari - t.valoareReducereLucrari
     for (const p of fisa.piese || []) {
       upsertAgregat(pieseMap, p.denumire, p.cantitate, calcLinieTotal(p.cantitate, p.pretUnitar))
     }
@@ -816,9 +991,29 @@ export async function getRapoarte(period) {
     }
   }
 
+  // Venit lunar pe ultimele 6 luni, independent de perioada aleasa - da
+  // contextul de evolutie, nu doar totalul perioadei curente.
+  const acum = new Date()
+  const lunar = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(acum.getFullYear(), acum.getMonth() - i, 1)
+    lunar.push({ year: d.getFullYear(), month: d.getMonth(), total: 0, count: 0 })
+  }
+  for (const fisa of all) {
+    if (!fisa.finalizedAt) continue
+    const d = new Date(fisa.finalizedAt)
+    const slot = lunar.find((m) => m.year === d.getFullYear() && m.month === d.getMonth())
+    if (!slot) continue
+    slot.total = round2(slot.total + totalsOf(fisa).totalFinal)
+    slot.count += 1
+  }
+
   return {
     numarFise: filtered.length,
     totalIncasat: round2(totalIncasat),
+    totalPiese: round2(totalPiese),
+    totalLucrari: round2(totalLucrari),
+    lunar,
     topPiese: [...pieseMap.values()].sort((a, b) => b.count - a.count).slice(0, 5),
     topLucrari: [...lucrariMap.values()].sort((a, b) => b.count - a.count).slice(0, 5)
   }

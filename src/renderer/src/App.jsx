@@ -12,7 +12,9 @@ import SettingsModal from './components/SettingsModal'
 import ReportsModal from './components/ReportsModal'
 import VehicleHistoryModal from './components/VehicleHistoryModal'
 import OverflowMenu from './components/OverflowMenu'
-import { validateFisa, reduceriDinFisa, isFisaEmpty } from '../../shared/calculations'
+import Icon from './components/Icon'
+import { formatLei } from './format'
+import { validateFisa, reduceriDinFisa, isFisaEmpty, calcTotaluri } from '../../shared/calculations'
 import { draftBackupRef } from './draftBackup'
 
 // Prima salvare (cand fisa capata continut) e instanta, ca sa apara imediat
@@ -20,8 +22,12 @@ import { draftBackupRef } from './draftBackup'
 // utilizatorul se opreste din tastat, nu pe fiecare litera.
 const AUTOSAVE_DEBOUNCE_MS = 1000
 
+// Data LOCALA (nu UTC): toISOString() ar da ziua precedenta dupa miezul noptii
+// intr-un fus orar cu offset pozitiv.
 function todayISO() {
-  return new Date().toISOString().slice(0, 10)
+  const d = new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
 function emptyFisa() {
@@ -85,6 +91,8 @@ export default function App() {
 
   const draftsRef = useRef([])
   const searchBoxRef = useRef(null)
+  const searchInputRef = useRef(null)
+  const savedAtRef = useRef(null)
 
   const showToast = useCallback((type, message, action, opts) => {
     const id = ++toastIdRef.current
@@ -173,17 +181,17 @@ export default function App() {
       if (res.data.recoveredFromSafetyBackup) {
         showToast(
           'error',
-          'Folderul principal de date a fost gasit gol la pornire - fisele au fost restaurate automat din backup-ul de siguranta.'
+          'Folderul principal de date a fost găsit gol la pornire - fișele au fost restaurate automat din backup-ul de siguranță.'
         )
       } else if (res.data.migratedFromLegacy) {
         showToast(
           'success',
-          'Datele au fost mutate automat intr-o locatie mai sigura (nu mai dispar la actualizari).'
+          'Datele au fost mutate automat într-o locație mai sigură (nu mai dispar la actualizări).'
         )
       } else if (res.data.usingFallback) {
         showToast(
           'error',
-          `Folderul din proiect nu e scriptibil - fisele se salveaza in schimb in ${res.data.dir}`
+          `Folderul din proiect nu e scriptibil - fișele se salvează în schimb în ${res.data.dir}`
         )
       }
     })
@@ -219,7 +227,7 @@ export default function App() {
     const unsubscribe = window.serviceAuto.app.onFatalError(() => {
       showToast(
         'error',
-        'Aplicatia a intalnit o eroare neasteptata. Salveaza-ti lucrul in curs si repornesc-o cand poti.',
+        'Aplicația a întâlnit o eroare neașteptată. Salvează-ți lucrul în curs și repornește-o când poți.',
         null,
         { sticky: true }
       )
@@ -269,15 +277,15 @@ export default function App() {
   // sa vada in orice moment ce se intampla efectiv (verifica, nu a gasit
   // nimic, descarca cu procent, gata de instalat), nu doar un text static.
   function getUpdateButtonState() {
-    if (checkingUpdates) return { text: 'Se verifica...', variant: 'info' }
+    if (checkingUpdates) return { text: 'Se verifică...', variant: 'info' }
     if (updateInfo.status === 'downloading') {
-      return { text: `Se descarca... ${updateInfo.percent ?? 0}%`, variant: 'info' }
+      return { text: `Se descarcă... ${updateInfo.percent ?? 0}%`, variant: 'info' }
     }
-    if (updateInfo.status === 'downloaded') return { text: 'Gata de instalat ✓', variant: 'success' }
-    if (updateInfo.status === 'available') return { text: `Versiune noua: v${updateInfo.version}`, variant: 'accent' }
-    if (updateFlash === 'no-update') return { text: 'Esti la zi ✓', variant: 'success' }
-    if (updateFlash === 'error') return { text: 'Verificare esuata', variant: 'error' }
-    return { text: 'Verifica actualizari', variant: null }
+    if (updateInfo.status === 'downloaded') return { text: 'Gata de instalat', variant: 'success' }
+    if (updateInfo.status === 'available') return { text: `Versiune nouă: v${updateInfo.version}`, variant: 'accent' }
+    if (updateFlash === 'no-update') return { text: 'Ești la zi', variant: 'success' }
+    if (updateFlash === 'error') return { text: 'Verificare eșuată', variant: 'error' }
+    return { text: 'Verifică actualizări', variant: null }
   }
 
   function handleCheckForUpdates() {
@@ -310,11 +318,12 @@ export default function App() {
       if (fisaGenRef.current !== gen) return // utilizatorul a comutat deja pe alta fisa - ignoram rezultatul
       if (res.ok) {
         if (!fisa.id) setFisa((f) => (f.id ? f : { ...f, id: res.data }))
+        savedAtRef.current = new Date()
         setSaveState('saved')
         refreshDrafts()
       } else {
         setSaveState('idle')
-        showToast('error', `Autosave esuat: ${res.error.message}`)
+        showToast('error', `Salvare automată eșuată: ${res.error.message}`)
       }
     }, delay)
 
@@ -383,7 +392,7 @@ export default function App() {
     // ar duplica "Fisa noua" in sidebar la fiecare click. Citim din ref (nu
     // din state) ca handleNewFisa sa ramana stabil intre randari.
     if (isFisaEmpty(draftBackupRef.current)) {
-      showToast('success', 'Esti deja pe o fisa noua, goala.')
+      showToast('success', 'Ești deja pe o fișă nouă, goală.')
       return
     }
     // Sau, daca exista deja un draft gol NEFOLOSIT in lista (creat mai
@@ -398,11 +407,29 @@ export default function App() {
     setPdfRetry(null)
   }, [resetToNewFisa, showToast, handleOpenDraft])
 
+  // Scurtaturi: Ctrl+K muta focusul in cautare, Ctrl+N deschide o fisa noua.
+  useEffect(() => {
+    function onKey(e) {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return
+      const k = e.key.toLowerCase()
+      if (k === 'k') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
+      } else if (k === 'n') {
+        e.preventDefault()
+        handleNewFisa()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [handleNewFisa])
+
   async function handleRelease() {
     const { valid, errors: localErrors } = validateFisa(fisa)
     setErrors(localErrors)
     if (!valid) {
-      showToast('error', 'Fisa contine campuri incomplete sau invalide. Verifica evidentiate cu rosu.')
+      showToast('error', 'Fișa conține câmpuri incomplete sau invalide. Verifică câmpurile evidențiate cu roșu.')
       return
     }
 
@@ -428,17 +455,17 @@ export default function App() {
       showToast(
         'success',
         res.data.replaced
-          ? `Fisa actualizata si PDF salvat: ${res.data.baseName}.pdf`
-          : `Fisa finalizata si PDF salvat: ${res.data.baseName}.pdf`,
-        { label: 'Printeaza', onClick: () => handlePrintPdf(res.data.baseName) }
+          ? `Fișă actualizată și PDF salvat: ${res.data.baseName}.pdf`
+          : `Fișă finalizată și PDF salvat: ${res.data.baseName}.pdf`,
+        { label: 'Printează', onClick: () => handlePrintPdf(res.data.baseName) }
       )
       await goToNextDraftOrNew()
     } else {
       setPdfRetry({ fisa: res.data.fisa, baseName: res.data.baseName })
       showToast(
         'error',
-        `Fisa a fost salvata, dar PDF-ul a esuat: ${res.data.pdfError}`,
-        { label: 'Reincearca PDF', onClick: () => handleRetryPdf(res.data.fisa, res.data.baseName) }
+        `Fișa a fost salvată, dar PDF-ul a eșuat: ${res.data.pdfError}`,
+        { label: 'Reîncearcă PDF', onClick: () => handleRetryPdf(res.data.fisa, res.data.baseName) }
       )
       refreshDrafts()
     }
@@ -453,14 +480,14 @@ export default function App() {
     const res = await window.serviceAuto.fisa.retryPdf({ fisa: finalFisa, baseName })
     if (res.ok) {
       showToast('success', `PDF salvat: ${baseName}.pdf`, {
-        label: 'Printeaza',
+        label: 'Printează',
         onClick: () => handlePrintPdf(baseName)
       })
       setPdfRetry(null)
       await goToNextDraftOrNew()
     } else {
-      showToast('error', `PDF tot a esuat: ${res.error.message}`, {
-        label: 'Reincearca',
+      showToast('error', `PDF tot a eșuat: ${res.error.message}`, {
+        label: 'Reîncearcă',
         onClick: () => handleRetryPdf(finalFisa, baseName)
       })
     }
@@ -476,7 +503,7 @@ export default function App() {
     const res = await window.serviceAuto.app.exportLogs()
     setExportingLogs(false)
     if (res.ok) {
-      showToast('success', `Loguri exportate pe Desktop (${res.data.copied} fisiere) - trimite folderul pentru debugging.`)
+      showToast('success', `Loguri exportate pe Desktop (${res.data.copied} fișiere) - trimite folderul pentru depanare.`)
     } else {
       showToast('error', res.error.message)
     }
@@ -544,8 +571,8 @@ export default function App() {
   const handleDeleteFinalized = useCallback(
     async (fileName) => {
       const ok = await confirmAction(
-        'Stergi definitiv aceasta fisa finalizata? PDF-ul si inregistrarea dispar ireversibil.',
-        { confirmLabel: 'Sterge' }
+        'Ștergi definitiv această fișă finalizată? PDF-ul și înregistrarea dispar ireversibil.',
+        { confirmLabel: 'Șterge' }
       )
       if (!ok) return false
       const res = await window.serviceAuto.fisa.deleteFinalizata(fileName)
@@ -553,7 +580,7 @@ export default function App() {
         showToast('error', res.error.message)
         return false
       }
-      showToast('success', 'Fisa finalizata a fost stearsa.')
+      showToast('success', 'Fișa finalizată a fost ștearsă.')
       refreshRecentFise()
       return true
     },
@@ -563,6 +590,14 @@ export default function App() {
   const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
 
   const updateBtn = getUpdateButtonState()
+  const totals = calcTotaluri(fisa.piese, fisa.lucrari, fisa.reducerePiesePercent, fisa.reducereLucrariPercent)
+  const plate = fisa.auto.nrInmatriculare?.trim()
+  const vehicul = [fisa.auto.marca, fisa.auto.model].map((x) => x?.trim()).filter(Boolean).join(' ')
+  const fisaGoala = isFisaEmpty(fisa)
+  const savedTime = savedAtRef.current
+    ? savedAtRef.current.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })
+    : ''
+  const showUpdatePill = Boolean(updateBtn.variant)
 
   return (
     <div className="app">
@@ -591,19 +626,36 @@ export default function App() {
         />
 
         <header className="topbar">
-          <h1>Fisa de service auto</h1>
+          <div className="topbar-title">
+            <h1>{fisa._replaceBaseName ? 'Editare fișă' : fisaGoala ? 'Fișă nouă' : 'Fișă de service'}</h1>
+            {!fisaGoala && (plate || vehicul || fisa.client.nume?.trim()) && (
+              <div className="crumbs">
+                {plate && <span className="plate">{plate}</span>}
+                {vehicul && <span>{vehicul}</span>}
+                {fisa.client.nume?.trim() && (
+                  <span className="crumb-client">
+                    <Icon name="user" size={13} /> {fisa.client.nume.trim()}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
           <div className="topbar-actions">
             <div className="search-box" ref={searchBoxRef}>
+              <Icon name="search" size={15} className="search-icon" />
               <input
                 type="text"
+                ref={searchInputRef}
                 className="topbar-search"
-                placeholder="Cauta"
+                placeholder="Caută"
+                aria-label="Caută fișe"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') setSearchQuery('')
                 }}
               />
+              {!searchQuery && <kbd className="search-kbd">Ctrl+K</kbd>}
               {searchQuery.trim() && (
                 <SearchModal
                   query={searchQuery}
@@ -615,19 +667,32 @@ export default function App() {
                 />
               )}
             </div>
-            <button
-              type="button"
-              className={updateBtn.variant ? `btn-status-${updateBtn.variant}` : ''}
-              disabled={checkingUpdates || updateInfo.status === 'downloading'}
-              onClick={handleCheckForUpdates}
-            >
-              {updateBtn.text}
-            </button>
+            {showUpdatePill && (
+              <button
+                type="button"
+                className={`btn-sm btn-status-${updateBtn.variant}`}
+                disabled={checkingUpdates || updateInfo.status === 'downloading'}
+                onClick={handleCheckForUpdates}
+              >
+                <Icon name={updateInfo.status === 'downloading' || checkingUpdates ? 'loader' : 'refresh'} />
+                {updateBtn.text}
+              </button>
+            )}
             <OverflowMenu
               items={[
-                { label: 'Rapoarte', onClick: () => setReportsOpen(true) },
-                { label: 'Deschide folderul cu fise', onClick: handleOpenFolder },
-                { label: exportingLogs ? 'Se exporta...' : 'Exporta loguri', onClick: handleExportLogs }
+                { label: 'Rapoarte', icon: 'chart', onClick: () => setReportsOpen(true) },
+                { label: 'Deschide folderul cu fișe', icon: 'folder', onClick: handleOpenFolder },
+                {
+                  label: updateBtn.variant ? 'Verifică actualizări' : updateBtn.text,
+                  icon: 'refresh',
+                  disabled: checkingUpdates || updateInfo.status === 'downloading',
+                  onClick: handleCheckForUpdates
+                },
+                {
+                  label: exportingLogs ? 'Se exportă...' : 'Exportă loguri',
+                  icon: 'download',
+                  onClick: handleExportLogs
+                }
               ]}
             />
             <ThemeToggle />
@@ -644,10 +709,11 @@ export default function App() {
 
         <ListaItems
           titlu="Piese"
+          singular="piesă"
           items={fisa.piese}
           onChange={handlePieseChange}
           priceKey="pretUnitar"
-          priceLabel="Pret unitar"
+          priceLabel="Preț unitar"
           errorPrefix="piese"
           errors={errors}
           suggestions={autocomplete.piese}
@@ -655,11 +721,12 @@ export default function App() {
         />
 
         <ListaItems
-          titlu="Lucrari"
+          titlu="Lucrări"
+          singular="lucrare"
           items={fisa.lucrari}
           onChange={handleLucrariChange}
           priceKey="pret"
-          priceLabel="Pret"
+          priceLabel="Preț"
           errorPrefix="lucrari"
           errors={errors}
           suggestions={autocomplete.lucrari}
@@ -676,18 +743,38 @@ export default function App() {
         />
 
         <div className="release-bar">
-          <span className={`autosave-status ${saveState === 'saved' ? 'saved' : ''}`}>
-            {saveState === 'saving' && '⏳ Se salveaza...'}
-            {saveState === 'saved' && '✓ Salvat'}
+          <div className="release-total">
+            <span className="release-total-label">Total final</span>
+            <span className="release-total-value">{formatLei(totals.totalFinal)}</span>
+          </div>
+          <span className={`chip autosave-status ${saveState === 'saved' ? 'saved' : ''}`}>
+            {saveState === 'saving' && (
+              <>
+                <Icon name="loader" size={13} className="spin" /> Se salvează...
+              </>
+            )}
+            {saveState === 'saved' && (
+              <>
+                <Icon name="check" size={13} /> Salvat{savedTime && ` ${savedTime}`}
+              </>
+            )}
           </span>
           <div className="release-bar-actions">
             {pdfRetry && (
               <button type="button" onClick={() => handleRetryPdf(pdfRetry.fisa, pdfRetry.baseName)}>
-                Reincearca generare PDF
+                <Icon name="refresh" /> Reîncearcă generarea PDF
               </button>
             )}
             <button type="button" className="btn-primary btn-release" disabled={releasing} onClick={handleRelease}>
-              {releasing ? 'Se finalizeaza...' : 'Finalizare / Release'}
+              {releasing ? (
+                <>
+                  <Icon name="loader" className="spin" /> Se finalizează...
+                </>
+              ) : (
+                <>
+                  <Icon name="check" /> Finalizează fișa
+                </>
+              )}
             </button>
           </div>
         </div>

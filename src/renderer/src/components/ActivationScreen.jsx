@@ -25,21 +25,21 @@ export default function ActivationScreen({ onActivated, revoked }) {
         <h1>Activare Service Auto</h1>
         {revoked ? (
           <p className="activation-error">
-            Licenta curenta a fost revocata. Daca ai primit o cheie noua, introdu-o mai jos.
+            Licența curentă a fost revocată. Dacă ai primit o cheie nouă, introdu-o mai jos.
           </p>
         ) : (
-          <p>Introdu cheia de licenta primita pentru a folosi aplicatia.</p>
+          <p>Introdu cheia de licență primită pentru a folosi aplicația.</p>
         )}
         <form onSubmit={handleActivate}>
           <textarea
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder="Lipeste aici cheia de licenta..."
+            placeholder="Lipește aici cheia de licență..."
             rows={4}
           />
           {error && <p className="activation-error">{error}</p>}
           <button type="submit" className="btn-primary" disabled={activating || !key.trim()}>
-            {activating ? 'Se activeaza...' : 'Activeaza'}
+            {activating ? 'Se activează...' : 'Activează'}
           </button>
         </form>
       </div>

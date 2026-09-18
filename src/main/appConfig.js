@@ -23,5 +23,7 @@ export function getDataPathOverride() {
 export function setDataPathOverride(newPath) {
   const cfg = { dataPath: newPath || null }
   fs.mkdirSync(path.dirname(configFilePath()), { recursive: true })
-  fs.writeFileSync(configFilePath(), JSON.stringify(cfg, null, 2), 'utf-8')
+  const tmp = `${configFilePath()}.tmp-${process.pid}`
+  fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2), 'utf-8')
+  fs.renameSync(tmp, configFilePath())
 }
