@@ -24,6 +24,27 @@ export function foldForMatch(value) {
     .replace(/[̀-ͯ]/g, '')
 }
 
+// Fisa nu are inca niciun continut real introdus. Sursa unica de adevar
+// pentru "e goala" - folosita atat pentru autosave/reuse (App.jsx) cat si
+// pentru gate-ul de confirmare la stergere (DraftsSidebar.jsx); un check mai
+// ingust intr-un singur loc insemna ca o fisa cu date reale intr-un camp pe
+// care celalalt loc nu-l verifica (ex: telefon/marca/model/VIN/piese/lucrari)
+// putea fi tratata gresit ca goala - reutilizata din greseala sau stearsa
+// fara nicio confirmare.
+export function isFisaEmpty(f) {
+  return (
+    !f.client?.nume?.trim() &&
+    !f.client?.telefon?.trim() &&
+    !f.auto?.nrInmatriculare?.trim() &&
+    !f.auto?.marca?.trim() &&
+    !f.auto?.model?.trim() &&
+    !f.auto?.vin?.trim() &&
+    (f.piese?.length ?? 0) === 0 &&
+    (f.lucrari?.length ?? 0) === 0 &&
+    !f._replaceBaseName
+  )
+}
+
 export function calcListaTotal(items, pretKey) {
   return round2(
     items.reduce((sum, item) => sum + calcLinieTotal(item.cantitate, item[pretKey]), 0)

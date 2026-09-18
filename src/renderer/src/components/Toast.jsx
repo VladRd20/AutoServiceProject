@@ -1,11 +1,16 @@
 import React, { useEffect } from 'react'
 
 function ToastItem({ toast, onClose }) {
+  // Efectul depinde doar de id/sticky (nu de `toast` intreg si nici de o
+  // functie inline creata la fiecare randare a ToastStack) - altfel orice
+  // re-randare a parintelui (App.jsx se re-randeaza la fiecare tasta) rearma
+  // timer-ul de 6s de la zero, si un toast nesticky nu mai dispare singur
+  // cat timp utilizatorul continua sa interactioneze cu aplicatia.
   useEffect(() => {
     if (toast.sticky) return undefined
-    const t = setTimeout(onClose, 6000)
+    const t = setTimeout(() => onClose(toast.id), 6000)
     return () => clearTimeout(t)
-  }, [toast, onClose])
+  }, [toast.id, toast.sticky, onClose])
 
   return (
     <div className={`toast toast-${toast.type}`}>
@@ -15,7 +20,7 @@ function ToastItem({ toast, onClose }) {
           {toast.action.label}
         </button>
       )}
-      <button type="button" className="toast-close" onClick={onClose}>
+      <button type="button" className="toast-close" onClick={() => onClose(toast.id)}>
         ✕
       </button>
     </div>
@@ -33,7 +38,7 @@ export default function ToastStack({ toasts, onClose }) {
   return (
     <div className="toast-stack">
       {toasts.map((t) => (
-        <ToastItem key={t.id} toast={t} onClose={() => onClose(t.id)} />
+        <ToastItem key={t.id} toast={t} onClose={onClose} />
       ))}
     </div>
   )

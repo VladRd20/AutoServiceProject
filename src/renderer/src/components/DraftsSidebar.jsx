@@ -1,4 +1,5 @@
 import React, { memo } from 'react'
+import { isFisaEmpty } from '../../../shared/calculations'
 
 function formatData(dataISO) {
   const datePart = String(dataISO || '').slice(0, 10)
@@ -36,6 +37,10 @@ function DraftsSidebar({
         {drafts.length === 0 && <p className="hint">Niciuna momentan.</p>}
         <ul className="drafts-list">
           {drafts.map((d) => {
+            // Doar pentru eticheta afisata (plita/nume lipsa) - gate-ul de
+            // confirmare la stergere foloseste isFisaEmpty (mai jos), nu
+            // aceasta, ca sa nu stearga fara confirmare un draft cu date
+            // reale in alte campuri (telefon, marca/model, VIN, piese/lucrari).
             const goala = !d.auto?.nrInmatriculare?.trim() && !d.client?.nume?.trim()
             return (
               <li key={d.id} className={d.id === currentId ? 'active' : ''}>
@@ -60,7 +65,7 @@ function DraftsSidebar({
                     // misclick pe "✕" nu trebuie sa poata rade continut real
                     // fara nicio sansa de a te razgandi.
                     if (
-                      !goala &&
+                      !isFisaEmpty(d) &&
                       !(await confirm('Stergi definitiv aceasta fisa in lucru? Continutul introdus se pierde.', {
                         confirmLabel: 'Sterge'
                       }))

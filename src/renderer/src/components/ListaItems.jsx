@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useRef } from 'react'
+import React, { memo, useEffect, useMemo, useRef } from 'react'
 import { calcLinieTotal, foldForMatch } from '../../../shared/calculations'
 import Autocomplete from './Autocomplete'
 
@@ -15,7 +15,10 @@ export function newItemId() {
 // comparatia shallow a memo() evita re-randarea listei de piese la fiecare
 // litera tastata in campurile de client/auto, sau in lista de lucrari.
 function ListaItems({ titlu, items, onChange, priceKey, priceLabel, errorPrefix, errors, suggestions, confirm }) {
-  const denumiri = (suggestions || []).map((s) => s.denumire)
+  // Referinta stabila intre randari (cat timp `suggestions` nu s-a schimbat
+  // efectiv) - altfel Autocomplete.jsx primeste un array nou la fiecare
+  // randare si memo-ul lui pe `options` nu prinde niciodata cache.
+  const denumiri = useMemo(() => (suggestions || []).map((s) => s.denumire), [suggestions])
   const inputRefs = useRef(new Map())
   const focusIdRef = useRef(null)
 

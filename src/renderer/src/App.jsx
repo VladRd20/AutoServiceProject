@@ -12,7 +12,7 @@ import SettingsModal from './components/SettingsModal'
 import ReportsModal from './components/ReportsModal'
 import VehicleHistoryModal from './components/VehicleHistoryModal'
 import OverflowMenu from './components/OverflowMenu'
-import { validateFisa, reduceriDinFisa } from '../../shared/calculations'
+import { validateFisa, reduceriDinFisa, isFisaEmpty } from '../../shared/calculations'
 import { draftBackupRef } from './draftBackup'
 
 // Prima salvare (cand fisa capata continut) e instanta, ca sa apara imediat
@@ -48,22 +48,6 @@ function normalizeFisa(f) {
   const { reducerePercent, ...rest } = f
   const r = reduceriDinFisa(f)
   return { ...rest, reducerePiesePercent: r.piese, reducereLucrariPercent: r.lucrari }
-}
-
-// Fisa nu are inca niciun continut real introdus - folosit ca sa nu cream un
-// nou draft gol daca utilizatorul e deja pe unul (ar duplica "Fisa noua" in
-// sidebar de fiecare data cand apasa butonul, fara sa isi dea seama).
-function isFisaEmpty(f) {
-  return (
-    !f.client?.nume?.trim() &&
-    !f.client?.telefon?.trim() &&
-    !f.auto?.nrInmatriculare?.trim() &&
-    !f.auto?.marca?.trim() &&
-    !f.auto?.model?.trim() &&
-    !f.auto?.vin?.trim() &&
-    (f.piese?.length ?? 0) === 0 &&
-    (f.lucrari?.length ?? 0) === 0
-  )
 }
 
 export default function App() {
@@ -215,6 +199,11 @@ export default function App() {
   useEffect(() => {
     if (!searchQuery.trim()) return undefined
     function handleClickOutside(e) {
+      // Nu inchidem panoul de cautare la click-uri in alte overlay-uri proprii
+      // (ex: ConfirmDialog deschis din interiorul SearchModal, la stergerea
+      // unui rezultat) - acelea sunt randate la nivel de App, in afara
+      // .search-box, dar fac parte din acelasi flux, nu sunt "in afara".
+      if (e.target.closest?.('.confirm-overlay')) return
       if (searchBoxRef.current && !searchBoxRef.current.contains(e.target)) setSearchQuery('')
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -571,6 +560,8 @@ export default function App() {
     [confirmAction, showToast, refreshRecentFise]
   )
 
+  const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
+
   const updateBtn = getUpdateButtonState()
 
   return (
@@ -586,7 +577,7 @@ export default function App() {
         onOpenPdf={handleOpenPdfFromSearch}
         onPrintPdf={handlePrintPdfFromList}
         onDeleteFinalized={handleDeleteFinalized}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={handleOpenSettings}
         confirm={confirmAction}
       />
 

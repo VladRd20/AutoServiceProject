@@ -470,14 +470,20 @@ export async function deleteFinalizedFisa(fileNameOrBaseName) {
   await ensureDirs()
   const baseName = String(fileNameOrBaseName || '').replace(/\.json$/, '')
   assertSafeId(baseName)
-  for (const ext of ['.json', '.pdf']) {
-    try {
-      await fs.unlink(path.join(getFiseDir(), `${baseName}${ext}`))
-    } catch (err) {
-      if (err.code !== 'ENOENT') throw toAppError(err, 'Nu s-a putut sterge fisa.')
+  try {
+    for (const ext of ['.json', '.pdf']) {
+      try {
+        await fs.unlink(path.join(getFiseDir(), `${baseName}${ext}`))
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw toAppError(err, 'Nu s-a putut sterge fisa.')
+      }
     }
+  } finally {
+    // Chiar daca .pdf esueaza (ex: EBUSY - fisierul e deschis in alt program),
+    // .json poate fi deja sters - cache-ul trebuie invalidat oricum, altfel
+    // ramane o intrare "zombie" ce nu mai corespunde niciunui fisier de pe disc.
+    invalidateFiseCache()
   }
-  invalidateFiseCache()
 }
 
 export async function listFiseFinalizate() {
@@ -499,9 +505,16 @@ export async function listFiseFinalizate() {
 // - intre doua asemenea scrieri, orice numar de cautari/rapoarte refolosesc
 // aceeasi lista deja citita, in loc sa rescaneze discul de fiecare data.
 let _fiseFinalizateCache = null
+// Creste la fiecare invalidare - o citire in curs (readdir/readFile-urile de
+// mai jos sunt async, dau control altor operatii intre ele) poate termina
+// DUPA o invalidare declansata de un finalize/delete concurent; fara acest
+// gard, ar suprascrie cache-ul gol/proaspat cu snapshot-ul vechi, deja
+// invechit, pe care il ținea in memorie inainte sa inceapa citirea.
+let _fiseCacheGen = 0
 
 function invalidateFiseCache() {
   _fiseFinalizateCache = null
+  _fiseCacheGen += 1
 }
 
 // Citeste toate fisele finalizate de pe disc. Suficient de rapid pentru
@@ -510,6 +523,7 @@ function invalidateFiseCache() {
 async function readAllFiseFinalizate() {
   if (_fiseFinalizateCache) return _fiseFinalizateCache
 
+  const genAtStart = _fiseCacheGen
   let files
   try {
     files = (await fs.readdir(getFiseDir())).filter((f) => f.endsWith('.json'))
@@ -526,7 +540,9 @@ async function readAllFiseFinalizate() {
       log.warn(`[fileStore] fisa finalizata corupta sarita: ${f}`, err)
     }
   }
-  _fiseFinalizateCache = result
+  // Daca a intervenit o invalidare cat timp citeam, snapshot-ul de mai sus
+  // e deja invechit - nu-l publicam peste starea (mai noua) din cache.
+  if (_fiseCacheGen === genAtStart) _fiseFinalizateCache = result
   return result
 }
 
