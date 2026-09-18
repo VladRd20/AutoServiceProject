@@ -275,6 +275,7 @@ export async function changeDataPath(newBasePath) {
   usingFallback = false
   baseDirPromise = Promise.resolve(resolvedNew)
   dirsEnsured = false
+  invalidateFiseCache()
 
   log.info(`[fileStore] folder de date schimbat: ${oldBase} -> ${resolvedNew}`)
   return { changed: true, path: resolvedNew, oldPath: oldBase }
@@ -320,15 +321,28 @@ async function writeJsonAtomic(filePath, data) {
   }
 }
 
+// Id-ul vine mereu din `draft-${Date.now()}` (vezi mai jos) sau de la un id
+// deja salvat astfel - niciodata text liber introdus de utilizator. Validam
+// oricum strict inainte sa-l punem intr-o cale de fisier: apararea in
+// adancime nu costa nimic, iar un id neasteptat (bug viitor, fisa
+// corupta/editata manual) nu trebuie sa poata iesi din folderul de drafturi.
+function assertSafeId(id) {
+  if (!/^[\w-]+$/.test(String(id || ''))) {
+    throw new AppError('INVALID_ID', 'Identificator de fisa invalid.')
+  }
+}
+
 export async function saveDraft(fisa) {
   await ensureDirs()
   const id = fisa.id || `draft-${Date.now()}`
+  assertSafeId(id)
   const filePath = path.join(getDraftsDir(), `${id}.json`)
   await writeJsonAtomic(filePath, { ...fisa, id, status: 'draft' })
   return id
 }
 
 export async function loadDraft(id) {
+  assertSafeId(id)
   const filePath = path.join(getDraftsDir(), `${id}.json`)
   try {
     const raw = await fs.readFile(filePath, 'utf-8')
@@ -360,6 +374,7 @@ export async function listDrafts() {
 }
 
 export async function deleteDraft(id) {
+  assertSafeId(id)
   const filePath = path.join(getDraftsDir(), `${id}.json`)
   try {
     await fs.unlink(filePath)
@@ -369,18 +384,66 @@ export async function deleteDraft(id) {
   }
 }
 
+// Doua fise finalizate pentru aceeasi masina in aceeasi zi sunt un caz
+// legitim (ex: schimb ulei dimineata + o reparatie separata dupa-amiaza,
+// sau o corectie facuta in aceeasi zi) - fisaBaseName() produce acelasi
+// nume pentru amandoua. Fara verificare, a doua finalizare ar suprascrie
+// silentios JSON-ul SI PDF-ul primei fise, cu pierdere completa si
+// ireversibila a facturii anterioare. Adaugam un sufix numeric pana gasim
+// un nume liber, exact cum ar face orice "salveaza ca" de pe desktop.
+//
+// excludeBaseName e numele fisei pe care o INLOCUIM efectiv (fluxul
+// "Editeaza" de pe o lucrare recenta) - acel nume nu conteaza drept coliziune
+// cu el insusi, altfel re-finalizarea unei editari ar primi mereu un sufix
+// nou in loc sa suprascrie fisa originala.
+async function uniqueFinalBaseName(baseName, excludeBaseName) {
+  let candidate = baseName
+  let n = 2
+  for (;;) {
+    if (candidate === excludeBaseName) return candidate
+    try {
+      await fs.access(path.join(getFiseDir(), `${candidate}.json`))
+      candidate = `${baseName}-${n}`
+      n++
+    } catch {
+      return candidate
+    }
+  }
+}
+
 // Finalizeaza fisa: scrie JSON-ul definitiv in folderul de fise (nu drafturi)
 // si returneaza calea, pentru a fi asociata cu PDF-ul generat separat.
-export async function finalizeFisa(fisa) {
+//
+// options.replaceBaseName: setat cand fisa vine din "Editeaza" pe o lucrare
+// deja finalizata (vezi handleEditRecent in App.jsx) - in loc sa creeze o a
+// doua fisa separata pentru aceeasi lucrare, refolosim acelasi nume de
+// fisier (suprascriem JSON-ul si PDF-ul original cu versiunea editata). Daca
+// intre timp s-au schimbat date care schimba numele calculat (nr.
+// inmatriculare sau data), scriem sub noul nume si stergem fisierele vechi,
+// ca sa nu ramana o fisa "fantoma" duplicata sub numele vechi.
+export async function finalizeFisa(fisa, options = {}) {
   await ensureDirs()
   const now = new Date()
   // Daca "Data curenta" e bifat, data folosita in fisa/PDF e data si ora
   // exacta a finalizarii (Release), nu momentul in care a fost bifat checkbox-ul.
   const data = fisa.dataCurenta ? now.toISOString() : fisa.data
   const finalFisa = { ...fisa, data, status: 'finalizata', finalizedAt: now.toISOString() }
-  const baseName = fisaBaseName(finalFisa)
+  const replaceBaseName = options.replaceBaseName || null
+  if (replaceBaseName) assertSafeId(replaceBaseName)
+  const baseName = await uniqueFinalBaseName(fisaBaseName(finalFisa), replaceBaseName)
   const jsonPath = path.join(getFiseDir(), `${baseName}.json`)
   await writeJsonAtomic(jsonPath, finalFisa)
+
+  if (replaceBaseName && replaceBaseName !== baseName) {
+    for (const ext of ['.json', '.pdf']) {
+      try {
+        await fs.unlink(path.join(getFiseDir(), `${replaceBaseName}${ext}`))
+      } catch {
+        // fisierul vechi poate sa nu mai existe (ex: deja sters de altundeva) - ignoram
+      }
+    }
+  }
+  invalidateFiseCache()
 
   if (fisa.id) {
     try {
@@ -391,11 +454,30 @@ export async function finalizeFisa(fisa) {
     }
   }
 
-  return { jsonPath, baseName, fisa: finalFisa }
+  return { jsonPath, baseName, fisa: finalFisa, replaced: Boolean(replaceBaseName) }
 }
 
 export function getPdfPath(baseName) {
+  assertSafeId(baseName)
   return path.join(getFiseDir(), `${baseName}.pdf`)
+}
+
+// Sterge definitiv o fisa finalizata (JSON + PDF) - spre deosebire de
+// deleteDraft (o fisa in lucru, niciodata expusa clientului), asta sterge o
+// factura deja emisa/printata. Confirmarea ramane responsabilitatea UI-ului
+// (vezi App.jsx/confirmAction) - functia asta doar executa stergerea.
+export async function deleteFinalizedFisa(fileNameOrBaseName) {
+  await ensureDirs()
+  const baseName = String(fileNameOrBaseName || '').replace(/\.json$/, '')
+  assertSafeId(baseName)
+  for (const ext of ['.json', '.pdf']) {
+    try {
+      await fs.unlink(path.join(getFiseDir(), `${baseName}${ext}`))
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw toAppError(err, 'Nu s-a putut sterge fisa.')
+    }
+  }
+  invalidateFiseCache()
 }
 
 export async function listFiseFinalizate() {
@@ -408,10 +490,26 @@ export async function listFiseFinalizate() {
   }
 }
 
+// Cache in memorie a continutului tuturor fiselor finalizate - search/
+// rapoarte/autocompletare/istoric vehicul il foloseau pe fiecare apel citind
+// si parsand TOATE fisele de pe disc de fiecare data (bine la zeci-sute de
+// fise, vizibil de incet dupa cativa ani de utilizare reala, cand ajung mii).
+// Populat lazy la prima citire, invalidat explicit doar la scrierile care
+// chiar schimba continutul folderului de fise (finalizeFisa, changeDataPath)
+// - intre doua asemenea scrieri, orice numar de cautari/rapoarte refolosesc
+// aceeasi lista deja citita, in loc sa rescaneze discul de fiecare data.
+let _fiseFinalizateCache = null
+
+function invalidateFiseCache() {
+  _fiseFinalizateCache = null
+}
+
 // Citeste toate fisele finalizate de pe disc. Suficient de rapid pentru
 // volumul unui singur service auto (sute-mii de fise) - o fisa corupta
 // individual e logata si sarita, nu blocheaza restul.
 async function readAllFiseFinalizate() {
+  if (_fiseFinalizateCache) return _fiseFinalizateCache
+
   let files
   try {
     files = (await fs.readdir(getFiseDir())).filter((f) => f.endsWith('.json'))
@@ -428,6 +526,7 @@ async function readAllFiseFinalizate() {
       log.warn(`[fileStore] fisa finalizata corupta sarita: ${f}`, err)
     }
   }
+  _fiseFinalizateCache = result
   return result
 }
 

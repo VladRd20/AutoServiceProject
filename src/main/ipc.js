@@ -7,6 +7,7 @@ import {
   listDrafts,
   deleteDraft,
   finalizeFisa,
+  deleteFinalizedFisa,
   getFiseDir,
   getPdfPath,
   backupNow,
@@ -84,7 +85,11 @@ export function registerIpcHandlers() {
 
   ipcMain.handle('fisa:finalize', (e, fisa) =>
     wrapLicensed(async () => {
-      const { valid, errors } = validateFisa(fisa)
+      // _replaceBaseName e un camp tehnic adaugat de App.jsx cand fisa vine
+      // din "Editeaza" pe o lucrare deja finalizata - nu face parte din
+      // datele fisei si nu trebuie validat/persistat ca atare.
+      const { _replaceBaseName, ...fisaData } = fisa
+      const { valid, errors } = validateFisa(fisaData)
       if (!valid) {
         const err = new Error('Fisa contine campuri invalide sau incomplete.')
         err.code = 'VALIDATION'
@@ -92,12 +97,16 @@ export function registerIpcHandlers() {
         throw err
       }
 
-      const { baseName, fisa: finalFisa } = await finalizeFisa(fisa)
+      const {
+        baseName,
+        fisa: finalFisa,
+        replaced
+      } = await finalizeFisa(fisaData, { replaceBaseName: _replaceBaseName })
       const pdfPath = getPdfPath(baseName)
 
       try {
         await generatePdf(finalFisa, pdfPath)
-        return { fisa: finalFisa, baseName, pdfSaved: true, pdfPath }
+        return { fisa: finalFisa, baseName, pdfSaved: true, pdfPath, replaced }
       } catch (pdfErr) {
         // JSON-ul e deja salvat cu succes - nu pierdem datele introduse de utilizator
         // chiar daca generarea PDF-ului esueaza. Utilizatorul poate reincerca doar PDF-ul.
@@ -106,7 +115,8 @@ export function registerIpcHandlers() {
           fisa: finalFisa,
           baseName,
           pdfSaved: false,
-          pdfError: pdfErr.userMessage || pdfErr.message
+          pdfError: pdfErr.userMessage || pdfErr.message,
+          replaced
         }
       }
     }, 'finalize')
@@ -118,6 +128,10 @@ export function registerIpcHandlers() {
       await generatePdf(fisa, pdfPath)
       return { pdfSaved: true, pdfPath }
     }, 'retryPdf')
+  )
+
+  ipcMain.handle('fisa:deleteFinalizata', (e, fileName) =>
+    wrapLicensed(() => deleteFinalizedFisa(fileName), 'deleteFinalizata')
   )
 
   ipcMain.handle('fisa:search', (e, query) => wrapLicensed(() => searchFise(query), 'search'))

@@ -1,23 +1,33 @@
-import React from 'react'
+import React, { memo, useEffect, useRef } from 'react'
 import { calcLinieTotal, foldForMatch } from '../../../shared/calculations'
 import Autocomplete from './Autocomplete'
 
-let nextId = 1
+// crypto.randomUUID() e disponibil in runtime-ul Chromium al Electron - mult
+// mai sigur decat un contor de modul care se reseteaza la fiecare pornire a
+// aplicatiei si depindea de Date.now() ca sa nu se suprapuna peste id-uri
+// deja incarcate dintr-un draft salvat anterior.
 export function newItemId() {
-  return `item-${Date.now()}-${nextId++}`
+  return crypto.randomUUID()
 }
 
-export default function ListaItems({
-  titlu,
-  items,
-  onChange,
-  priceKey,
-  priceLabel,
-  errorPrefix,
-  errors,
-  suggestions
-}) {
+// memo: onChange-ul primit din App.jsx e un useCallback stabil (vezi
+// handlePieseChange/handleLucrariChange) - fara alte props instabile,
+// comparatia shallow a memo() evita re-randarea listei de piese la fiecare
+// litera tastata in campurile de client/auto, sau in lista de lucrari.
+function ListaItems({ titlu, items, onChange, priceKey, priceLabel, errorPrefix, errors, suggestions, confirm }) {
   const denumiri = (suggestions || []).map((s) => s.denumire)
+  const inputRefs = useRef(new Map())
+  const focusIdRef = useRef(null)
+
+  // Ruleaza dupa ce randul nou adaugat exista deja in DOM, ca sa-i putem da
+  // focus - o linie noua (din "+ Adauga" sau din Enter pe ultimul rand)
+  // trece direct la treaba, fara o cursa suplimentara cu mouse-ul.
+  useEffect(() => {
+    if (!focusIdRef.current) return
+    const el = inputRefs.current.get(focusIdRef.current)
+    if (el) el.focus()
+    focusIdRef.current = null
+  }, [items])
 
   function updateItem(id, patch) {
     onChange(items.map((it) => (it.id === id ? { ...it, ...patch } : it)))
@@ -38,11 +48,28 @@ export default function ListaItems({
   }
 
   function addItem() {
-    onChange([...items, { id: newItemId(), denumire: '', cantitate: 1, [priceKey]: 0 }])
+    const id = newItemId()
+    focusIdRef.current = id
+    onChange([...items, { id, denumire: '', cantitate: 1, [priceKey]: 0 }])
   }
 
-  function removeItem(id) {
+  async function removeItem(id) {
+    const item = items.find((it) => it.id === id)
+    // O linie neatinsa (fara denumire introdusa) nu are ce pierde - cere
+    // confirmare doar cand exista deja continut real, ca un clic gresit pe
+    // "✕" sa nu poata rade instant o linie completata, fara nicio sansa de
+    // a te razgandi.
+    if (item?.denumire?.trim() && !(await confirm(`Stergi linia "${item.denumire}"?`, { confirmLabel: 'Sterge' }))) {
+      return
+    }
     onChange(items.filter((it) => it.id !== id))
+  }
+
+  function handleRowKeyDown(e, index) {
+    if (e.key !== 'Enter') return
+    if (index !== items.length - 1) return
+    e.preventDefault()
+    addItem()
   }
 
   return (
@@ -59,9 +86,13 @@ export default function ListaItems({
       {items.map((item, i) => {
         const err = (field) => errors?.[`${errorPrefix}.${i}.${field}`]
         return (
-          <div className="linie" key={item.id}>
+          <div className="linie" key={item.id} onKeyDown={(e) => handleRowKeyDown(e, i)}>
             <div className="field field-grow">
               <Autocomplete
+                inputRef={(el) => {
+                  if (el) inputRefs.current.set(item.id, el)
+                  else inputRefs.current.delete(item.id)
+                }}
                 value={item.denumire}
                 onChange={(v) => handleDenumireChange(item, v)}
                 options={denumiri}
@@ -101,3 +132,5 @@ export default function ListaItems({
     </section>
   )
 }
+
+export default memo(ListaItems)

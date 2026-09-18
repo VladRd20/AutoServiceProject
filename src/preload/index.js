@@ -20,6 +20,7 @@ const api = {
     validate: (fisa) => ipcRenderer.invoke('fisa:validate', fisa),
     finalize: (fisa) => ipcRenderer.invoke('fisa:finalize', fisa),
     retryPdf: (payload) => ipcRenderer.invoke('fisa:retryPdf', payload),
+    deleteFinalizata: (fileName) => ipcRenderer.invoke('fisa:deleteFinalizata', fileName),
     search: (query) => ipcRenderer.invoke('fisa:search', query),
     listRecent: (limit) => ipcRenderer.invoke('fisa:listRecent', limit),
     getAutocompleteData: () => ipcRenderer.invoke('fisa:getAutocompleteData'),
@@ -53,6 +54,11 @@ const api = {
       const listener = (_e, payload) => callback(payload)
       ipcRenderer.on('update:event', listener)
       return () => ipcRenderer.removeListener('update:event', listener)
+    },
+    onFatalError: (callback) => {
+      const listener = (_e, payload) => callback(payload)
+      ipcRenderer.on('app:fatalError', listener)
+      return () => ipcRenderer.removeListener('app:fatalError', listener)
     }
   }
 }

@@ -1,18 +1,28 @@
-import React from 'react'
+import React, { useId } from 'react'
 import { foldForMatch } from '../../../shared/calculations'
 import Autocomplete from './Autocomplete'
 
+// Label-ul era un simplu text alaturi de input, fara asociere htmlFor/id -
+// clic pe text nu focusa inputul, iar un cititor de ecran nu putea anunta
+// eticheta corecta pentru camp. React.cloneElement injecteaza id-ul generat
+// pe copilul unic (un <input> sau <Autocomplete>, ambele accepta prop `id`),
+// ca fiecare camp din formular sa fie corect asociat, dintr-un singur loc.
 function Field({ label, error, children }) {
+  const id = useId()
   return (
     <div className="field">
-      <label>{label}</label>
-      {children}
+      <label htmlFor={id}>{label}</label>
+      {React.cloneElement(children, { id })}
       {error && <span className="field-error">{error}</span>}
     </div>
   )
 }
 
-export default function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }) {
+// memo: `onChange` primit din App.jsx e chiar setFisa (referinta stabila din
+// useState), deci fara alte modificari nefolositoare de props, comparatia
+// shallow a memo() are efect real - evita re-randarea acestui formular
+// intreg cand se schimba doar piese/lucrari/reducere, nu campurile lui.
+function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }) {
   const setClient = (patch) => onChange({ ...fisa, client: { ...fisa.client, ...patch } })
   const setAuto = (patch) => onChange({ ...fisa, auto: { ...fisa.auto, ...patch } })
 
@@ -131,3 +141,5 @@ export default function FisaForm({ fisa, onChange, errors, autocomplete, onShowV
     </>
   )
 }
+
+export default React.memo(FisaForm)

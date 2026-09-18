@@ -21,7 +21,9 @@ function DraftsSidebar({
   onEditRecent,
   onOpenPdf,
   onPrintPdf,
-  onOpenSettings
+  onDeleteFinalized,
+  onOpenSettings,
+  confirm
 }) {
   return (
     <aside className="sidebar">
@@ -47,7 +49,27 @@ function DraftsSidebar({
                     </>
                   )}
                 </button>
-                <button type="button" className="btn-remove" title="Sterge" onClick={() => onDelete(d.id)}>
+                <button
+                  type="button"
+                  className="btn-remove"
+                  title="Sterge"
+                  onClick={async () => {
+                    // O fisa noua, goala, nu are ce pierde - confirmarea ar fi
+                    // doar friction. Una cu date reale introduse (client, auto,
+                    // piese/lucrari) e stearsa definitiv, fara undo - un
+                    // misclick pe "✕" nu trebuie sa poata rade continut real
+                    // fara nicio sansa de a te razgandi.
+                    if (
+                      !goala &&
+                      !(await confirm('Stergi definitiv aceasta fisa in lucru? Continutul introdus se pierde.', {
+                        confirmLabel: 'Sterge'
+                      }))
+                    ) {
+                      return
+                    }
+                    onDelete(d.id)
+                  }}
+                >
                   ✕
                 </button>
               </li>
@@ -69,7 +91,7 @@ function DraftsSidebar({
               <div className="recent-actions">
                 <button
                   type="button"
-                  title="Editeaza (creeaza o fisa noua pe baza acesteia)"
+                  title="Editeaza (la Finalizare, inlocuieste aceasta fisa - nu creeaza una noua)"
                   onClick={() => onEditRecent(f)}
                 >
                   Editeaza
@@ -79,6 +101,14 @@ function DraftsSidebar({
                 </button>
                 <button type="button" title="Printeaza" onClick={() => onPrintPdf(f._file)}>
                   Printeaza
+                </button>
+                <button
+                  type="button"
+                  className="btn-remove"
+                  title="Sterge definitiv"
+                  onClick={() => onDeleteFinalized(f._file)}
+                >
+                  ✕
                 </button>
               </div>
             </li>

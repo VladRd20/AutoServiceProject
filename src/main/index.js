@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow } from 'electron'
 import path from 'path'
 import { is } from '@electron-toolkit/utils'
-import log from './logger'
+import log, { setMainWindow } from './logger'
 import { ensureDirs, backupNow } from './fileStore'
 import { registerIpcHandlers } from './ipc'
 import { initUpdater } from './updater'
@@ -64,6 +64,7 @@ app.whenReady().then(async () => {
 
   registerIpcHandlers()
   createWindow()
+  setMainWindow(mainWindow)
   initUpdater(mainWindow)
 
   // Best-effort, o singura data la pornire - daca gaseste id-ul curent in

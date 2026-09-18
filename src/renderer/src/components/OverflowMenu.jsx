@@ -16,21 +16,29 @@ export default function OverflowMenu({ items }) {
   }, [])
 
   return (
-    <div className="autocomplete overflow-menu" ref={ref}>
+    <div
+      className="autocomplete overflow-menu"
+      ref={ref}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') setOpen(false)
+      }}
+    >
       <button type="button" onClick={() => setOpen((o) => !o)} title="Mai multe actiuni">
         ⋯ Mai multe
       </button>
       {open && (
         <ul className="autocomplete-dropdown">
           {items.map((item) => (
-            <li
-              key={item.label}
-              onClick={() => {
-                setOpen(false)
-                item.onClick()
-              }}
-            >
-              {item.label}
+            <li key={item.label}>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false)
+                  item.onClick()
+                }}
+              >
+                {item.label}
+              </button>
             </li>
           ))}
         </ul>

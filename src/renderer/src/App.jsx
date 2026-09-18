@@ -3,6 +3,7 @@ import FisaForm from './components/FisaForm'
 import ListaItems from './components/ListaItems'
 import Totaluri from './components/Totaluri'
 import Toast from './components/Toast'
+import ConfirmDialog from './components/ConfirmDialog'
 import DraftsSidebar from './components/DraftsSidebar'
 import SearchModal from './components/SearchModal'
 import UpdateBanner from './components/UpdateBanner'
@@ -69,7 +70,8 @@ export default function App() {
   const [fisa, setFisa] = useState(emptyFisa)
   const [drafts, setDrafts] = useState([])
   const [errors, setErrors] = useState({})
-  const [toast, setToast] = useState(null)
+  const [toasts, setToasts] = useState([])
+  const toastIdRef = useRef(0)
   const [releasing, setReleasing] = useState(false)
   const [pdfRetry, setPdfRetry] = useState(null) // { fisa, baseName }
   const saveTimerRef = useRef(null)
@@ -98,8 +100,33 @@ export default function App() {
   const [initialCheckDone, setInitialCheckDone] = useState(false)
 
   const draftsRef = useRef([])
+  const searchBoxRef = useRef(null)
 
-  const showToast = useCallback((type, message, action) => setToast({ type, message, action }), [])
+  const showToast = useCallback((type, message, action, opts) => {
+    const id = ++toastIdRef.current
+    setToasts((ts) => [...ts, { id, type, message, action, sticky: opts?.sticky }])
+  }, [])
+
+  const closeToast = useCallback((id) => setToasts((ts) => ts.filter((t) => t.id !== id)), [])
+
+  // Inlocuieste window.confirm() nativ (arata cu titlul procesului si stilul
+  // brut al SO, in afara temei aplicatiei) cu un dialog propriu. confirmAction
+  // pastreaza acelasi API simplu (Promise<boolean>, await-uibil de la locul
+  // de apel), doar ca randarea reala e delegata catre ConfirmDialog de mai
+  // jos, controlat prin confirmState.
+  const [confirmState, setConfirmState] = useState(null)
+  const confirmAction = useCallback((message, opts) => {
+    return new Promise((resolve) => {
+      setConfirmState({ message, resolve, ...opts })
+    })
+  }, [])
+  const handleConfirmResult = useCallback(
+    (result) => {
+      confirmState?.resolve(result)
+      setConfirmState(null)
+    },
+    [confirmState]
+  )
 
   // Daca exista mai multe drafturi goale simultan (acumulate din pornirile
   // anterioare, inainte de acest fix), pastram doar cel mai recent si stergem
@@ -181,6 +208,35 @@ export default function App() {
   useEffect(() => {
     draftBackupRef.current = fisa
   }, [fisa])
+
+  // Panoul de rezultate e un dropdown ancorat (nu mai are propriul backdrop
+  // intunecat peste tot ecranul) - fara asta, click-ul in afara lui n-ar mai
+  // avea cum sa-l inchida. Aceeasi conventie ca la Autocomplete/OverflowMenu.
+  useEffect(() => {
+    if (!searchQuery.trim()) return undefined
+    function handleClickOutside(e) {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target)) setSearchQuery('')
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [searchQuery])
+
+  // Procesul principal e intr-o stare nedefinita dupa o exceptie neprinsa -
+  // fara acest anunt, aplicatia parea sa mearga normal in continuare pe
+  // ecran, desi ceva a mers prost undeva. Un toast sticky (nu dispare
+  // singur) cere explicit un restart, la prima ocazie convenabila - fisa
+  // curenta ramane oricum salvata ca draft prin autosave.
+  useEffect(() => {
+    const unsubscribe = window.serviceAuto.app.onFatalError(() => {
+      showToast(
+        'error',
+        'Aplicatia a intalnit o eroare neasteptata. Salveaza-ti lucrul in curs si repornesc-o cand poti.',
+        null,
+        { sticky: true }
+      )
+    })
+    return unsubscribe
+  }, [showToast])
 
   // Update-urile de versiune noua/gata de instalare sunt anuntate si printr-un
   // dialog nativ (main process), dar tinem si o stare persistenta in UI
@@ -361,6 +417,14 @@ export default function App() {
       return
     }
 
+    // Fara asta, un autosave programat (debounce de 1s) care ajunge sa se
+    // execute DUPA ce finalize() a reusit mai jos ar re-salva fisa curenta
+    // ca draft - o fisa "fantoma" duplicata in "Fise in lucru", desi tocmai
+    // a fost finalizata cu succes. Cresterea generatiei blocheaza si orice
+    // autosave deja pornit (in curs de await) sa-si mai aplice rezultatul.
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    fisaGenRef.current += 1
+
     setReleasing(true)
     const res = await window.serviceAuto.fisa.finalize(fisa)
     setReleasing(false)
@@ -374,7 +438,9 @@ export default function App() {
     if (res.data.pdfSaved) {
       showToast(
         'success',
-        `Fisa finalizata si PDF salvat: ${res.data.baseName}.pdf`,
+        res.data.replaced
+          ? `Fisa actualizata si PDF salvat: ${res.data.baseName}.pdf`
+          : `Fisa finalizata si PDF salvat: ${res.data.baseName}.pdf`,
         { label: 'Printeaza', onClick: () => handlePrintPdf(res.data.baseName) }
       )
       await goToNextDraftOrNew()
@@ -427,19 +493,42 @@ export default function App() {
     }
   }
 
-  // "Editeaza" pe o lucrare recenta nu modifica fisa finalizata/PDF-ul
-  // existent - creeaza o fisa noua, in lucru, pre-completata cu aceleasi
-  // date, ca istoricul deja finalizat sa ramana intact.
+  // "Editeaza" pe o lucrare recenta porneste un draft nou (fisa finalizata
+  // originala nu se modifica cat timp editarea e doar in lucru - daca
+  // utilizatorul abandoneaza editarea fara sa apese din nou Finalizare,
+  // originalul ramane intact). _replaceBaseName retine numele fisierului
+  // original: cand editarea e efectiv finalizata, finalizeFisa() il
+  // foloseste ca sa suprascrie acea fisa (JSON + PDF), nu sa creeze una noua
+  // separata pentru aceeasi lucrare.
   const handleEditRecent = useCallback((finalizedFisa) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     fisaGenRef.current += 1
     hasSavedOnceRef.current = false
     setSaveState('idle')
     const { _file, id, status, finalizedAt, ...rest } = finalizedFisa
-    setFisa(normalizeFisa({ ...rest, id: null }))
+    setFisa(
+      normalizeFisa({
+        ...rest,
+        id: null,
+        _replaceBaseName: _file ? _file.replace(/\.json$/, '') : null
+      })
+    )
     setErrors({})
     setPdfRetry(null)
   }, [])
+
+  // Handlere stabile pentru ListaItems/Totaluri - memo() pe acele componente
+  // (vezi ListaItems.jsx/Totaluri.jsx) are efect real doar daca props-urile
+  // functie primite au aceeasi referinta intre randari; inline arrows aici
+  // ar recrea o functie noua la fiecare randare a App.jsx si ar anula memo().
+  const handlePieseChange = useCallback((piese) => setFisa((f) => ({ ...f, piese })), [])
+  const handleLucrariChange = useCallback((lucrari) => setFisa((f) => ({ ...f, lucrari })), [])
+  const handleReducerePieseChange = useCallback((v) => setFisa((f) => ({ ...f, reducerePiesePercent: v })), [])
+  const handleReducereLucrariChange = useCallback((v) => setFisa((f) => ({ ...f, reducereLucrariPercent: v })), [])
+  const handleShowVehicleHistory = useCallback(
+    (vin, nr) => setVehicleHistoryQuery({ vin, nrInmatriculare: nr }),
+    []
+  )
 
   const handleOpenPdfFromSearch = useCallback(
     async (fileName) => {
@@ -457,6 +546,31 @@ export default function App() {
     [showToast]
   )
 
+  // Sterge o fisa deja finalizata (PDF-ul + inregistrarea), nu un draft in
+  // lucru - spre deosebire de handleDeleteDraft, e ireversibil (o factura
+  // deja emisa), de-aia trece prin confirmAction. Returneaza true doar daca
+  // s-a sters efectiv, ca listele care o afiseaza (Lucrari recente, Cautare,
+  // Istoric masina) sa-si poata actualiza propria stare locala pe loc, fara
+  // sa astepte un refresh complet.
+  const handleDeleteFinalized = useCallback(
+    async (fileName) => {
+      const ok = await confirmAction(
+        'Stergi definitiv aceasta fisa finalizata? PDF-ul si inregistrarea dispar ireversibil.',
+        { confirmLabel: 'Sterge' }
+      )
+      if (!ok) return false
+      const res = await window.serviceAuto.fisa.deleteFinalizata(fileName)
+      if (!res.ok) {
+        showToast('error', res.error.message)
+        return false
+      }
+      showToast('success', 'Fisa finalizata a fost stearsa.')
+      refreshRecentFise()
+      return true
+    },
+    [confirmAction, showToast, refreshRecentFise]
+  )
+
   const updateBtn = getUpdateButtonState()
 
   return (
@@ -471,7 +585,9 @@ export default function App() {
         onEditRecent={handleEditRecent}
         onOpenPdf={handleOpenPdfFromSearch}
         onPrintPdf={handlePrintPdfFromList}
+        onDeleteFinalized={handleDeleteFinalized}
         onOpenSettings={() => setSettingsOpen(true)}
+        confirm={confirmAction}
       />
 
       <main className="main">
@@ -486,16 +602,28 @@ export default function App() {
         <header className="topbar">
           <h1>Fisa de service auto</h1>
           <div className="topbar-actions">
-            <input
-              type="text"
-              className="topbar-search"
-              placeholder="Cauta"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setSearchQuery('')
-              }}
-            />
+            <div className="search-box" ref={searchBoxRef}>
+              <input
+                type="text"
+                className="topbar-search"
+                placeholder="Cauta"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setSearchQuery('')
+                }}
+              />
+              {searchQuery.trim() && (
+                <SearchModal
+                  query={searchQuery}
+                  onClose={() => setSearchQuery('')}
+                  onOpenPdf={handleOpenPdfFromSearch}
+                  onPrintPdf={handlePrintPdfFromList}
+                  onDeleteFinalized={handleDeleteFinalized}
+                  showToast={showToast}
+                />
+              )}
+            </div>
             <button
               type="button"
               className={updateBtn.variant ? `btn-status-${updateBtn.variant}` : ''}
@@ -520,29 +648,31 @@ export default function App() {
           onChange={setFisa}
           errors={errors}
           autocomplete={autocomplete}
-          onShowVehicleHistory={(vin, nr) => setVehicleHistoryQuery({ vin, nrInmatriculare: nr })}
+          onShowVehicleHistory={handleShowVehicleHistory}
         />
 
         <ListaItems
           titlu="Piese"
           items={fisa.piese}
-          onChange={(piese) => setFisa({ ...fisa, piese })}
+          onChange={handlePieseChange}
           priceKey="pretUnitar"
           priceLabel="Pret unitar"
           errorPrefix="piese"
           errors={errors}
           suggestions={autocomplete.piese}
+          confirm={confirmAction}
         />
 
         <ListaItems
           titlu="Lucrari"
           items={fisa.lucrari}
-          onChange={(lucrari) => setFisa({ ...fisa, lucrari })}
+          onChange={handleLucrariChange}
           priceKey="pret"
           priceLabel="Pret"
           errorPrefix="lucrari"
           errors={errors}
           suggestions={autocomplete.lucrari}
+          confirm={confirmAction}
         />
 
         <Totaluri
@@ -550,8 +680,8 @@ export default function App() {
           lucrari={fisa.lucrari}
           reducerePiesePercent={fisa.reducerePiesePercent}
           reducereLucrariPercent={fisa.reducereLucrariPercent}
-          onChangeReducerePiese={(v) => setFisa({ ...fisa, reducerePiesePercent: v })}
-          onChangeReducereLucrari={(v) => setFisa({ ...fisa, reducereLucrariPercent: v })}
+          onChangeReducerePiese={handleReducerePieseChange}
+          onChangeReducereLucrari={handleReducereLucrariChange}
         />
 
         <div className="release-bar">
@@ -572,17 +702,9 @@ export default function App() {
         </div>
       </main>
 
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      <Toast toasts={toasts} onClose={closeToast} />
 
-      {searchQuery.trim() && (
-        <SearchModal
-          query={searchQuery}
-          onClose={() => setSearchQuery('')}
-          onOpenPdf={handleOpenPdfFromSearch}
-          onPrintPdf={handlePrintPdfFromList}
-          showToast={showToast}
-        />
-      )}
+      <ConfirmDialog state={confirmState} onResult={handleConfirmResult} />
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} showToast={showToast} />}
 
@@ -595,6 +717,7 @@ export default function App() {
           onClose={() => setVehicleHistoryQuery(null)}
           onOpenPdf={handleOpenPdfFromSearch}
           onPrintPdf={handlePrintPdfFromList}
+          onDeleteFinalized={handleDeleteFinalized}
           showToast={showToast}
         />
       )}

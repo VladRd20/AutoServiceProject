@@ -1,7 +1,7 @@
-import React from 'react'
+import React, { memo } from 'react'
 import { calcTotaluri } from '../../../shared/calculations'
 
-export default function Totaluri({
+function Totaluri({
   piese,
   lucrari,
   reducerePiesePercent,
@@ -77,3 +77,5 @@ export default function Totaluri({
     </section>
   )
 }
+
+export default memo(Totaluri)
