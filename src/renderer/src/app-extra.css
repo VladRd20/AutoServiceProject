@@ -1,0 +1,62 @@
+/* Stiluri suplimentare pentru App: bannere, chip-uri de stare, overlay activare. */
+
+.app-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--danger);
+  background: var(--danger-bg);
+  color: #fff;
+}
+
+.app-banner.warn {
+  background: #78350f;
+  border-bottom-color: #f59e0b;
+}
+
+.app-banner span {
+  flex: 1;
+}
+
+.app-banner button {
+  flex-shrink: 0;
+}
+
+.activation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+}
+
+.activation-close {
+  float: right;
+}
+
+.chip.chip-error {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.chip.chip-warn {
+  background: #78350f;
+  border-color: #f59e0b;
+  color: #fef3c7;
+}
+
+.chip.chip-backup {
+  font-size: 12px;
+}
+
+.toast-warning {
+  background: #78350f;
+  color: #fef3c7;
+}
+
+.toast-info {
+  background: #1e3a5f;
+  color: #dbeafe;
+}

@@ -1,0 +1,44 @@
+.field select {
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.field select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.field textarea {
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.field-counter {
+  align-self: flex-end;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.field-counter.warn {
+  color: var(--danger, #c0392b);
+}
+
+.fisa-nr {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: normal;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/* VIN pe tot randul din grila cardului Automobil. */
+.field-full {
+  grid-column: 1 / -1;
+}

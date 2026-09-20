@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, dialog } from 'electron'
 import path from 'path'
 import { is } from '@electron-toolkit/utils'
 import log, { setMainWindow } from './logger'
@@ -6,6 +6,7 @@ import { ensureDirs, backupNow } from './fileStore'
 import { registerIpcHandlers } from './ipc'
 import { initUpdater } from './updater'
 import { checkRevocationOnline, isRevoked, warmFingerprint } from './license'
+import { attachWindow, guardWindowClose } from './lifecycle'
 
 let mainWindow = null
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000 // o data pe zi
@@ -28,6 +29,33 @@ function createWindow() {
   })
 
   mainWindow.on('ready-to-show', () => mainWindow.show())
+
+  // Inchiderea asteapta salvarea draftului curent + un ultim backup.
+  attachWindow(mainWindow)
+  guardWindowClose(mainWindow)
+
+  // Renderer-ul blocheaza inchiderea (beforeunload) doar cand are modificari
+  // NESALVATE (salvarea a esuat): fara acest handler Electron ar ignora tacit
+  // inchiderea si aplicatia nu s-ar mai putea inchide deloc. Lasam utilizatorul sa decida.
+  mainWindow.webContents.on('will-prevent-unload', (event) => {
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'warning',
+      buttons: ['Rămân în aplicație', 'Închid oricum'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Modificări nesalvate',
+      message: 'Ultimele modificări nu au putut fi salvate (disc plin sau folder blocat).',
+      detail: 'Dacă închizi acum, aceste modificări se pierd.'
+    })
+    if (choice === 1) event.preventDefault() // ignora beforeunload => inchiderea continua
+  })
+
+  // Un crash al procesului de randare nu trebuie sa lase o fereastra alba:
+  // draftul e salvat pe disc de autosave, deci reincarcam pagina.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    log.error(`[main] renderer oprit: ${details.reason}`)
+    if (details.reason !== 'clean-exit' && mainWindow && !mainWindow.isDestroyed()) mainWindow.reload()
+  })
 
   // Linkurile externe se deschid in browser, nu in fereastra aplicatiei
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -57,7 +85,23 @@ function createWindow() {
   }
 }
 
+// O singura instanta: doua procese pe acelasi folder de date ar avea cache-uri
+// separate si autosave-uri care se calca reciproc.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
+}
+
 app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) return
+
   app.setAppUserModelId('com.serviceauto.app')
 
   try {
@@ -65,7 +109,6 @@ app.whenReady().then(async () => {
   } catch (err) {
     // Fara foldere de date, aplicatia nu poate functiona in siguranta.
     log.error('[main] initializare foldere esuata', err)
-    const { dialog } = await import('electron')
     dialog.showErrorBox(
       'Nu s-a putut porni aplicația',
       err.userMessage || 'Nu s-a putut crea folderul de date. Verifică permisiunile de scriere pe disc.'

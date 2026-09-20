@@ -6,7 +6,7 @@ const MAX_RESULTS = 8
 // Input cu dropdown de sugestii stilizat propriu - inlocuieste <datalist>-ul
 // nativ, care nu poate fi stilizat (arata mereu ca meniul brut al browser-ului,
 // indiferent de tema aplicatiei).
-export default function Autocomplete({ value, onChange, options, placeholder, id, inputRef }) {
+export default function Autocomplete({ value, onChange, options, placeholder, id, inputRef, maxLength }) {
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
   const containerRef = useRef(null)
@@ -73,7 +73,8 @@ export default function Autocomplete({ value, onChange, options, placeholder, id
         ref={inputRef}
         type="text"
         autoComplete="off"
-        value={value}
+        maxLength={maxLength}
+        value={value ?? ''}
         placeholder={placeholder}
         onChange={(e) => {
           onChange(e.target.value)

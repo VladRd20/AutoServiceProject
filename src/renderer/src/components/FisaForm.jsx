@@ -1,19 +1,35 @@
 import React, { useId } from 'react'
 import { foldForMatch } from '../../../shared/calculations'
 import Autocomplete from './Autocomplete'
+import PlateInput from './PlateInput'
 import Icon from './Icon'
+import './form-extra.css'
 
 // Label-ul era un simplu text alaturi de input, fara asociere htmlFor/id -
 // clic pe text nu focusa inputul, iar un cititor de ecran nu putea anunta
 // eticheta corecta pentru camp. React.cloneElement injecteaza id-ul generat
 // pe copilul unic (un <input> sau <Autocomplete>, ambele accepta prop `id`),
 // ca fiecare camp din formular sa fie corect asociat, dintr-un singur loc.
-function Field({ label, error, children }) {
+// Contor de caractere: apare doar cand campul se apropie de limita (>= 85%), ca
+// sa se vada DE CE se opreste tastarea, fara zgomot vizual altfel.
+export function LengthCounter({ value, max }) {
+  const len = String(value ?? '').length
+  if (!max || max < 32 || len < Math.floor(max * 0.85)) return null
+  return (
+    <span className={`field-counter${len >= max ? ' warn' : ''}`} aria-live="polite">
+      {len} / {max}
+      {len >= max ? ' — limita atinsă' : ''}
+    </span>
+  )
+}
+
+function Field({ label, error, children, className = '' }) {
   const id = useId()
   return (
-    <div className="field">
+    <div className={`field ${className}`.trim()}>
       <label htmlFor={id}>{label}</label>
       {React.cloneElement(children, { id })}
+      <LengthCounter value={children.props.value} max={children.props.maxLength} />
       {error && <span className="field-error">{error}</span>}
     </div>
   )
@@ -36,10 +52,11 @@ function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }
       <section className="card">
         <h2>Client</h2>
         <div className="grid-2">
-          <Field label="Nume client" error={errors['client.nume']}>
+          <Field className="field-full" label="Nume client" error={errors['client.nume']}>
             <input
               type="text"
               placeholder="Ion Popescu"
+              maxLength={200}
               value={fisa.client.nume}
               onChange={(e) => setClient({ nume: e.target.value })}
             />
@@ -48,6 +65,7 @@ function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }
             <input
               type="text"
               placeholder="+373 69 123 456"
+              maxLength={40}
               value={fisa.client.telefon}
               onChange={(e) => setClient({ telefon: e.target.value })}
             />
@@ -97,21 +115,24 @@ function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }
             </button>
           )}
         </div>
+        <Field label="Număr de înmatriculare" error={errors['auto.nrInmatriculare']}>
+          <PlateInput
+            placeholder="ABC 123"
+            maxLength={32}
+            invalid={Boolean(errors['auto.nrInmatriculare'])}
+            value={fisa.auto.nrInmatriculare}
+            onChange={(e) => setAuto({ nrInmatriculare: e.target.value.toUpperCase() })}
+          />
+        </Field>
         <div className="grid-2">
-          <Field label="Număr de înmatriculare" error={errors['auto.nrInmatriculare']}>
-            <input
-              type="text"
-              placeholder="C AB 123"
-              value={fisa.auto.nrInmatriculare}
-              onChange={(e) => setAuto({ nrInmatriculare: e.target.value.toUpperCase() })}
-            />
-          </Field>
           <Field label="An fabricație" error={errors['auto.an']}>
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
               placeholder="2018"
-              value={fisa.auto.an}
-              onChange={(e) => setAuto({ an: e.target.value })}
+              value={fisa.auto.an ?? ''}
+              onChange={(e) => setAuto({ an: e.target.value.replace(/\D/g, '') })}
             />
           </Field>
           <Field label="Marcă" error={errors['auto.marca']}>
@@ -120,6 +141,7 @@ function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }
               onChange={(v) => setAuto({ marca: v })}
               options={marci}
               placeholder="Dacia"
+              maxLength={64}
             />
           </Field>
           <Field label="Model" error={errors['auto.model']}>
@@ -128,9 +150,20 @@ function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }
               onChange={(v) => setAuto({ model: v })}
               options={modeleCurente}
               placeholder="Logan"
+              maxLength={64}
             />
           </Field>
-          <Field label="VIN" error={errors['auto.vin']}>
+          <Field label="Kilometraj (opțional)" error={errors['km']}>
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="ex: 185000"
+              maxLength={12}
+              value={fisa.km ?? ''}
+              onChange={(e) => onChange({ ...fisa, km: e.target.value })}
+            />
+          </Field>
+          <Field className="field-full" label="VIN" error={errors['auto.vin']}>
             <input
               type="text"
               maxLength={17}

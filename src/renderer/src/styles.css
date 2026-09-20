@@ -1500,11 +1500,17 @@ kbd {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
   gap: 0 16px;
-  align-items: start;
+  align-items: stretch; /* coloane de aceeasi inaltime: ultimul card din fiecare se intinde */
 }
 
 .form-col {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-col > .card:last-child {
+  flex: 1;
 }
 
 @media (max-width: 1150px) {

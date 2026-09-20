@@ -1,11 +1,28 @@
 import { autoUpdater } from 'electron-updater'
 import log from './logger'
+import { flushEverything } from './lifecycle'
+import { getAutoUpdate, setAutoUpdate } from './appConfig'
 
 autoUpdater.logger = log
 // Nu descarcam automat - cerem intai acordul utilizatorului printr-un dialog,
 // dupa ce gasim o versiune mai noua.
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
+
+// Preferinta "actualizari automate": cand e pornita, o versiune noua se descarca
+// singura, in fundal, si se instaleaza la urmatoarea INCHIDERE a aplicatiei
+// (dupa salvarea draftului) - fara nicio intrerupere in timpul lucrului.
+export function isAutoUpdateEnabled() {
+  return getAutoUpdate()
+}
+
+export function setAutoUpdateEnabled(enabled) {
+  setAutoUpdate(enabled)
+  autoUpdater.autoDownload = Boolean(enabled)
+  autoUpdater.autoInstallOnAppQuit = true
+  // Daca acum e deja o versiune disponibila, o luam imediat.
+  if (enabled) checkForUpdatesSafe()
+}
 
 let mainWindowRef = null
 let checking = false
@@ -22,6 +39,7 @@ function sendStatus(type, data) {
 // e logat si ignorat - aplicatia trebuie sa functioneze normal pe versiunea curenta.
 export function initUpdater(mainWindow) {
   mainWindowRef = mainWindow
+  autoUpdater.autoDownload = getAutoUpdate()
 
   autoUpdater.on('error', (err) => {
     log.warn('[updater] verificare/descarcare update esuata (ignorat, aplicatia continua normal)', err)
@@ -36,10 +54,12 @@ export function initUpdater(mainWindow) {
     log.info(`[updater] versiune noua disponibila: ${info.version}`)
     // Anuntat doar prin banner-ul din UI (stilizat, cu buton propriu) - un
     // dialog nativ Windows aici arata neplacut si nu poate fi personalizat.
-    sendStatus('available', { version: info.version })
+    const notes = typeof info.releaseNotes === 'string' ? info.releaseNotes.replace(/<[^>]*>/g, '').trim().slice(0, 600) : ''
+    sendStatus('available', { version: info.version, notes })
   })
 
   autoUpdater.on('download-progress', (progress) => {
+    downloading = true
     sendStatus('progress', { percent: Math.round(progress.percent) })
   })
 
@@ -81,7 +101,10 @@ export function downloadUpdateNow() {
   })
 }
 
-export function installUpdateNow() {
+// Salveaza draftul curent si face un ultim backup INAINTE de a inchide
+// aplicatia pentru instalare - un update nu trebuie sa piarda munca in curs.
+export async function installUpdateNow() {
   if (!downloaded) return
+  await flushEverything().catch((err) => log.error('[updater] flush inainte de instalare esuat', err))
   autoUpdater.quitAndInstall()
 }

@@ -121,6 +121,8 @@ function buildDocDefinition(fisa, settings) {
     .filter(Boolean)
     .join(' · ')
 
+  const titluFisa = fisa.nr ? `Fișă de service auto nr. ${fisa.nr}` : 'Fișă de service auto'
+
   const content = [
     { canvas: [{ type: 'rect', x: 0, y: 0, w: 515, h: 4, color: '#1c3552' }], margin: [0, 0, 0, 10] },
     settings?.numeService
@@ -128,8 +130,9 @@ function buildDocDefinition(fisa, settings) {
       : { text: 'Fișă de service auto', style: 'titlu' },
     settings?.numeService && antetService ? { text: antetService, style: 'firmaSub' } : null,
     settings?.numeService
-      ? { text: 'Fișă de service auto', style: 'sectiune', margin: [0, 10, 0, 2] }
+      ? { text: titluFisa, style: 'sectiune', margin: [0, 10, 0, 2] }
       : null,
+    !settings?.numeService && fisa.nr ? { text: `Nr. ${fisa.nr}`, margin: [0, 0, 0, 4] } : null,
     { text: `Data intervenției: ${formatDataAfisare(fisa)}`, margin: [0, 0, 0, 12] },
 
     { text: 'Client', style: 'sectiune' },
@@ -138,8 +141,9 @@ function buildDocDefinition(fisa, settings) {
         { text: `Nume: ${fisa.client?.nume || '-'}` },
         { text: `Telefon: ${fisa.client?.telefon || '-'}` }
       ],
-      margin: [0, 0, 0, 10]
+      margin: fisa.client?.cui ? [0, 0, 0, 0] : [0, 0, 0, 10]
     },
+    fisa.client?.cui ? { text: `CUI/IDNO: ${fisa.client.cui}`, margin: [0, 0, 0, 10] } : null,
 
     { text: 'Automobil', style: 'sectiune' },
     {
@@ -148,6 +152,9 @@ function buildDocDefinition(fisa, settings) {
         { text: `An fabricație: ${fisa.auto?.an || '-'}` }
       ]
     },
+    fisa.km !== undefined && String(fisa.km).trim() !== ''
+      ? { text: `Kilometraj: ${fisa.km} km` }
+      : null,
     {
       columns: [
         { text: `Marca: ${fisa.auto?.marca || '-'}` },
@@ -196,6 +203,17 @@ function buildDocDefinition(fisa, settings) {
 
     { text: `Total general: ${formatBani(totals.totalGeneral)}`, alignment: 'right' },
     { text: `Total final: ${formatBani(totals.totalFinal)}`, alignment: 'right', style: 'totalFinal' },
+    fisa.plata?.status
+      ? {
+          text: `Plată: ${fisa.plata.status === 'achitat' ? 'achitat' : 'neachitat'}${fisa.plata.metoda ? ` (${fisa.plata.metoda})` : ''}`,
+          alignment: 'right',
+          margin: [0, 2, 0, 0]
+        }
+      : null,
+    fisa.observatii?.trim()
+      ? { text: 'Observații', style: 'sectiune', margin: [0, 14, 0, 2] }
+      : null,
+    fisa.observatii?.trim() ? { text: fisa.observatii.trim() } : null,
 
     {
       unbreakable: true,
@@ -237,6 +255,18 @@ function buildDocDefinition(fisa, settings) {
   }
 }
 
+// Un viewer PDF deschis (sau antivirusul) poate bloca scurt fisierul tinta: EPERM/EBUSY
+// se reincearca de cateva ori inainte sa fie tratate ca eroare.
+function renameWithRetry(from, to, attemptsLeft, cb) {
+  fs.rename(from, to, (err) => {
+    if (err && ['EPERM', 'EBUSY', 'EACCES'].includes(err.code) && attemptsLeft > 1) {
+      setTimeout(() => renameWithRetry(from, to, attemptsLeft - 1, cb), 150)
+    } else {
+      cb(err)
+    }
+  })
+}
+
 // Genereaza PDF-ul si il scrie la calea data. Rezolva/respinge cand streamul
 // e complet inchis pe disc (nu doar cand pdfkit termina de generat continutul).
 export async function generatePdf(fisa, destPath) {
@@ -260,12 +290,14 @@ export async function generatePdf(fisa, destPath) {
 
       stream.on('error', (err) => {
         log.error('[pdfGenerator] scriere esuata', err)
+        fs.unlink(tmpPath, () => {})
         reject(toAppError(err, 'Nu s-a putut scrie fișierul PDF pe disc.'))
       })
 
       stream.on('finish', () => {
-        fs.rename(tmpPath, destPath, (err) => {
+        renameWithRetry(tmpPath, destPath, 4, (err) => {
           if (err) {
+            fs.unlink(tmpPath, () => {})
             reject(toAppError(err, 'PDF-ul a fost generat dar nu a putut fi salvat definitiv.'))
           } else {
             resolve(destPath)
@@ -308,9 +340,12 @@ export function printPdf(pdfPath) {
           cleanup()
           if (success) {
             resolve()
-          } else if (errorType === 'cancelled') {
-            resolve() // utilizatorul a inchis dialogul de printare - nu e o eroare
+          } else if (/cancel/i.test(String(errorType || ''))) {
+            // Utilizatorul a inchis dialogul de printare - nu e o eroare. Textul difera
+            // dupa versiune/driver ("cancelled", "Print job canceled" etc.), deci potrivim larg.
+            resolve()
           } else {
+            log.warn(`[pdfGenerator] printare esuata: ${errorType}`)
             reject(toAppError(new Error(errorType), 'Printarea a eșuat.'))
           }
         })

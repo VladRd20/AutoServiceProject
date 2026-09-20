@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-export default function ActivationScreen({ onActivated, revoked }) {
+export default function ActivationScreen({ onActivated, revoked, overlay, onClose }) {
   const [key, setKey] = useState('')
   const [error, setError] = useState('')
   const [activating, setActivating] = useState(false)
@@ -10,18 +10,25 @@ export default function ActivationScreen({ onActivated, revoked }) {
     if (!key.trim()) return
     setActivating(true)
     setError('')
-    const res = await window.serviceAuto.license.activate(key.trim())
-    setActivating(false)
-    if (res.ok) {
-      onActivated()
-    } else {
-      setError(res.error.message)
+    try {
+      const res = await window.serviceAuto.license.activate(key.trim())
+      if (res.ok) onActivated()
+      else setError(res.error.message)
+    } catch (err) {
+      setError(err?.message || 'Activarea a eșuat. Încearcă din nou.')
+    } finally {
+      setActivating(false)
     }
   }
 
   return (
-    <div className="activation-screen">
+    <div className={`activation-screen${overlay ? ' activation-overlay' : ''}`}>
       <div className="activation-card">
+        {onClose && (
+          <button type="button" className="activation-close" onClick={onClose}>
+            Închide
+          </button>
+        )}
         <h1>Activare Service Auto</h1>
         {revoked ? (
           <p className="activation-error">

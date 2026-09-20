@@ -8,7 +8,8 @@ function Totaluri({
   reducerePiesePercent,
   reducereLucrariPercent,
   onChangeReducerePiese,
-  onChangeReducereLucrari
+  onChangeReducereLucrari,
+  errors = {}
 }) {
   const t = calcTotaluri(piese, lucrari, reducerePiesePercent, reducereLucrariPercent)
 
@@ -19,6 +20,7 @@ function Totaluri({
       subtotal: t.totalPiese,
       reducere: t.valoareReducerePiese,
       percent: reducerePiesePercent,
+      error: errors.reducerePiesePercent,
       onChange: onChangeReducerePiese
     },
     {
@@ -27,6 +29,7 @@ function Totaluri({
       subtotal: t.totalLucrari,
       reducere: t.valoareReducereLucrari,
       percent: reducereLucrariPercent,
+      error: errors.reducereLucrariPercent,
       onChange: onChangeReducereLucrari
     }
   ]
@@ -52,10 +55,13 @@ function Totaluri({
                 max="100"
                 step="1"
                 aria-label={`Reducere ${r.label.toLowerCase()} (%)`}
-                value={r.percent}
+                value={r.percent ?? 0}
+                aria-invalid={r.error ? 'true' : undefined}
+                title={r.error || undefined}
                 onChange={(e) => r.onChange(e.target.value)}
               />
               <span className="unit">%</span>
+              {r.error && <span className="field-error">{r.error}</span>}
             </span>
             <span className={`td-num ${r.reducere > 0 ? 'reducere-valoare' : 'muted'}`}>
               {r.reducere > 0 ? `−${formatLei(r.reducere)}` : '—'}

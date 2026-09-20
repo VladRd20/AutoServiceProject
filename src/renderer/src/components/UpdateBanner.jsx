@@ -1,10 +1,18 @@
 import React from 'react'
+import './settings-extra.css'
 
-export default function UpdateBanner({ status, version, percent, onDownload, onInstall }) {
+export default function UpdateBanner({ status, version, percent, notes, onDownload, onInstall }) {
   if (status === 'available') {
     return (
       <div className="update-banner">
-        <span>🆕 Versiune nouă disponibilă: v{version}</span>
+        <span className="update-banner-text">
+          <span>🆕 Versiune nouă disponibilă: v{version}</span>
+          {typeof notes === 'string' && notes.trim() && (
+            <span className="update-notes" title={notes}>
+              {notes.replace(/\s+/g, ' ').trim()}
+            </span>
+          )}
+        </span>
         <button type="button" onClick={onDownload}>
           Descarcă
         </button>

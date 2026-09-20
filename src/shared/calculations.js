@@ -2,7 +2,7 @@
 // cat si in main process (generare PDF), ca sursa unica de adevar.
 
 function toNumber(value) {
-  const n = Number(value)
+  const n = typeof value === 'string' ? Number(value.trim().replace(',', '.')) : Number(value)
   return Number.isFinite(n) ? n : 0
 }
 
@@ -39,6 +39,9 @@ export function isFisaEmpty(f) {
     !f.auto?.marca?.trim() &&
     !f.auto?.model?.trim() &&
     !f.auto?.vin?.trim() &&
+    !f.client?.cui?.trim() &&
+    !String(f.km ?? '').trim() &&
+    !f.observatii?.trim() &&
     (f.piese?.length ?? 0) === 0 &&
     (f.lucrari?.length ?? 0) === 0 &&
     !f._replaceBaseName
@@ -46,8 +49,9 @@ export function isFisaEmpty(f) {
 }
 
 export function calcListaTotal(items, pretKey) {
+  if (!Array.isArray(items)) return 0
   return round2(
-    items.reduce((sum, item) => sum + calcLinieTotal(item.cantitate, item[pretKey]), 0)
+    items.reduce((sum, item) => sum + calcLinieTotal(item?.cantitate, item?.[pretKey]), 0)
   )
 }
 
@@ -91,39 +95,106 @@ export function reduceriDinFisa(fisa) {
   return { piese: legacy, lucrari: legacy }
 }
 
+// Limite comune: sanitize (main) le aplica ca truncare de siguranta, iar
+// validateFisa le verifica INAINTE de truncare - o fisa prea lunga este
+// respinsa cu un mesaj clar, nu taiata in tacere.
+export const LIMITS = {
+  text: 200,
+  telefon: 40,
+  plate: 32,
+  marca: 64,
+  vin: 32,
+  cui: 32,
+  observatii: 2000,
+  linii: 300,
+  pretMax: 1e9,
+  cantitateMax: 1e6
+}
+
+export const PLATA_STATUS = ['', 'achitat', 'neachitat']
+export const PLATA_METODE = ['', 'numerar', 'card', 'transfer']
+
+// Text gol/absent = valid ("nu a fost completat"); text ne-numeric = invalid.
+function numericProblem(value) {
+  if (value === '' || value == null) return false
+  const n = typeof value === 'number' ? value : Number(String(value).trim().replace(',', '.'))
+  return !Number.isFinite(n)
+}
+
+function isRealDate(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) return false
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d
+}
+
+const tooLong = (v, max) => typeof v === 'string' && v.length > max
+
 export function validateFisa(fisa) {
   const errors = {}
+  fisa = fisa && typeof fisa === 'object' ? fisa : {}
 
   if (!fisa.client?.nume?.trim()) errors['client.nume'] = 'Numele clientului este obligatoriu'
+  else if (tooLong(fisa.client.nume, LIMITS.text)) errors['client.nume'] = `Maxim ${LIMITS.text} de caractere`
   if (!fisa.client?.telefon?.trim()) errors['client.telefon'] = 'Numărul de telefon este obligatoriu'
   else if (!/^[0-9+()\-\s]{7,20}$/.test(fisa.client.telefon.trim()))
     errors['client.telefon'] = 'Număr de telefon invalid'
+  if (tooLong(fisa.client?.cui, LIMITS.cui)) errors['client.cui'] = `Maxim ${LIMITS.cui} de caractere`
 
   if (!fisa.auto?.nrInmatriculare?.trim())
     errors['auto.nrInmatriculare'] = 'Numărul de înmatriculare este obligatoriu'
+  else if (tooLong(fisa.auto.nrInmatriculare, LIMITS.plate))
+    errors['auto.nrInmatriculare'] = `Maxim ${LIMITS.plate} de caractere`
   if (!fisa.auto?.marca?.trim()) errors['auto.marca'] = 'Marca este obligatorie'
+  else if (tooLong(fisa.auto.marca, LIMITS.marca)) errors['auto.marca'] = `Maxim ${LIMITS.marca} de caractere`
   if (!fisa.auto?.model?.trim()) errors['auto.model'] = 'Modelul este obligatoriu'
+  else if (tooLong(fisa.auto.model, LIMITS.marca)) errors['auto.model'] = `Maxim ${LIMITS.marca} de caractere`
   if (fisa.auto?.vin?.trim() && fisa.auto.vin.trim().length !== 17)
     errors['auto.vin'] = 'VIN-ul trebuie să aibă exact 17 caractere'
   if (
-    fisa.auto?.an &&
-    (toNumber(fisa.auto.an) < 1950 || toNumber(fisa.auto.an) > new Date().getFullYear() + 1)
+    fisa.auto?.an !== '' &&
+    fisa.auto?.an != null &&
+    (numericProblem(fisa.auto.an) ||
+      toNumber(fisa.auto.an) < 1950 ||
+      toNumber(fisa.auto.an) > new Date().getFullYear() + 1)
   )
     errors['auto.an'] = 'An fabricație invalid'
+  if (fisa.km !== '' && fisa.km != null && (numericProblem(fisa.km) || toNumber(fisa.km) < 0 || toNumber(fisa.km) > 5e6))
+    errors['km'] = 'Kilometraj invalid'
 
   if (!fisa.dataCurenta && !fisa.data) errors['data'] = 'Data intervenției este obligatorie'
+  else if (!fisa.dataCurenta && !isRealDate(fisa.data)) errors['data'] = 'Data intervenției este invalidă'
 
-  ;(fisa.piese || []).forEach((p, i) => {
-    if (!p.denumire?.trim()) errors[`piese.${i}.denumire`] = 'Denumirea piesei este obligatorie'
-    if (toNumber(p.cantitate) <= 0) errors[`piese.${i}.cantitate`] = 'Cantitate invalidă'
-    if (toNumber(p.pretUnitar) < 0) errors[`piese.${i}.pretUnitar`] = 'Preț invalid'
-  })
+  if (tooLong(fisa.observatii, LIMITS.observatii)) errors['observatii'] = `Maxim ${LIMITS.observatii} de caractere`
+  if (fisa.plata?.status && !PLATA_STATUS.includes(fisa.plata.status)) errors['plata.status'] = 'Stare plată invalidă'
+  if (fisa.plata?.metoda && !PLATA_METODE.includes(fisa.plata.metoda)) errors['plata.metoda'] = 'Metodă de plată invalidă'
 
-  ;(fisa.lucrari || []).forEach((l, i) => {
-    if (!l.denumire?.trim()) errors[`lucrari.${i}.denumire`] = 'Denumirea lucrării este obligatorie'
-    if (toNumber(l.cantitate) <= 0) errors[`lucrari.${i}.cantitate`] = 'Cantitate invalidă'
-    if (toNumber(l.pret) < 0) errors[`lucrari.${i}.pret`] = 'Preț invalid'
-  })
+  for (const [key, list] of [['piese', fisa.piese], ['lucrari', fisa.lucrari]]) {
+    if (list != null && !Array.isArray(list)) errors[key] = 'Listă invalidă'
+    else if ((list?.length ?? 0) > LIMITS.linii) errors[key] = `Maxim ${LIMITS.linii} de linii`
+  }
+
+  const checkLines = (list, key, priceKey) => {
+    if (!Array.isArray(list)) return
+    list.forEach((it, i) => {
+      if (!it?.denumire?.trim()) errors[`${key}.${i}.denumire`] = 'Denumirea este obligatorie'
+      else if (tooLong(it.denumire, LIMITS.text)) errors[`${key}.${i}.denumire`] = `Maxim ${LIMITS.text} de caractere`
+      if (numericProblem(it?.cantitate) || toNumber(it?.cantitate) <= 0 || toNumber(it?.cantitate) > LIMITS.cantitateMax)
+        errors[`${key}.${i}.cantitate`] = 'Cantitate invalidă'
+      if (numericProblem(it?.[priceKey]) || toNumber(it?.[priceKey]) < 0 || toNumber(it?.[priceKey]) > LIMITS.pretMax)
+        errors[`${key}.${i}.${priceKey}`] = 'Preț invalid'
+    })
+  }
+  checkLines(fisa.piese, 'piese', 'pretUnitar')
+  checkLines(fisa.lucrari, 'lucrari', 'pret')
+
+  for (const [k, v] of [
+    ['reducerePiesePercent', fisa.reducerePiesePercent],
+    ['reducereLucrariPercent', fisa.reducereLucrariPercent]
+  ]) {
+    if (v !== undefined && v !== '' && (numericProblem(v) || toNumber(v) < 0 || toNumber(v) > 100))
+      errors[k] = 'Reducere invalidă (0-100%)'
+  }
 
   return { valid: Object.keys(errors).length === 0, errors }
 }

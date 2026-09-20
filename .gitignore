@@ -11,3 +11,9 @@ dist/
 # Cheia privata de semnare a licentelor - daca ajunge pe GitHub, oricine
 # poate genera chei de licenta valide. NU comite niciodata acest folder.
 /keys/
+
+# Backup criptat al cheilor (scripts/keys-backup.js)
+*.sakeys
+
+# raport local al suitei e2e
+tests/e2e/last-report.json

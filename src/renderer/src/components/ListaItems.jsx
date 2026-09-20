@@ -1,8 +1,11 @@
 import React, { memo, useEffect, useMemo, useRef } from 'react'
-import { calcLinieTotal, calcListaTotal, foldForMatch } from '../../../shared/calculations'
+import { calcLinieTotal, foldForMatch } from '../../../shared/calculations'
+import { LengthCounter } from './FisaForm'
 import Autocomplete from './Autocomplete'
 import Icon from './Icon'
 import { formatLei } from '../format'
+
+const MAX_LINII = 300
 
 // crypto.randomUUID() e disponibil in runtime-ul Chromium al Electron - mult
 // mai sigur decat un contor de modul care se reseteaza la fiecare pornire a
@@ -54,7 +57,10 @@ function ListaItems({ titlu, singular, items, onChange, priceKey, priceLabel, er
 
   const subtotal = items.reduce((sum, it) => sum + calcLinieTotal(it.cantitate, it[priceKey]), 0)
 
+  const atLimit = items.length >= MAX_LINII
+
   function addItem() {
+    if (items.length >= MAX_LINII) return
     const id = newItemId()
     focusIdRef.current = id
     onChange([...items, { id, denumire: '', cantitate: 1, [priceKey]: 0 }])
@@ -88,9 +94,16 @@ function ListaItems({ titlu, singular, items, onChange, priceKey, priceLabel, er
         </h2>
         <div className="card-header-right">
           {items.length > 0 && <span className="subtotal">{formatLei(subtotal)}</span>}
-          <button type="button" className="btn-sm" onClick={addItem}>
+          <button
+            type="button"
+            className="btn-sm"
+            onClick={addItem}
+            disabled={atLimit}
+            title={atLimit ? 'Maxim 300 de linii' : undefined}
+          >
             <Icon name="plus" /> Adaugă
           </button>
+          {atLimit && <span className="hint">Maxim 300 de linii</span>}
         </div>
       </div>
 
@@ -125,14 +138,15 @@ function ListaItems({ titlu, singular, items, onChange, priceKey, priceLabel, er
                 onChange={(v) => handleDenumireChange(item, v)}
                 options={denumiri}
                 placeholder="Denumire"
+                maxLength={200}
               />
+              <LengthCounter value={item.denumire} max={200} />
               {err('denumire') && <span className="field-error">{err('denumire')}</span>}
             </div>
             <div className="field field-small">
               <input
-                type="number"
-                min="0"
-                step="1"
+                type="text"
+                inputMode="decimal"
                 placeholder="Cant." aria-label="Cantitate"
                 value={item.cantitate}
                 onChange={(e) => updateItem(item.id, { cantitate: e.target.value })}
@@ -141,9 +155,8 @@ function ListaItems({ titlu, singular, items, onChange, priceKey, priceLabel, er
             </div>
             <div className="field field-small">
               <input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 placeholder={priceLabel}
                 aria-label={priceLabel}
                 value={item[priceKey]}

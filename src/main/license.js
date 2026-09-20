@@ -33,10 +33,6 @@ function getPublicKey() {
   return publicKeyObj
 }
 
-function b64url(buf) {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
 function fromB64url(str) {
   const padded = str.replace(/-/g, '+').replace(/_/g, '/')
   const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4))
@@ -85,30 +81,55 @@ let cachedFingerprint = null
 
 // Citeste MachineGuid fara sa blocheze procesul principal; apelata o data la
 // pornire (index.js). getMachineFingerprint() foloseste rezultatul memorat.
-export function warmFingerprint() {
-  return new Promise((resolve) => {
-    execFile('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], { timeout: 5000 }, (err, stdout) => {
-      if (!err) {
-        const match = String(stdout).match(/MachineGuid\s+REG_SZ\s+([0-9a-fA-F-]+)/)
-        if (match) cachedFingerprint = match[1].trim()
-      }
-      resolve()
+export async function warmFingerprint() {
+  // Citirea din registru poate esua sporadic (AV, incarcare) - 3 incercari,
+  // ca o cheie valida sa nu fie tratata drept invalida din cauza unui singur esec.
+  for (let attempt = 0; attempt < 3 && !cachedFingerprint; attempt++) {
+    await new Promise((resolve) => {
+      execFile(
+        'reg',
+        ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'],
+        { timeout: 5000 },
+        (err, stdout) => {
+          if (!err) {
+            const match = String(stdout).match(/MachineGuid\s+REG_SZ\s+([0-9a-fA-F-]+)/)
+            if (match) cachedFingerprint = match[1].trim()
+          }
+          resolve()
+        }
+      )
     })
-  })
+    if (!cachedFingerprint) await new Promise((r) => setTimeout(r, 300))
+  }
+}
+
+function fallbackFingerprint() {
+  return `${os.hostname()}-${os.cpus()?.[0]?.model || 'unknown-cpu'}`
 }
 
 function getMachineFingerprint() {
   if (cachedFingerprint) return cachedFingerprint
   try {
-    const out = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid').toString()
+    const out = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid', { timeout: 5000 }).toString()
     const match = out.match(/MachineGuid\s+REG_SZ\s+([0-9a-fA-F-]+)/)
     if (match) return (cachedFingerprint = match[1].trim())
   } catch (err) {
     log.warn('[license] nu s-a putut citi MachineGuid, folosesc fallback', err)
   }
-  // Fallback mai slab (functioneaza tot, doar mai putin stabil la schimbari
-  // hardware majore) - mai bine decat sa blocam activarea complet.
-  return `${os.hostname()}-${os.cpus()?.[0]?.model || 'unknown-cpu'}`
+  // Fallback mai slab - NU se memoreaza: la urmatorul apel se reincearca
+  // MachineGuid, ca un esec trecator sa nu ramana "lipit" pentru toata sesiunea.
+  return fallbackFingerprint()
+}
+
+// Amprente acceptate la verificare: MachineGuid (normal) si fallback-ul
+// (pentru o activare facuta cand registrul nu era citibil). Cheia de
+// decriptare deriva din amprenta salvata in inregistrare, deci un
+// license.dat copiat pe alt calculator tot nu se decripteaza.
+function fingerprintCandidates() {
+  const list = [getMachineFingerprint()]
+  const fb = fallbackFingerprint()
+  if (!list.includes(fb)) list.push(fb)
+  return list
 }
 
 function deriveKey(fingerprint) {
@@ -139,25 +160,42 @@ function licenseFilePath() {
 }
 
 let cachedActivated = null
+let cachedActivatedAt = 0
 let cachedPayload = null
 let cachedRevoked = false
+// Un rezultat "nu e activat" e memorat doar scurt: un esec trecator (fisier
+// blocat de AV, registru indisponibil) nu trebuie sa tina utilizatorul pe
+// ecranul de activare pana la repornire.
+const NEGATIVE_CACHE_MS = 15000
 
 // Adevarat doar daca exista o inregistrare de activare valida, criptata cu
-// o cheie derivata din fingerprint-ul ACESTEI masini - copiat pe alt
-// calculator, fisierul nu se mai poate decripta (cheia derivata difera).
+// o cheie derivata din amprenta ACESTEI masini - copiat pe alt calculator,
+// fisierul nu se mai poate decripta.
 export function isActivated() {
-  if (cachedActivated !== null) return cachedActivated
+  if (cachedActivated === true) return true
+  if (cachedActivated === false && Date.now() - cachedActivatedAt < NEGATIVE_CACHE_MS) return false
 
+  cachedActivated = false
+  cachedActivatedAt = Date.now()
+  let raw
   try {
-    const raw = fs.readFileSync(licenseFilePath(), 'utf-8')
-    const fingerprint = getMachineFingerprint()
-    const record = decryptRecord(raw, deriveKey(fingerprint))
-    cachedActivated = record?.fingerprint === fingerprint && !!record?.payload
-    cachedPayload = cachedActivated ? record.payload : null
+    raw = fs.readFileSync(licenseFilePath(), 'utf-8')
   } catch (err) {
-    cachedActivated = false
+    return false // fara fisier = neactivat (nu e o eroare)
   }
-  return cachedActivated
+  for (const fingerprint of fingerprintCandidates()) {
+    try {
+      const record = decryptRecord(raw, deriveKey(fingerprint))
+      if (record?.fingerprint === fingerprint && record?.payload) {
+        cachedActivated = true
+        cachedPayload = record.payload
+        return true
+      }
+    } catch {
+      // cheie gresita pentru aceasta amprenta - o incercam pe urmatoarea
+    }
+  }
+  return false
 }
 
 // True doar dupa ce checkRevocationOnline() a confirmat ca id-ul curent e in

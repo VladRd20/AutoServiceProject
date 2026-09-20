@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import './search-extra.css'
 import Modal from './Modal'
 import { formatLei, formatMoney } from '../format'
 
@@ -6,7 +7,8 @@ const PERIOADE = [
   { key: 'azi', label: 'Azi' },
   { key: 'saptamana', label: 'Săptămâna asta' },
   { key: 'luna', label: 'Luna asta' },
-  { key: 'tot', label: 'Tot' }
+  { key: 'tot', label: 'Tot' },
+  { key: 'interval', label: 'Interval' }
 ]
 
 const LUNI = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -83,22 +85,58 @@ function Skeleton() {
 
 export default function ReportsModal({ onClose, showToast }) {
   const [period, setPeriod] = useState('luna')
+  const [range, setRange] = useState({ from: '', to: '' })
   const [loading, setLoading] = useState(true)
   const [raport, setRaport] = useState(null)
+  const [exporting, setExporting] = useState(false)
+  const mounted = useRef(true)
+  const exportingRef = useRef(false)
 
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  const { from: rangeFrom, to: rangeTo } = range
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    window.serviceAuto.fisa.getRapoarte(period).then((res) => {
-      if (cancelled) return
-      setLoading(false)
-      if (res.ok) setRaport(res.data)
-      else showToast('error', res.error.message)
-    })
+    window.serviceAuto.fisa
+      .getRapoarte(period, period === 'interval' ? { from: rangeFrom, to: rangeTo } : undefined)
+      .then((res) => {
+        if (cancelled) return
+        if (res.ok) setRaport(res.data)
+        else showToast('error', res.error.message)
+      })
+      .catch((err) => {
+        if (!cancelled) showToast('error', String(err?.message || err))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
     return () => {
       cancelled = true
     }
-  }, [period, showToast])
+  }, [period, rangeFrom, rangeTo, showToast])
+
+  async function handleExportCsv() {
+    if (exportingRef.current) return
+    exportingRef.current = true
+    setExporting(true)
+    try {
+      const res = await window.serviceAuto.fisa.exportCsv(period, period === 'interval' ? range : undefined)
+      if (!mounted.current) return
+      if (!res.ok) showToast('error', res.error.message)
+      else if (res.data) showToast('success', `CSV salvat în ${res.data.path} (${res.data.count} fișe).`)
+    } catch (err) {
+      if (mounted.current) showToast('error', String(err?.message || err))
+    } finally {
+      exportingRef.current = false
+      if (mounted.current) setExporting(false)
+    }
+  }
 
   const medie = raport && raport.numarFise > 0 ? raport.totalIncasat / raport.numarFise : 0
   const sumaPL = raport ? (raport.totalPiese || 0) + (raport.totalLucrari || 0) : 0
@@ -119,6 +157,34 @@ export default function ReportsModal({ onClose, showToast }) {
             {p.label}
           </button>
         ))}
+      </div>
+      {period === 'interval' && (
+        <div className="search-dates" style={{ margin: '8px 0 0' }}>
+          <label>
+            De la
+            <input
+              type="date"
+              value={range.from}
+              max={range.to || undefined}
+              onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
+            />
+          </label>
+          <label>
+            Până la
+            <input
+              type="date"
+              value={range.to}
+              min={range.from || undefined}
+              onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
+            />
+          </label>
+          {!range.from && !range.to && <span className="hint">Alege capetele intervalului (se folosesc toate fișele până atunci).</span>}
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '8px 0' }}>
+        <button type="button" className="btn-sm" disabled={exporting} onClick={handleExportCsv}>
+          {exporting ? 'Se exportă...' : 'Exportă CSV'}
+        </button>
       </div>
 
       {loading || !raport ? (

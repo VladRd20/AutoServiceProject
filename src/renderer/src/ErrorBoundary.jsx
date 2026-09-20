@@ -5,6 +5,7 @@ export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
     this.state = { hasError: false }
+    this.backupPromise = null
   }
 
   static getDerivedStateFromError() {
@@ -12,12 +13,23 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    // eslint-disable-next-line no-console
     console.error('[ErrorBoundary] eroare neasteptata in UI', error, info)
-    trySaveBackup()
+    this.backupPromise = trySaveBackup()
   }
 
-  handleRestart = () => {
+  handleRestart = async () => {
+    // Un draft care face UI-ul sa cada nu trebuie redeschis automat la repornire (bucla de crash).
+    try {
+      window.localStorage.removeItem('lastOpenDraftId')
+    } catch {
+      // localStorage indisponibil
+    }
+    // Asteptam salvarea de urgenta ca reload-ul sa nu o intrerupa.
+    try {
+      await this.backupPromise
+    } catch {
+      // ignoram - reload oricum
+    }
     window.location.reload()
   }
 

@@ -1,0 +1,58 @@
+.search-filter-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  margin-top: -14px; /* centrare fara transform: `button:active` are propriul transform si l-ar rupe */
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+/* Fara animatie de apasare: butonul ramane exact pe loc la hover / click / focus. */
+.search-filter-btn,
+.search-filter-btn:hover,
+.search-filter-btn:active,
+.search-filter-btn:focus,
+.search-filter-btn:focus-visible {
+  transform: none !important;
+  transition: none;
+}
+.search-filter-btn.active {
+  color: var(--accent, #2563eb);
+}
+.search-box .topbar-search {
+  padding-right: 34px;
+}
+.search-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 4px;
+  border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25));
+}
+.search-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.search-presets .btn-sm.active {
+  background: var(--accent, #2563eb);
+  color: #fff;
+}
+.search-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+.search-dates label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}

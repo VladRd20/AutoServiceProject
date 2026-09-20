@@ -1,0 +1,34 @@
+/* Camp pentru numarul de inmatriculare: pastreaza stilul campurilor aplicatiei
+   (fundal, bordura, focus din tema); doar iconul cu drapelul si fontul monospatiat
+   il diferentiaza. Clasele au prefix md- ca sa nu se ciocneasca cu `.plate` din antet. */
+.md-plate {
+  position: relative;
+  display: block;
+}
+.md-plate-flag {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 22px;
+  height: 15px;
+  margin-top: -7.5px; /* fara transform */
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(128, 128, 128, 0.35);
+  pointer-events: none;
+}
+.field .md-plate-input {
+  padding-left: 44px;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.field .md-plate-input::placeholder {
+  font-weight: 400;
+  letter-spacing: 1px;
+}
+
+/* aer intre numarul de inmatriculare si randul de campuri de sub el */
+.field:has(> .md-plate) {
+  margin-bottom: 14px;
+}

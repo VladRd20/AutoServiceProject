@@ -16,6 +16,7 @@ import React, { useEffect, useRef } from 'react'
 // acel input, in App.jsx).
 export default function Modal({ title, onClose, className = '', children, autoFocus = true }) {
   const overlayRef = useRef(null)
+  const downOnOverlay = useRef(false)
 
   useEffect(() => {
     if (autoFocus) overlayRef.current?.focus()
@@ -28,7 +29,14 @@ export default function Modal({ title, onClose, className = '', children, autoFo
   return (
     <div
       className="modal-overlay"
-      onClick={onClose}
+      onMouseDown={(e) => {
+        downOnOverlay.current = e.target === e.currentTarget
+      }}
+      onClick={(e) => {
+        // Un drag de selectie de text care se termina pe fundal nu inchide modalul.
+        if (e.target === e.currentTarget && downOnOverlay.current) onClose()
+        downOnOverlay.current = false
+      }}
       onKeyDown={handleKeyDown}
       ref={overlayRef}
       tabIndex={-1}

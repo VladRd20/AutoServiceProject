@@ -1,6 +1,6 @@
 {
   "name": "service-auto",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Aplicatie de gestiune fise de service auto",
   "main": "./out/main/index.js",
   "author": "ServiceAuto",
@@ -11,7 +11,12 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "dist": "electron-vite build && electron-builder --win --publish never",
-    "release": "electron-vite build && electron-builder --win --publish always"
+    "release": "electron-vite build && electron-builder --win --publish always",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "keys:backup": "node scripts/keys-backup.js backup",
+    "keys:restore": "node scripts/keys-backup.js restore",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@electron-toolkit/utils": "^3.0.0",
@@ -22,11 +27,18 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
-    "vite": "^5.4.11"
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "playwright-core": "^1.63.0",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   },
   "build": {
     "appId": "com.serviceauto.app",
@@ -62,5 +74,8 @@
   "allowScripts": {
     "electron@33.4.11": true,
     "esbuild@0.21.5": true
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

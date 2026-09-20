@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useState } from 'react'
+import React, { memo, useEffect, useRef, useState } from 'react'
 import { isFisaEmpty, calcTotaluri, reduceriDinFisa } from '../../../shared/calculations'
 import { formatLei } from '../format'
 import Icon from './Icon'
@@ -35,9 +35,27 @@ function DraftsSidebar({
   onPrintPdf,
   onDeleteFinalized,
   onOpenSettings,
-  confirm
+  confirm,
+  isCurrentEmpty
 }) {
   const [version, setVersion] = useState('')
+  // Garda per rand: un dublu-clic rapid pe stergere nu trebuie sa porneasca
+  // doua stergeri (si doua dialoguri de confirmare) pentru aceeasi fisa.
+  const busyRef = useRef(new Set())
+  const [, setBusyTick] = useState(0)
+  async function handleDeleteFinalized(file) {
+    if (busyRef.current.has(file)) return
+    busyRef.current.add(file)
+    setBusyTick((n) => n + 1)
+    try {
+      await onDeleteFinalized(file)
+    } catch {
+      // lista ramane neschimbata; App afiseaza eroarea
+    } finally {
+      busyRef.current.delete(file)
+      setBusyTick((n) => n + 1)
+    }
+  }
   useEffect(() => {
     Promise.resolve(window.serviceAuto.app.getVersion?.())
       .then((res) => res?.ok && setVersion(res.data))
@@ -98,7 +116,7 @@ function DraftsSidebar({
                     // misclick nu trebuie sa poata rade continut real
                     // fara nicio sansa de a te razgandi.
                     if (
-                      !isFisaEmpty(d) &&
+                      !(d.id === currentId && isCurrentEmpty ? isCurrentEmpty() : isFisaEmpty(d)) &&
                       !(await confirm('Ștergi definitiv această fișă în lucru? Conținutul introdus se pierde.', {
                         confirmLabel: 'Șterge'
                       }))
@@ -129,6 +147,7 @@ function DraftsSidebar({
                 </span>
                 <span>
                   {f.client?.nume || 'Fără nume'} · {formatData(f.data)}
+                  {f.nr && <span className="fisa-nr">#{f.nr}</span>}
                 </span>
               </div>
               <div className="recent-actions">
@@ -149,9 +168,10 @@ function DraftsSidebar({
                 <button
                   type="button"
                   className="danger-hover"
-                  title="Șterge definitiv"
-                  aria-label="Șterge definitiv"
-                  onClick={() => onDeleteFinalized(f._file)}
+                  title="Șterge (mută în coș)"
+                  aria-label="Șterge fișa finalizată"
+                  disabled={busyRef.current.has(f._file)}
+                  onClick={() => handleDeleteFinalized(f._file)}
                 >
                   <Icon name="trash" size={14} />
                 </button>

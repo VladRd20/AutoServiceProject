@@ -24,7 +24,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Nicio versiune nu se publica daca testele de siguranta a datelor pica.
+      - name: Lint + test
+        run: npm run lint && npm test
+
       - name: Build and publish (electron-builder -> GitHub Releases)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run release
+
+      # Notele publicului (GitHub Release + banner de actualizare) vin din aceeasi lista
+      # "Ce e nou" pe care o vede utilizatorul - fara detalii tehnice.
+      - name: Release notes from "Ce e nou"
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/release-notes.js "${GITHUB_REF_NAME#v}" > notes.md
+          gh release edit "$GITHUB_REF_NAME" --notes-file notes.md

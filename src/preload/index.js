@@ -17,16 +17,20 @@ const api = {
     loadDraft: (id) => ipcRenderer.invoke('fisa:loadDraft', id),
     listDrafts: () => ipcRenderer.invoke('fisa:listDrafts'),
     deleteDraft: (id) => ipcRenderer.invoke('fisa:deleteDraft', id),
-    validate: (fisa) => ipcRenderer.invoke('fisa:validate', fisa),
     finalize: (fisa) => ipcRenderer.invoke('fisa:finalize', fisa),
     retryPdf: (payload) => ipcRenderer.invoke('fisa:retryPdf', payload),
     deleteFinalizata: (fileName) => ipcRenderer.invoke('fisa:deleteFinalizata', fileName),
-    search: (query) => ipcRenderer.invoke('fisa:search', query),
+    search: (query, range) => ipcRenderer.invoke('fisa:search', query, range),
     listRecent: (limit) => ipcRenderer.invoke('fisa:listRecent', limit),
     getAutocompleteData: () => ipcRenderer.invoke('fisa:getAutocompleteData'),
     getVehicleHistory: (vin, nrInmatriculare) =>
       ipcRenderer.invoke('fisa:getVehicleHistory', vin, nrInmatriculare),
-    getRapoarte: (period) => ipcRenderer.invoke('fisa:getRapoarte', period)
+    getRapoarte: (period, range) => ipcRenderer.invoke('fisa:getRapoarte', period, range),
+    exportCsv: (period, range) => ipcRenderer.invoke('fisa:exportCsv', period, range)
+  },
+  trash: {
+    list: () => ipcRenderer.invoke('trash:list'),
+    restore: (trashId) => ipcRenderer.invoke('trash:restore', trashId)
   },
   fise: {
     openFolder: () => ipcRenderer.invoke('fise:openFolder'),
@@ -42,11 +46,19 @@ const api = {
     changeDataPath: (newPath) => ipcRenderer.invoke('settings:changeDataPath', newPath)
   },
   backup: {
-    now: () => ipcRenderer.invoke('backup:now')
+    now: () => ipcRenderer.invoke('backup:now'),
+    status: () => ipcRenderer.invoke('backup:status'),
+    export: () => ipcRenderer.invoke('backup:export'),
+    // source: 'dialog' | 'latest'
+    import: (source) => ipcRenderer.invoke('backup:import', source)
   },
   app: {
+    getWhatsNew: (mode) => ipcRenderer.invoke('app:getWhatsNew', mode),
+    markWhatsNewSeen: () => ipcRenderer.invoke('app:markWhatsNewSeen'),
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     exportLogs: () => ipcRenderer.invoke('app:exportLogs'),
+    getAutoUpdate: () => ipcRenderer.invoke('app:getAutoUpdate'),
+    setAutoUpdate: (enabled) => ipcRenderer.invoke('app:setAutoUpdate', enabled),
     checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
     downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
     installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
@@ -55,6 +67,14 @@ const api = {
       ipcRenderer.on('update:event', listener)
       return () => ipcRenderer.removeListener('update:event', listener)
     },
+    // Main cere salvarea imediata a draftului (inchidere fereastra / instalare
+    // update); renderer-ul confirma cu flushDone(id) dupa ce a terminat.
+    onFlushRequest: (callback) => {
+      const listener = (_e, id) => callback(id)
+      ipcRenderer.on('app:flush', listener)
+      return () => ipcRenderer.removeListener('app:flush', listener)
+    },
+    flushDone: (id) => ipcRenderer.send('app:flushDone', id),
     onFatalError: (callback) => {
       const listener = (_e, payload) => callback(payload)
       ipcRenderer.on('app:fatalError', listener)
