@@ -89,3 +89,14 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.update-status.update-success { color: var(--success, #16a34a); }
+.update-status.update-error { color: var(--danger, #dc2626); }
+.update-status.update-accent { color: var(--accent); font-weight: 600; }

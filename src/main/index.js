@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, dialog } from 'electron'
+import { app, shell, BrowserWindow, dialog, nativeTheme } from 'electron'
 import path from 'path'
 import { is } from '@electron-toolkit/utils'
 import log, { setMainWindow } from './logger'
@@ -20,6 +20,16 @@ function createWindow() {
     minHeight: 650,
     show: false,
     autoHideMenuBar: true,
+    // Bara de titlu proprie (in aplicatie, in tema ei); Windows deseneaza doar butoanele
+    // ferestrei (overlay). Culorile initiale urmeaza tema sistemului; aplicatia le
+    // ajusteaza imediat dupa incarcare (TitleBar.jsx) si la schimbarea temei.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: nativeTheme.shouldUseDarkColors ? '#101216' : '#1f2430',
+      symbolColor: '#e5e7eb',
+      height: 36
+    },
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#101216' : '#1f2430',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: true,

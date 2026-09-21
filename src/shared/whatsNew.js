@@ -13,6 +13,17 @@
 
 export const WHATS_NEW = [
   {
+    version: '0.7.1',
+    date: '2026-09-21',
+    titlu: 'Actualizări mai simple, aspect mai unitar',
+    items: [
+      { tip: 'nou', text: 'Aplicația caută singură versiuni noi, la câteva minute, și te anunță printr-un banner când găsește una. Nu mai trebuie să cauți tu manual.' },
+      { tip: 'imbunatatit', text: 'Verificarea manuală a actualizărilor s-a mutat în Setări → Actualizări, unde vezi și versiunea curentă. În bara de sus apare un buton doar când există o actualizare de instalat.' },
+      { tip: 'imbunatatit', text: 'Bara ferestrei are acum aceeași temă ca aplicația, în modul deschis și în cel închis.' },
+      { tip: 'imbunatatit', text: 'Numărul de înmatriculare are un câmp propriu, cu drapelul Moldovei, în formatul ABC 123.' }
+    ]
+  },
+  {
     version: '0.7.0',
     date: '2026-09-20',
     titlu: 'Mai sigur, mai ușor de folosit',

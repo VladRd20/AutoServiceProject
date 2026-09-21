@@ -248,9 +248,46 @@ button,
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
+/* Pagina = bara de titlu proprie (36px) + restul aplicatiei */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+.titlebar {
+  flex: none;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  padding-right: 150px; /* loc pentru butoanele ferestrei (overlay-ul Windows) */
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  -webkit-app-region: drag; /* fereastra se trage de bara; dublu-clic = maximizeaza */
+  user-select: none;
+  transition: none;
+}
+
+.titlebar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--sidebar-text-muted);
+}
+
 .app {
   display: flex;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
 }
 
 .sidebar {
@@ -1138,7 +1175,8 @@ textarea:focus-visible,
 }
 
 .crash-screen {
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1151,7 +1189,8 @@ textarea:focus-visible,
 }
 
 .activation-screen {
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;

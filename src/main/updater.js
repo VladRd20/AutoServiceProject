@@ -2,12 +2,19 @@ import { autoUpdater } from 'electron-updater'
 import log from './logger'
 import { flushEverything } from './lifecycle'
 import { getAutoUpdate, setAutoUpdate } from './appConfig'
+import { createUpdatePoller } from './updatePoller'
 
 autoUpdater.logger = log
-// Nu descarcam automat - cerem intai acordul utilizatorului printr-un dialog,
-// dupa ce gasim o versiune mai noua.
+// Nu descarcam automat (decat daca utilizatorul a bifat "Actualizari automate" in
+// Setari): cerem intai acordul, printr-un banner in aplicatie, cand gasim o versiune noua.
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
+
+let mainWindowRef = null
+let checking = false
+let checkIsManual = false
+let downloading = false
+let downloaded = false
 
 // Preferinta "actualizari automate": cand e pornita, o versiune noua se descarca
 // singura, in fundal, si se instaleaza la urmatoarea INCHIDERE a aplicatiei
@@ -24,14 +31,36 @@ export function setAutoUpdateEnabled(enabled) {
   if (enabled) checkForUpdatesSafe()
 }
 
-let mainWindowRef = null
-let checking = false
-let downloading = false
-let downloaded = false
-
+// Toate evenimentele poarta `manual`: interfata arata "Se verifica..." / "Esti la zi" /
+// erori DOAR pentru verificarile cerute de utilizator; cele periodice sunt silentioase
+// si apar in UI doar cand gasesc ceva (banner "Versiune noua").
 function sendStatus(type, data) {
   if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-    mainWindowRef.webContents.send('update:event', { type, ...data })
+    mainWindowRef.webContents.send('update:event', { type, manual: checkIsManual, ...data })
+  }
+}
+
+// Verificarea periodica: la 10 min (+/- 1 min), cu backoff la esec, cu verificare
+// imediata la revenirea pe fereastra (max o data la 5 min) si oprita cand exista deja
+// o versiune noua. Vezi updatePoller.js.
+const poller = createUpdatePoller({
+  check: () => runCheck(false)
+})
+
+// Intoarce true = verificarea s-a putut face (chiar daca nu exista nimic nou).
+async function runCheck(manual) {
+  if (checking || downloading || downloaded) return true
+  checking = true
+  checkIsManual = manual
+  try {
+    await autoUpdater.checkForUpdates()
+    return true
+  } catch (err) {
+    log.warn('[updater] checkForUpdates esuat (ignorat)', err)
+    if (manual) sendStatus('error', { message: err?.message })
+    return false
+  } finally {
+    checking = false
   }
 }
 
@@ -43,7 +72,8 @@ export function initUpdater(mainWindow) {
 
   autoUpdater.on('error', (err) => {
     log.warn('[updater] verificare/descarcare update esuata (ignorat, aplicatia continua normal)', err)
-    sendStatus('error', { message: err?.message })
+    // erorile verificarilor periodice nu se arata; cele de la descarcare si cele cerute manual, da
+    if (checkIsManual || downloading) sendStatus('error', { message: err?.message })
   })
 
   autoUpdater.on('checking-for-update', () => sendStatus('checking'))
@@ -52,8 +82,8 @@ export function initUpdater(mainWindow) {
 
   autoUpdater.on('update-available', (info) => {
     log.info(`[updater] versiune noua disponibila: ${info.version}`)
-    // Anuntat doar prin banner-ul din UI (stilizat, cu buton propriu) - un
-    // dialog nativ Windows aici arata neplacut si nu poate fi personalizat.
+    poller.pause() // am gasit-o - nu mai intrebam pana o instaleaza
+    // Anuntat prin banner-ul din UI (stilizat, cu buton propriu), nu printr-un dialog nativ.
     const notes = typeof info.releaseNotes === 'string' ? info.releaseNotes.replace(/<[^>]*>/g, '').trim().slice(0, 600) : ''
     sendStatus('available', { version: info.version, notes })
   })
@@ -67,25 +97,21 @@ export function initUpdater(mainWindow) {
     log.info(`[updater] update ${info.version} descarcat, se ofera restart`)
     downloading = false
     downloaded = true
-    // La fel - doar banner-ul din UI, cu butonul lui "Reporneste acum".
+    poller.pause()
     sendStatus('downloaded', { version: info.version })
   })
 
-  checkForUpdatesSafe()
+  // Prima verificare la pornire (tacuta), apoi periodic.
+  runCheck(false).finally(() => poller.start({ initialCheckDone: true }))
+
+  // Revenirea pe fereastra dupa o pauza lunga = moment bun pentru o verificare
+  // (fara sa depaseasca frecventa: maxim o data la 5 min).
+  mainWindow.on('focus', () => poller.nudge())
 }
 
-export function checkForUpdatesSafe() {
-  if (checking) return
-  checking = true
-  autoUpdater
-    .checkForUpdates()
-    .catch((err) => {
-      log.warn('[updater] checkForUpdates esuat (ignorat)', err)
-      sendStatus('error', { message: err?.message })
-    })
-    .finally(() => {
-      checking = false
-    })
+// Verificarea ceruta de utilizator (buton din Setari): da feedback in UI.
+export function checkForUpdatesSafe(manual = false) {
+  runCheck(manual).catch(() => {})
 }
 
 // Declansata din butonul "Descarca" al banner-ului din UI - idempotenta,
@@ -98,6 +124,7 @@ export function downloadUpdateNow() {
     downloading = false
     log.warn('[updater] downloadUpdate esuat', err)
     sendStatus('error', { message: err?.message })
+    poller.resume() // descarcarea a esuat: reluam verificarile periodice
   })
 }
 

@@ -60,3 +60,14 @@
   background: #1e3a5f;
   color: #dbeafe;
 }
+
+/* Punct de notificare pe "Setari" cand exista o actualizare */
+.update-dot {
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px var(--sidebar-bg);
+  flex: none;
+}

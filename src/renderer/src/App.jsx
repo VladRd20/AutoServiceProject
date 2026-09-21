@@ -181,7 +181,6 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
     })
   )
   const showToastRef = useRef(null)
-  const manualUpdateCheckRef = useRef(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchRange, setSearchRange] = useState({ from: '', to: '' })
@@ -510,8 +509,10 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // ca exista o actualizare disponibila, nu doar un toast care dispare.
   useEffect(() => {
     const unsubscribe = window.serviceAuto.app.onUpdateEvent((evt) => {
+      // Verificarile periodice (la ~10 min) sunt silentioase: "Se verifica..." apare doar
+      // pentru verificarea ceruta de utilizator (buton din Setari).
       if (evt.type === 'checking') {
-        setCheckingUpdates(true)
+        if (evt.manual) setCheckingUpdates(true)
         return
       }
       setCheckingUpdates(false)
@@ -526,17 +527,21 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
         setUpdateInfo({ status: 'downloaded', version: evt.version })
       }
 
-      if (!manualUpdateCheckRef.current) return
-      manualUpdateCheckRef.current = false
+      // O eroare in timpul DESCARCARII se arata mereu (utilizatorul a cerut descarcarea).
+      if (evt.type === 'error' && !evt.manual) {
+        setUpdateInfo((info) => (info.status === 'downloading' ? { ...info, status: 'available' } : info))
+        showToast('error', 'Descărcarea actualizării a eșuat. O poți reîncerca din banner sau din Setări.')
+        return
+      }
 
-      // Doar starea butonului "Verifica actualizari" - fara toast in plus,
-      // ar duplica exact acelasi mesaj de doua ori pe ecran.
+      // Rezultatul verificarii cerute de utilizator (starea butonului din Setari).
+      if (!evt.manual) return
       if (evt.type === 'not-available') {
         setUpdateFlash('no-update')
-        setTimeout(() => setUpdateFlash(null), 3000)
+        setTimeout(() => setUpdateFlash(null), 4000)
       } else if (evt.type === 'error') {
         setUpdateFlash('error')
-        setTimeout(() => setUpdateFlash(null), 3000)
+        setTimeout(() => setUpdateFlash(null), 4000)
       }
     })
     return unsubscribe
@@ -558,7 +563,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   }
 
   function handleCheckForUpdates() {
-    manualUpdateCheckRef.current = true
+    setCheckingUpdates(true)
     window.serviceAuto.app.checkForUpdates()
   }
 
@@ -941,7 +946,11 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   const fisaGoala = isFisaEmpty(fisa)
   const savedTime = savedAt ? savedAt.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }) : ''
   const backupChip = getBackupChip(backupStatus)
-  const showUpdatePill = Boolean(updateBtn.variant)
+  // Butonul din bara de sus apare DOAR cand exista ceva de facut (versiune noua / descarcare /
+  // gata de instalat) si face exact actiunea potrivita; verificarea manuala e in Setari.
+  const updateActionable = ['available', 'downloading', 'downloaded'].includes(updateInfo.status)
+  const showUpdatePill = updateActionable
+  const onUpdatePillClick = updateInfo.status === 'downloaded' ? handleInstallUpdate : handleDownloadUpdate
 
   return (
     <div className="app">
@@ -959,6 +968,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
         onOpenSettings={handleOpenSettings}
         confirm={confirmAction}
         isCurrentEmpty={isCurrentEmpty}
+        updateBadge={updateActionable}
       />
 
       <main className="main">
@@ -1047,10 +1057,10 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
               <button
                 type="button"
                 className={`btn-sm btn-status-${updateBtn.variant}`}
-                disabled={checkingUpdates || updateInfo.status === 'downloading'}
-                onClick={handleCheckForUpdates}
+                disabled={updateInfo.status === 'downloading'}
+                onClick={onUpdatePillClick}
               >
-                <Icon name={updateInfo.status === 'downloading' || checkingUpdates ? 'loader' : 'refresh'} />
+                <Icon name={updateInfo.status === 'downloading' ? 'loader' : 'download'} />
                 {updateBtn.text}
               </button>
             )}
@@ -1059,12 +1069,6 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
                 { label: 'Rapoarte', icon: 'chart', onClick: () => setReportsOpen(true) },
                 { label: 'Ce e nou', icon: 'info', onClick: openWhatsNew },
                 { label: 'Deschide folderul cu fișe', icon: 'folder', onClick: handleOpenFolder },
-                {
-                  label: updateBtn.variant ? 'Verifică actualizări' : updateBtn.text,
-                  icon: 'refresh',
-                  disabled: checkingUpdates || updateInfo.status === 'downloading',
-                  onClick: handleCheckForUpdates
-                },
                 {
                   label: exportingLogs ? 'Se exportă...' : 'Exportă loguri',
                   icon: 'download',
@@ -1192,6 +1196,16 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           showToast={showToast}
           confirm={confirmAction}
           onDataChanged={onDataChanged}
+          update={{
+            status: updateInfo.status,
+            version: updateInfo.version,
+            text: updateBtn.text,
+            variant: updateBtn.variant,
+            checking: checkingUpdates,
+            onCheck: handleCheckForUpdates,
+            onDownload: handleDownloadUpdate,
+            onInstall: handleInstallUpdate
+          }}
           firstRun={firstRunOpen}
           readOnly={readOnly}
         />

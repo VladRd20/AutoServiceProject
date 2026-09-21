@@ -124,6 +124,8 @@ async function ensurePdf(baseName) {
 
 const baseNameOf = (fileName) => String(fileName || '').replace(/\.json$/, '')
 
+export const TITLEBAR_HEIGHT = 36
+
 const stamp = () => new Date().toISOString().slice(0, 10)
 
 export function registerIpcHandlers() {
@@ -376,6 +378,20 @@ export function registerIpcHandlers() {
     }, 'exportLogs')
   )
 
+  // Culorile butoanelor ferestrei (minimizare/maximizare/inchidere), desenate de Windows
+  // peste bara de titlu proprie: urmaresc tema aplicatiei. Doar culori CSS simple.
+  ipcMain.handle('app:setTitleBarColors', (e, colors) =>
+    wrap(() => {
+      const ok = (v) => typeof v === 'string' && /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%/]+\)|hsla?\([\d\s.,%/deg]+\))$/i.test(v.trim())
+      if (!ok(colors?.color) || !ok(colors?.symbolColor)) return false
+      const win = BrowserWindow.fromWebContents(e.sender)
+      if (win && !win.isDestroyed() && typeof win.setTitleBarOverlay === 'function') {
+        win.setTitleBarOverlay({ color: colors.color.trim(), symbolColor: colors.symbolColor.trim(), height: TITLEBAR_HEIGHT })
+      }
+      return true
+    }, 'setTitleBarColors')
+  )
+
   ipcMain.handle('app:getAutoUpdate', () => wrap(() => isAutoUpdateEnabled(), 'getAutoUpdate'))
   ipcMain.handle('app:setAutoUpdate', (e, enabled) =>
     wrap(() => {
@@ -386,7 +402,7 @@ export function registerIpcHandlers() {
 
   ipcMain.handle('app:checkForUpdates', () =>
     wrap(async () => {
-      checkForUpdatesSafe()
+      checkForUpdatesSafe(true) // cerut de utilizator: se afiseaza rezultatul in UI
       return true
     }, 'checkForUpdates')
   )

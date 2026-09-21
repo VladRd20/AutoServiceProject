@@ -4,7 +4,7 @@ import BackupPanel from './BackupPanel'
 import TrashPanel from './TrashPanel'
 import './settings-extra.css'
 
-export default function SettingsModal({ onClose, showToast, confirm, firstRun = false, readOnly = false, onDataChanged }) {
+export default function SettingsModal({ onClose, showToast, confirm, firstRun = false, readOnly = false, onDataChanged, update }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [settings, setSettings] = useState({ numeService: '', adresa: '', telefon: '', cui: '' })
@@ -248,6 +248,33 @@ export default function SettingsModal({ onClose, showToast, confirm, firstRun = 
 
           <div className="settings-section">
             <h3>Actualizări</h3>
+            {update && (
+              <div className="update-row">
+                <div>
+                  <div>
+                    Versiunea curentă: <strong>{appVersion ? `v${appVersion}` : '…'}</strong>
+                  </div>
+                  <div className={`hint update-status${update.variant ? ` update-${update.variant}` : ''}`} aria-live="polite">
+                    {update.status === 'idle' && !update.variant
+                      ? 'Aplicația verifică singură, periodic, dacă există o versiune nouă.'
+                      : update.text}
+                  </div>
+                </div>
+                {update.status === 'available' ? (
+                  <button type="button" className="btn-primary" onClick={update.onDownload}>
+                    Descarcă v{update.version}
+                  </button>
+                ) : update.status === 'downloaded' ? (
+                  <button type="button" className="btn-primary" onClick={update.onInstall}>
+                    Repornește și instalează
+                  </button>
+                ) : (
+                  <button type="button" disabled={update.checking || update.status === 'downloading'} onClick={update.onCheck}>
+                    {update.checking ? 'Se verifică...' : 'Verifică acum'}
+                  </button>
+                )}
+              </div>
+            )}
             <label className="switch" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <input type="checkbox" checked={autoUpdate} disabled={autoUpdateBusy} onChange={handleToggleAutoUpdate} />
               <span className="switch-track" aria-hidden="true" />

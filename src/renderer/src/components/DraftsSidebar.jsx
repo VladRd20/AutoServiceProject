@@ -36,7 +36,8 @@ function DraftsSidebar({
   onDeleteFinalized,
   onOpenSettings,
   confirm,
-  isCurrentEmpty
+  isCurrentEmpty,
+  updateBadge = false
 }) {
   const [version, setVersion] = useState('')
   // Garda per rand: un dublu-clic rapid pe stergere nu trebuie sa porneasca
@@ -183,6 +184,7 @@ function DraftsSidebar({
 
       <button type="button" className="sidebar-settings-btn" onClick={onOpenSettings}>
         <Icon name="settings" /> Setări
+        {updateBadge && <span className="update-dot" title="Actualizare disponibilă" aria-label="Actualizare disponibilă" />}
         {version && <span className="version">v{version}</span>}
       </button>
     </aside>

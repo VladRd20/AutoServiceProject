@@ -57,6 +57,7 @@ const api = {
     markWhatsNewSeen: () => ipcRenderer.invoke('app:markWhatsNewSeen'),
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     exportLogs: () => ipcRenderer.invoke('app:exportLogs'),
+    setTitleBarColors: (colors) => ipcRenderer.invoke('app:setTitleBarColors', colors),
     getAutoUpdate: () => ipcRenderer.invoke('app:getAutoUpdate'),
     setAutoUpdate: (enabled) => ipcRenderer.invoke('app:setAutoUpdate', enabled),
     checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
