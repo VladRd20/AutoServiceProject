@@ -8,7 +8,7 @@
 // Truncarea de aici e doar plasa de siguranta: la finalizare, validateFisa()
 // (shared/calculations.js) ruleaza pe fisa BRUTA si respinge textele/listele
 // prea lungi cu un mesaj clar, ca nimic sa nu fie taiat in tacere.
-import { LIMITS, PLATA_STATUS, PLATA_METODE } from '../shared/calculations'
+import { LIMITS, PLATA_STATUS, PLATA_METODE, COMBUSTIBILI } from '../shared/calculations'
 import { SCHEMA_VERSION } from '../shared/schema'
 
 const str = (v, max = LIMITS.text) =>
@@ -18,12 +18,13 @@ const str = (v, max = LIMITS.text) =>
 // scurt, nimic altceva (obiecte, array-uri, functii).
 const scalar = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : str(v, 32))
 
-function lines(list, priceKey) {
+function lines(list, priceKey, withCod = false) {
   if (!Array.isArray(list)) return []
   return list.slice(0, LIMITS.linii).map((it) => ({
     id: str(it?.id, 64),
     denumire: str(it?.denumire),
     cantitate: scalar(it?.cantitate),
+    ...(withCod ? { cod: str(it?.cod, LIMITS.cod) } : {}),
     [priceKey]: scalar(it?.[priceKey])
   }))
 }
@@ -45,14 +46,17 @@ export function sanitizeFisa(fisa) {
       marca: str(f.auto?.marca, LIMITS.marca),
       model: str(f.auto?.model, LIMITS.marca),
       vin: str(f.auto?.vin, LIMITS.vin),
-      an: scalar(f.auto?.an)
+      an: scalar(f.auto?.an),
+      capacitate: scalar(f.auto?.capacitate),
+      combustibil: oneOf(f.auto?.combustibil, COMBUSTIBILI)
     },
     km: scalar(f.km),
     observatii: str(f.observatii, LIMITS.observatii),
+    observatiiPrint: Boolean(f.observatiiPrint),
     plata: { status: oneOf(f.plata?.status, PLATA_STATUS), metoda: oneOf(f.plata?.metoda, PLATA_METODE) },
     data: str(f.data, 40),
     dataCurenta: Boolean(f.dataCurenta),
-    piese: lines(f.piese, 'pretUnitar'),
+    piese: lines(f.piese, 'pretUnitar', true),
     lucrari: lines(f.lucrari, 'pret')
   }
   if (f.reducerePiesePercent !== undefined) out.reducerePiesePercent = scalar(f.reducerePiesePercent)

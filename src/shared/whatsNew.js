@@ -13,6 +13,16 @@
 
 export const WHATS_NEW = [
   {
+    version: '0.8.0',
+    date: '2026-09-27',
+    titlu: 'Mai multe detalii pe fișă',
+    items: [
+      { tip: 'nou', text: 'La datele mașinii poți introduce capacitatea cilindrică și tipul combustibilului (diesel sau benzină). Apar și pe fișa printată.' },
+      { tip: 'nou', text: 'Casetă de note la fiecare fișă. Alegi tu dacă notele apar la printare sau rămân doar în program.' },
+      { tip: 'nou', text: 'La piese poți introduce codul piesei. Rămâne doar în program, ca să știi ce piese s-au folosit, și nu se printează pentru client.' }
+    ]
+  },
+  {
     version: '0.7.1',
     date: '2026-09-21',
     titlu: 'Actualizări mai simple, aspect mai unitar',

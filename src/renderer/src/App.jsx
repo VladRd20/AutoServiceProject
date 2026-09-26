@@ -59,9 +59,10 @@ function emptyFisa() {
   return {
     id: null,
     client: { nume: '', telefon: '', cui: '' },
-    auto: { nrInmatriculare: '', marca: '', model: '', vin: '', an: '' },
+    auto: { nrInmatriculare: '', marca: '', model: '', vin: '', an: '', capacitate: '', combustibil: '' },
     km: '',
     observatii: '',
+    observatiiPrint: false,
     plata: { status: '', metoda: '' },
     data: todayISO(),
     dataCurenta: true,
@@ -80,6 +81,9 @@ function withNewFieldDefaults(f) {
     client.cui !== undefined &&
     f.km !== undefined &&
     f.observatii !== undefined &&
+    f.observatiiPrint !== undefined &&
+    f.auto?.capacitate !== undefined &&
+    f.auto?.combustibil !== undefined &&
     f.plata &&
     plata.status !== undefined &&
     plata.metoda !== undefined
@@ -91,6 +95,8 @@ function withNewFieldDefaults(f) {
     client: { ...client, cui: client.cui ?? '' },
     km: f.km ?? '',
     observatii: f.observatii ?? '',
+    observatiiPrint: f.observatiiPrint ?? false,
+    auto: { ...(f.auto || {}), capacitate: f.auto?.capacitate ?? '', combustibil: f.auto?.combustibil ?? '' },
     plata: { ...plata, status: plata.status ?? '', metoda: plata.metoda ?? '' }
   }
 }
@@ -1094,6 +1100,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           items={fisa.piese}
           onChange={handlePieseChange}
           priceKey="pretUnitar"
+          codKey="cod"
           priceLabel="Preț unitar"
           errorPrefix="piese"
           errors={errors}

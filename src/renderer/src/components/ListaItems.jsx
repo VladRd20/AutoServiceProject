@@ -19,7 +19,7 @@ export function newItemId() {
 // handlePieseChange/handleLucrariChange) - fara alte props instabile,
 // comparatia shallow a memo() evita re-randarea listei de piese la fiecare
 // litera tastata in campurile de client/auto, sau in lista de lucrari.
-function ListaItems({ titlu, singular, items, onChange, priceKey, priceLabel, errorPrefix, errors, suggestions, confirm }) {
+function ListaItems({ titlu, singular, items, onChange, priceKey, codKey, priceLabel, errorPrefix, errors, suggestions, confirm }) {
   // Referinta stabila intre randari (cat timp `suggestions` nu s-a schimbat
   // efectiv) - altfel Autocomplete.jsx primeste un array nou la fiecare
   // randare si memo-ul lui pe `options` nu prinde niciodata cache.
@@ -63,7 +63,7 @@ function ListaItems({ titlu, singular, items, onChange, priceKey, priceLabel, er
     if (items.length >= MAX_LINII) return
     const id = newItemId()
     focusIdRef.current = id
-    onChange([...items, { id, denumire: '', cantitate: 1, [priceKey]: 0 }])
+    onChange([...items, { id, denumire: '', ...(codKey ? { [codKey]: '' } : {}), cantitate: 1, [priceKey]: 0 }])
   }
 
   async function removeItem(id) {
@@ -117,6 +117,7 @@ function ListaItems({ titlu, singular, items, onChange, priceKey, priceLabel, er
       ) : (
         <div className="linie linie-head" aria-hidden="true">
           <span className="field-grow">Denumire</span>
+          {codKey && <span className="field-cod" title="Doar intern, nu se printează">Cod (intern)</span>}
           <span className="field-small">Cant.</span>
           <span className="field-small">{priceLabel}</span>
           <span className="linie-total">Total</span>
@@ -143,6 +144,20 @@ function ListaItems({ titlu, singular, items, onChange, priceKey, priceLabel, er
               <LengthCounter value={item.denumire} max={200} />
               {err('denumire') && <span className="field-error">{err('denumire')}</span>}
             </div>
+            {codKey && (
+              <div className="field field-cod">
+                <input
+                  type="text"
+                  placeholder="Cod piesă"
+                  aria-label="Cod piesă (intern, nu se printează)"
+                  title="Doar intern, nu se printează"
+                  maxLength={64}
+                  value={item[codKey] ?? ''}
+                  onChange={(e) => updateItem(item.id, { [codKey]: e.target.value })}
+                />
+                {err('cod') && <span className="field-error">{err('cod')}</span>}
+              </div>
+            )}
             <div className="field field-small">
               <input
                 type="text"

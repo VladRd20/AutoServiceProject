@@ -42,3 +42,18 @@
 .field-full {
   grid-column: 1 / -1;
 }
+
+/* Cod piesa (intern) in lista de piese. */
+.field-cod {
+  width: 130px;
+  flex-shrink: 0;
+}
+
+/* Comutatorul de sub caseta de note nu trebuie sa se lipeasca de textarea. */
+.field + .switch {
+  margin-top: 10px;
+}
+.field textarea {
+  display: block;
+  margin-bottom: 2px;
+}

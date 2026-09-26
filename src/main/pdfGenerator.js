@@ -161,6 +161,14 @@ function buildDocDefinition(fisa, settings) {
         { text: `Model: ${fisa.auto?.model || '-'}` }
       ]
     },
+    fisa.auto?.capacitate || fisa.auto?.combustibil
+      ? {
+          columns: [
+            { text: `Capacitate cilindrică: ${fisa.auto?.capacitate ? `${fisa.auto.capacitate} cmc` : '-'}` },
+            { text: `Combustibil: ${{ diesel: 'Diesel', benzina: 'Benzină' }[fisa.auto?.combustibil] || '-'}` }
+          ]
+        }
+      : null,
     { text: `VIN: ${fisa.auto?.vin || '-'}`, margin: [0, 0, 0, 10] },
 
     { text: 'Piese', style: 'sectiune' },
@@ -210,10 +218,10 @@ function buildDocDefinition(fisa, settings) {
           margin: [0, 2, 0, 0]
         }
       : null,
-    fisa.observatii?.trim()
+    fisa.observatiiPrint && fisa.observatii?.trim()
       ? { text: 'Observații', style: 'sectiune', margin: [0, 14, 0, 2] }
       : null,
-    fisa.observatii?.trim() ? { text: fisa.observatii.trim() } : null,
+    fisa.observatiiPrint && fisa.observatii?.trim() ? { text: fisa.observatii.trim() } : null,
 
     {
       unbreakable: true,

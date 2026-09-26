@@ -86,6 +86,24 @@ function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }
             Data curentă
           </label>
         </div>
+        <Field label="Note (opțional)" error={errors['observatii']}>
+          <textarea
+            rows={3}
+            maxLength={2000}
+            placeholder="Note despre intervenție"
+            value={fisa.observatii ?? ''}
+            onChange={(e) => onChange({ ...fisa, observatii: e.target.value })}
+          />
+        </Field>
+        <label className="switch" title="Dacă nu e bifat, notele rămân doar în program">
+          <input
+            type="checkbox"
+            checked={Boolean(fisa.observatiiPrint)}
+            onChange={(e) => onChange({ ...fisa, observatiiPrint: e.target.checked })}
+          />
+          <span className="switch-track" aria-hidden="true" />
+          Afișează notele la printare
+        </label>
         {fisa.dataCurenta && <p className="hint">La finalizare se va folosi data și ora curentă.</p>}
         {!fisa.dataCurenta && (
           <div className="grid-2">
@@ -162,6 +180,23 @@ function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }
               value={fisa.km ?? ''}
               onChange={(e) => onChange({ ...fisa, km: e.target.value })}
             />
+          </Field>
+          <Field label="Capacitate cilindrică (cmc)" error={errors['auto.capacitate']}>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={5}
+              placeholder="1600"
+              value={fisa.auto.capacitate ?? ''}
+              onChange={(e) => setAuto({ capacitate: e.target.value.replace(/\D/g, '') })}
+            />
+          </Field>
+          <Field label="Combustibil" error={errors['auto.combustibil']}>
+            <select value={fisa.auto.combustibil ?? ''} onChange={(e) => setAuto({ combustibil: e.target.value })}>
+              <option value="">—</option>
+              <option value="diesel">Diesel</option>
+              <option value="benzina">Benzină</option>
+            </select>
           </Field>
           <Field className="field-full" label="VIN" error={errors['auto.vin']}>
             <input

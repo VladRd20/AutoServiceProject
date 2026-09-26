@@ -106,11 +106,13 @@ export const LIMITS = {
   vin: 32,
   cui: 32,
   observatii: 2000,
+  cod: 64,
   linii: 300,
   pretMax: 1e9,
   cantitateMax: 1e6
 }
 
+export const COMBUSTIBILI = ['', 'diesel', 'benzina']
 export const PLATA_STATUS = ['', 'achitat', 'neachitat']
 export const PLATA_METODE = ['', 'numerar', 'card', 'transfer']
 
@@ -159,6 +161,14 @@ export function validateFisa(fisa) {
       toNumber(fisa.auto.an) > new Date().getFullYear() + 1)
   )
     errors['auto.an'] = 'An fabricație invalid'
+  if (fisa.auto?.combustibil && !COMBUSTIBILI.includes(fisa.auto.combustibil))
+    errors['auto.combustibil'] = 'Tip combustibil invalid'
+  if (
+    fisa.auto?.capacitate !== '' &&
+    fisa.auto?.capacitate != null &&
+    (numericProblem(fisa.auto.capacitate) || toNumber(fisa.auto.capacitate) <= 0 || toNumber(fisa.auto.capacitate) > 20000)
+  )
+    errors['auto.capacitate'] = 'Capacitate cilindrică invalidă'
   if (fisa.km !== '' && fisa.km != null && (numericProblem(fisa.km) || toNumber(fisa.km) < 0 || toNumber(fisa.km) > 5e6))
     errors['km'] = 'Kilometraj invalid'
 
@@ -179,6 +189,7 @@ export function validateFisa(fisa) {
     list.forEach((it, i) => {
       if (!it?.denumire?.trim()) errors[`${key}.${i}.denumire`] = 'Denumirea este obligatorie'
       else if (tooLong(it.denumire, LIMITS.text)) errors[`${key}.${i}.denumire`] = `Maxim ${LIMITS.text} de caractere`
+      if (key === 'piese' && tooLong(it?.cod, LIMITS.cod)) errors[`${key}.${i}.cod`] = `Maxim ${LIMITS.cod} de caractere`
       if (numericProblem(it?.cantitate) || toNumber(it?.cantitate) <= 0 || toNumber(it?.cantitate) > LIMITS.cantitateMax)
         errors[`${key}.${i}.cantitate`] = 'Cantitate invalidă'
       if (numericProblem(it?.[priceKey]) || toNumber(it?.[priceKey]) < 0 || toNumber(it?.[priceKey]) > LIMITS.pretMax)
