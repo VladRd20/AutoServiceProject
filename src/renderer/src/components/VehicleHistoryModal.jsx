@@ -15,6 +15,8 @@ export default function VehicleHistoryModal({
   onOpenPdf,
   onPrintPdf,
   onDeleteFinalized,
+  onEditRecent,
+  onNewForProfile,
 }) {
   const [loading, setLoading] = useState(true)
   const [results, setResults] = useState([])
@@ -97,6 +99,30 @@ export default function VehicleHistoryModal({
                   <button type="button" onClick={() => onPrintPdf(fisa._file)}>
                     Printează
                   </button>
+                  {onEditRecent && (
+                    <button
+                      type="button"
+                      title="Deschide fișa în program (coduri piese, notițe interne)"
+                      onClick={() => {
+                        onEditRecent(fisa)
+                        onClose()
+                      }}
+                    >
+                      Editează
+                    </button>
+                  )}
+                  {onNewForProfile && (
+                    <button
+                      type="button"
+                      title="Pornește o fișă nouă, goală, cu datele clientului și ale mașinii precompletate"
+                      onClick={() => {
+                        onNewForProfile(fisa)
+                        onClose()
+                      }}
+                    >
+                      Fișă nouă (același profil)
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn-remove"

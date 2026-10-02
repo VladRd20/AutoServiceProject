@@ -18,7 +18,17 @@ function formatData(dataISO) {
 // (parintele ".search-box" din App.jsx e position:relative), nu ca modal
 // generic - Escape si click-in-afara sunt tratate tot in App.jsx, pe acelasi
 // wrapper care contine si input-ul.
-export default function SearchModal({ query, range = { from: '', to: '' }, onRangeChange, onClose, onOpenPdf, onPrintPdf, onDeleteFinalized }) {
+export default function SearchModal({
+  query,
+  range = { from: '', to: '' },
+  onRangeChange,
+  onClose,
+  onOpenPdf,
+  onPrintPdf,
+  onDeleteFinalized,
+  onEditRecent,
+  onNewForProfile
+}) {
   const [results, setResults] = useState(null)
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState('')
@@ -176,6 +186,30 @@ export default function SearchModal({ query, range = { from: '', to: '' }, onRan
                   <button type="button" onClick={() => onPrintPdf(fisa._file)}>
                     Printează
                   </button>
+                  {onEditRecent && (
+                    <button
+                      type="button"
+                      title="Deschide fișa în program (coduri piese, notițe interne)"
+                      onClick={() => {
+                        onEditRecent(fisa)
+                        onClose()
+                      }}
+                    >
+                      Editează
+                    </button>
+                  )}
+                  {onNewForProfile && (
+                    <button
+                      type="button"
+                      title="Pornește o fișă nouă, goală, cu datele clientului și ale mașinii precompletate"
+                      onClick={() => {
+                        onNewForProfile(fisa)
+                        onClose()
+                      }}
+                    >
+                      Fișă nouă (același profil)
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn-remove"

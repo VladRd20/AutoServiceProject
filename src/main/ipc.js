@@ -199,6 +199,26 @@ export function registerIpcHandlers() {
     }, 'retryPdf')
   )
 
+  // Previzualizare/ofertă: genereaza PDF-ul direct din fisa curenta din
+  // formular, fara sa o salveze sau sa o finalizeze - util pentru un calcul
+  // de oferta pe care clientul nu l-a acceptat inca. Scrie intr-un fisier
+  // temporar (nu in folderul de fise), cu nume unic, ca sa nu se suprapuna
+  // cu o alta previzualizare deschisa deja intr-un viewer.
+  ipcMain.handle('fisa:previewPdf', (e, fisa) =>
+    wrapLicensed(async () => {
+      const raw = fisa && typeof fisa === 'object' ? fisa : {}
+      const { _replaceBaseName, ...fisaData } = sanitizeFisa(raw)
+      const pdfPath = path.join(
+        app.getPath('temp'),
+        `ServiceAuto-previzualizare-${process.pid}-${Date.now()}.pdf`
+      )
+      await generatePdf(fisaData, pdfPath)
+      const result = await shell.openPath(pdfPath)
+      if (result) throw new Error(result)
+      return { pdfPath }
+    }, 'previewPdf')
+  )
+
   // ---- stergere (coș) ----
   ipcMain.handle('fisa:deleteFinalizata', (e, fileName) =>
     wrapLicensed(() => deleteFinalizedFisa(fileName), 'deleteFinalizata')

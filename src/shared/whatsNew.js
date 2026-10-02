@@ -13,6 +13,16 @@
 
 export const WHATS_NEW = [
   {
+    version: '0.8.1',
+    date: '2026-10-02',
+    titlu: 'Acces mai rapid la fișele vechi',
+    items: [
+      { tip: 'nou', text: 'Din Căutare și din Istoricul mașinii poți deschide direct în program o fișă veche (cu codurile de piese și notele interne), nu doar PDF-ul ei.' },
+      { tip: 'nou', text: 'Din Căutare și din Istoricul mașinii poți porni o fișă nouă cu datele clientului și ale mașinii precompletate.' },
+      { tip: 'nou', text: 'Poți genera și deschide un PDF de previzualizare (de exemplu pentru o ofertă), fără să finalizezi fișa.' }
+    ]
+  },
+  {
     version: '0.8.0',
     date: '2026-09-27',
     titlu: 'Mai multe detalii pe fișă',

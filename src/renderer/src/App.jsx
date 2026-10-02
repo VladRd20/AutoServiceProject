@@ -142,6 +142,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   const [toasts, setToasts] = useState([])
   const toastIdRef = useRef(0)
   const [releasing, setReleasing] = useState(false)
+  const [previewingPdf, setPreviewingPdf] = useState(false)
   const [pdfRetry, setPdfRetry] = useState(null) // { fisa, baseName }
   const [locationBanner, setLocationBanner] = useState(null) // { override, dir }
   const [firstRunOpen, setFirstRunOpen] = useState(false)
@@ -805,6 +806,24 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
     if (!res.ok) showToast('error', res.error.message)
   }
 
+  // Genereaza si deschide un PDF din fisa curenta a formularului, FARA sa o
+  // finalizeze/salveze - util pentru un calcul/oferta pe care clientul nu a
+  // acceptat-o inca. Nu trece prin validateFisa (o oferta poate fi incompleta
+  // intentionat), dar nu are rost pe o fisa complet goala.
+  async function handlePreviewPdf() {
+    if (isFisaEmpty(fisaRef.current)) {
+      showToast('error', 'Adaugă cel puțin o piesă/lucrare sau datele clientului înainte de previzualizare.')
+      return
+    }
+    setPreviewingPdf(true)
+    try {
+      const res = await window.serviceAuto.fisa.previewPdf(fisaRef.current || fisa)
+      if (!res.ok) showToast('error', res.error.message)
+    } finally {
+      setPreviewingPdf(false)
+    }
+  }
+
   // Main regenereaza PDF-ul din fisa de pe disc - avem nevoie doar de baseName.
   async function handleRetryPdf(baseName) {
     const res = await window.serviceAuto.fisa.retryPdf({ baseName })
@@ -853,6 +872,26 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
         ...rest,
         id: null,
         _replaceBaseName: _file ? _file.replace(/\.json$/, '') : null
+      })
+      autosaver.reset(next, { clean: readOnlyRef.current })
+      setFisa(next)
+      setErrors({})
+      setPdfRetry(null)
+    },
+    [autosaver, flushOrAbort]
+  )
+
+  // Din Cautare/Istoric masina: porneste o fisa noua, goala, cu profilul
+  // (client + auto) precompletat dintr-o fisa veche a aceluiasi client/masina -
+  // spre deosebire de handleEditRecent, NU copiaza piesele/lucrarile vechi si
+  // NU suprascrie fisa veche la finalizare (e o comanda noua, separata).
+  const handleNewFisaForProfile = useCallback(
+    async (sourceFisa) => {
+      if (!(await flushOrAbort())) return
+      const next = normalizeFisa({
+        ...emptyFisa(),
+        client: { ...(sourceFisa?.client || {}) },
+        auto: { ...(sourceFisa?.auto || {}) }
       })
       autosaver.reset(next, { clean: readOnlyRef.current })
       setFisa(next)
@@ -1055,6 +1094,8 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
                   onOpenPdf={handleOpenPdfFromSearch}
                   onPrintPdf={handlePrintPdfFromList}
                   onDeleteFinalized={handleDeleteFinalized}
+                  onEditRecent={handleEditRecent}
+                  onNewForProfile={handleNewFisaForProfile}
                   showToast={showToast}
                 />
               )}
@@ -1170,6 +1211,22 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
             )}
             <button
               type="button"
+              disabled={previewingPdf || fisaGoala}
+              title="Generează și deschide un PDF cu fișa curentă, fără să o finalizezi (util pentru o ofertă)"
+              onClick={handlePreviewPdf}
+            >
+              {previewingPdf ? (
+                <>
+                  <Icon name="loader" className="spin" /> Se generează...
+                </>
+              ) : (
+                <>
+                  <Icon name="file" /> Previzualizează PDF
+                </>
+              )}
+            </button>
+            <button
+              type="button"
               className="btn-primary btn-release"
               disabled={releasing || readOnly}
               title={readOnly ? 'Licență revocată — mod doar-citire' : undefined}
@@ -1230,6 +1287,8 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           onOpenPdf={handleOpenPdfFromSearch}
           onPrintPdf={handlePrintPdfFromList}
           onDeleteFinalized={handleDeleteFinalized}
+          onEditRecent={handleEditRecent}
+          onNewForProfile={handleNewFisaForProfile}
           showToast={showToast}
         />
       )}

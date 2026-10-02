@@ -19,6 +19,7 @@ const api = {
     deleteDraft: (id) => ipcRenderer.invoke('fisa:deleteDraft', id),
     finalize: (fisa) => ipcRenderer.invoke('fisa:finalize', fisa),
     retryPdf: (payload) => ipcRenderer.invoke('fisa:retryPdf', payload),
+    previewPdf: (fisa) => ipcRenderer.invoke('fisa:previewPdf', fisa),
     deleteFinalizata: (fileName) => ipcRenderer.invoke('fisa:deleteFinalizata', fileName),
     search: (query, range) => ipcRenderer.invoke('fisa:search', query, range),
     listRecent: (limit) => ipcRenderer.invoke('fisa:listRecent', limit),
