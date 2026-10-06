@@ -100,6 +100,37 @@ describe('inchidere fereastra', () => {
     expect(await lifecycle.requestRendererFlush()).toBe(false)
   })
 
+  it('nu intra in bucla infinita cand evenimentul "close" nativ soseste asincron fata de apelul w.close()', async () => {
+    // Electron real nu garanteaza ca evenimentul 'close' e emis sincron din
+    // w.close() (poate veni printr-un round-trip OS, pe urmatorul tick).
+    // Garda nu trebuie sa trateze acel 'close' intarziat, declansat chiar de
+    // ea, ca pe o inchidere noua a utilizatorului.
+    const win = new EventEmitter()
+    win.destroyed = false
+    win.isDestroyed = () => win.destroyed
+    win.close = vi.fn(() => {
+      setTimeout(() => {
+        const event = { prevented: false, preventDefault() { this.prevented = true } }
+        win.emit('close', event)
+        if (!event.prevented) win.destroyed = true
+      }, 0)
+    })
+    const sent = []
+    win.webContents = {
+      isDestroyed: () => false,
+      isCrashed: () => false,
+      send: (_c, id) => {
+        sent.push(id)
+        setTimeout(() => lifecycle.handleFlushDone(id), 1)
+      }
+    }
+    lifecycle.attachWindow(win)
+    lifecycle.guardWindowClose(win)
+    win.close()
+    await vi.waitFor(() => expect(win.destroyed).toBe(true), { timeout: 2000 })
+    expect(sent).toHaveLength(1)
+  })
+
   it('flushEverything ruleaza si backup-ul (fisa finalizata cu <5s inainte de inchidere ajunge in backup)', async () => {
     const { fise } = await import('../src/main/fileStore.js').then(async (fs) => ({ fise: fs }))
     const { fisa, ls } = await import('./helpers')
