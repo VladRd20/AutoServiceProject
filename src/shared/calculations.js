@@ -39,11 +39,16 @@ export function isFisaEmpty(f) {
     !f.auto?.marca?.trim() &&
     !f.auto?.model?.trim() &&
     !f.auto?.vin?.trim() &&
+    !String(f.auto?.an ?? '').trim() &&
+    !String(f.auto?.capacitate ?? '').trim() &&
+    !f.auto?.combustibil?.trim() &&
     !f.client?.cui?.trim() &&
     !String(f.km ?? '').trim() &&
     !f.observatii?.trim() &&
     (f.piese?.length ?? 0) === 0 &&
     (f.lucrari?.length ?? 0) === 0 &&
+    !f.plata?.status?.trim() &&
+    !f.plata?.metoda?.trim() &&
     !f._replaceBaseName
   )
 }

@@ -115,6 +115,15 @@ describe('calcule', () => {
     expect(isFisaEmpty({ ...empty, client: { cui: '123' } })).toBe(false)
     expect(isFisaEmpty({ ...empty, _replaceBaseName: 'X_1' })).toBe(false)
   })
+  it('isFisaEmpty tine cont de an/capacitate/combustibil/plata (nu sunt tratate ca draft gol)', () => {
+    const empty = { client: {}, auto: {}, piese: [], lucrari: [], km: '', observatii: '' }
+    expect(isFisaEmpty(empty)).toBe(true)
+    expect(isFisaEmpty({ ...empty, auto: { an: '2020' } })).toBe(false)
+    expect(isFisaEmpty({ ...empty, auto: { capacitate: '1600' } })).toBe(false)
+    expect(isFisaEmpty({ ...empty, auto: { combustibil: 'diesel' } })).toBe(false)
+    expect(isFisaEmpty({ ...empty, plata: { status: 'achitat' } })).toBe(false)
+    expect(isFisaEmpty({ ...empty, plata: { metoda: 'card' } })).toBe(false)
+  })
 })
 
 describe('sanitizeFisa', () => {

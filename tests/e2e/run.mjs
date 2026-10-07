@@ -6,10 +6,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  ROOT, YEAR, sleep, rnd, prepareTemplate, makeSandbox, destroySandbox, cleanupAll, launch, closeApp, hardKill,
+  YEAR, sleep, rnd, prepareTemplate, makeSandbox, destroySandbox, cleanupAll, launch, closeApp, hardKill,
   readDrafts, readFise, jsonFiles, listDir, readJsonFile, tryReadJson, integrityProblems, waitFor, waitDraft, isPdf,
-  nameInput, phoneInput, plateInput, marcaInput, modelInput, vinInput, obsInput, releaseBtn, section, addLine, fillFisa,
-  waitSaved, clickFinalize, waitFinalizeDone, ipcFinalize, reload, spawnSecond, errorsOf, dismissModal
+  nameInput, phoneInput, plateInput, marcaInput, modelInput, releaseBtn, section, fillFisa,
+  waitSaved, clickFinalize, waitFinalizeDone, ipcFinalize, reload, spawnSecond, errorsOf
 } from './helpers.mjs'
 
 const wanted = process.argv.slice(2)

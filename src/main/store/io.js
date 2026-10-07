@@ -1,4 +1,3 @@
-import path from 'path'
 import fs from 'fs/promises'
 import { toAppError, AppError } from '../errors'
 
@@ -175,5 +174,3 @@ export async function dirEntryCount(dir) {
     return 0
   }
 }
-
-export const joinp = path.join

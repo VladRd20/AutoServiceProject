@@ -59,21 +59,32 @@ export async function flushEverything() {
 // (dublu-click pe X, Alt+F4 + quit) nu declanseaza flush-uri suprapuse.
 export function guardWindowClose(w) {
   let closing = false
-  let allow = false
+  // Consumat exact o singura data, de catre propriul nostru w.close() de mai
+  // jos - NU resetat dupa un timp fix. Evenimentul nativ 'close' al Electron
+  // nu e garantat sincron cu apelul w.close() (poate ajunge pe urmatorul tick
+  // prin bucla de mesaje a OS-ului); daca am reseta flagul imediat dupa ce
+  // chemam w.close(), acel 'close' intarziat ar fi tratat ca o inchidere noua
+  // a utilizatorului si am relua flush-ul la nesfarsit (fereastra nu s-ar mai
+  // inchide niciodata).
+  let forcedClose = false
   w.on('close', (event) => {
-    if (allow) return
+    if (forcedClose) {
+      forcedClose = false
+      return
+    }
     event.preventDefault()
     if (closing) return
     closing = true
     flushEverything()
       .catch((err) => log.error('[lifecycle] flush la inchidere esuat', err))
       .finally(() => {
-        allow = true
-        if (!w.isDestroyed()) w.close()
+        closing = false
         // Daca inchiderea a fost oprita (utilizatorul a ales "Raman" la avertismentul
         // de modificari nesalvate), garda trebuie sa functioneze si la urmatoarea inchidere.
-        allow = false
-        closing = false
+        if (!w.isDestroyed()) {
+          forcedClose = true
+          w.close()
+        }
       })
   })
 }
