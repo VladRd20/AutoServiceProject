@@ -2,7 +2,7 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import https from 'https'
-import { execFile, execSync } from 'child_process'
+import { execFile } from 'child_process'
 import os from 'os'
 import { app } from 'electron'
 import log from './logger'
@@ -107,17 +107,34 @@ function fallbackFingerprint() {
   return `${os.hostname()}-${os.cpus()?.[0]?.model || 'unknown-cpu'}`
 }
 
+// Daca warmFingerprint() a esuat la pornire, NU mai incercam reg query in mod
+// SINCRON aici: procesul principal e single-threaded, iar un execSync blocant
+// (pana la 5s) pe fiecare apel IPC protejat de licenta ar inghesui toata
+// interfata. In schimb reincercam warmFingerprint() in fundal, cu limitare
+// (cel mult o data la RETRY_INTERVAL_MS), si folosim fallback-ul rapid pana
+// se populeaza cache-ul.
+const WARM_RETRY_INTERVAL_MS = 30000
+let warmingInBackground = false
+let lastWarmAttemptAt = 0
+
+function retryWarmInBackground() {
+  const now = Date.now()
+  if (warmingInBackground || now - lastWarmAttemptAt < WARM_RETRY_INTERVAL_MS) return
+  lastWarmAttemptAt = now
+  warmingInBackground = true
+  warmFingerprint()
+    .catch((err) => log.warn('[license] reincercare warmFingerprint esuata', err))
+    .finally(() => {
+      warmingInBackground = false
+    })
+}
+
 function getMachineFingerprint() {
   if (cachedFingerprint) return cachedFingerprint
-  try {
-    const out = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid', { timeout: 5000 }).toString()
-    const match = out.match(/MachineGuid\s+REG_SZ\s+([0-9a-fA-F-]+)/)
-    if (match) return (cachedFingerprint = match[1].trim())
-  } catch (err) {
-    log.warn('[license] nu s-a putut citi MachineGuid, folosesc fallback', err)
-  }
-  // Fallback mai slab - NU se memoreaza: la urmatorul apel se reincearca
-  // MachineGuid, ca un esec trecator sa nu ramana "lipit" pentru toata sesiunea.
+  retryWarmInBackground()
+  // Fallback mai slab, calculat instant - NU blocheaza procesul principal.
+  // Odata ce reincercarea din fundal reuseste, apelurile urmatoare vor
+  // intoarce MachineGuid-ul real din cachedFingerprint.
   return fallbackFingerprint()
 }
 
