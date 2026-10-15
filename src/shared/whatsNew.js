@@ -13,6 +13,15 @@
 
 export const WHATS_NEW = [
   {
+    version: '0.8.2',
+    date: '2026-10-15',
+    titlu: 'Pornire și listare mai rapide',
+    items: [
+      { tip: 'rezolvat', text: 'Verificarea licenței nu mai blochează aplicația pentru o clipă la pornire.' },
+      { tip: 'imbunatatit', text: 'Lista fișelor recente se încarcă mai rapid când sunt multe fișe salvate.' }
+    ]
+  },
+  {
     version: '0.8.1',
     date: '2026-10-02',
     titlu: 'Acces mai rapid la fișele vechi',
