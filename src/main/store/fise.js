@@ -500,11 +500,58 @@ export async function searchFise(query, rangeIn) {
     .slice(0, SEARCH_MAX_RESULTS)
 }
 
+// Esantion din varf, dupa mtime (metadata, ieftin), din care parsam doar o
+// marja generoasa - suficient cat sa acopere si cazul in care mtime si
+// finalizedAt (campul real folosit la sortare) nu coincid exact (ex. o fisa
+// adusa inapoi din safety-backup/trash primeste un mtime nou, dar finalizedAt
+// vechi). Esantionul e marginit indiferent de cate fise finalizate exista -
+// scopul e sa nu parsam TOATE fisele doar ca sa aratam cateva pe ecranul de
+// pornire. Daca cache-ul (fiseMap) e deja populat, il folosim direct - e deja
+// mai ieftin decat un rescan de disc.
+async function listRecentFiseFast(dir, names, n) {
+  const sampleSize = Math.min(names.length, Math.max(n * 5, 40))
+  const stats = new Array(names.length)
+  await mapLimit(names, 32, async (name, idx) => {
+    try {
+      stats[idx] = { name, mtimeMs: (await fs.stat(path.join(dir, name))).mtimeMs }
+    } catch {
+      stats[idx] = { name, mtimeMs: 0 }
+    }
+  })
+  const candidates = stats.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, sampleSize)
+
+  const parsed = []
+  await mapLimit(candidates, 32, async ({ name }) => {
+    const res = await readJsonHealing(path.join(dir, name), 'fise')
+    if (res.ok) parsed.push({ ...migrateFisa(res.value), _file: name })
+  })
+  return parsed.sort(byFinalizedDesc).slice(0, n)
+}
+
 export async function listRecentFise(limit = 8) {
   await ensureDirs()
   const n = Math.min(Math.max(Number(limit) || 8, 1), 50)
-  const all = await readAllFiseFinalizate()
-  return [...all].sort(byFinalizedDesc).slice(0, n)
+  if (fiseMap) {
+    const all = await readAllFiseFinalizate()
+    return [...all].sort(byFinalizedDesc).slice(0, n)
+  }
+  const dir = getFiseDir()
+  let names
+  try {
+    names = (await fs.readdir(dir)).filter((f) => f.endsWith('.json') && !isTmpName(f))
+  } catch {
+    names = null
+  }
+  if (!names || names.length === 0) return []
+  try {
+    return await listRecentFiseFast(dir, names, n)
+  } catch (err) {
+    // Esantionul rapid a esuat (eroare neasteptata de disc) - calea sigura,
+    // deja validata, e incarcarea completa obisnuita.
+    log.warn('[fise] esantion rapid pentru fise recente esuat, folosesc incarcarea completa', err)
+    const all = await readAllFiseFinalizate()
+    return [...all].sort(byFinalizedDesc).slice(0, n)
+  }
 }
 
 // Cauta dupa VIN SAU numar de inmatriculare - o masina reinmatriculata isi

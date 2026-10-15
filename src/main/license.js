@@ -240,7 +240,9 @@ export async function checkRevocationOnline() {
   }
 }
 
-function fetchRevokedList() {
+// Exportat doar pentru teste (vezi tests/license.test.js) - comportamentul
+// de productie nu se schimba, doar vizibilitatea simbolului.
+export function fetchRevokedList() {
   return new Promise((resolve, reject) => {
     const req = https.get(REVOKED_LIST_URL, { timeout: REVOCATION_CHECK_TIMEOUT_MS }, (res) => {
       if (res.statusCode !== 200) {
