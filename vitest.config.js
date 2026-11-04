@@ -8,7 +8,7 @@ export default defineConfig({
     setupFiles: ['tests/setup.js'],
     testTimeout: 20000,
     pool: 'forks',
-    poolOptions: { forks: { singleFork: true } }
+    maxWorkers: 1
   },
   resolve: {
     alias: { electron: resolve('tests/stubs/electron.js') }

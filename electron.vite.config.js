@@ -1,10 +1,11 @@
 import { resolve } from 'path'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
+// Dependintele din node_modules raman externe (build.externalizeDeps e activ implicit
+// in electron-vite 5 pentru main/preload; externalizeDepsPlugin e depreciat).
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
         // Worker-ul de generare PDF e un entry separat (utilityProcess.fork pe out/main/pdfWorker.js)
@@ -20,9 +21,7 @@ export default defineConfig({
       }
     }
   },
-  preload: {
-    plugins: [externalizeDepsPlugin()]
-  },
+  preload: {},
   renderer: {
     resolve: {
       alias: {
