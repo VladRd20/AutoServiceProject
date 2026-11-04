@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import FisaForm from './components/FisaForm'
 import ListaItems from './components/ListaItems'
 import Totaluri from './components/Totaluri'
@@ -6,6 +6,7 @@ import Toast from './components/Toast'
 import ConfirmDialog from './components/ConfirmDialog'
 import DraftsSidebar from './components/DraftsSidebar'
 import SearchModal from './components/SearchModal'
+import SettingsModal from './components/SettingsModal'
 import UpdateBanner from './components/UpdateBanner'
 import ThemeToggle from './components/ThemeToggle'
 import OverflowMenu from './components/OverflowMenu'
@@ -14,18 +15,19 @@ import { formatLei } from './format'
 import { validateFisa, reduceriDinFisa, isFisaEmpty, calcTotaluri } from '../../shared/calculations'
 import { draftBackupRef, autosaverRef } from './draftBackup'
 import { createAutosaver } from './autosave'
+import { applyDraftPatch } from './draftPatch'
+import LazyBoundary, { lazyRetry } from './components/LazyBoundary'
 
 // Modalele rare se incarca la cerere (chunk separat) - nu cresc bundle-ul de
-// pornire. SearchModal ramane eager (Ctrl+K trebuie sa fie instant). Chunk-urile
+// pornire. SettingsModal e eager (~21 KB): modalul de prima rulare trebuie sa apara
+// imediat, nu dupa ce formularul e deja interactiv. SearchModal ramane eager (Ctrl+K trebuie sa fie instant). Chunk-urile
 // se preincarca in idle dupa prima randare, deci prima deschidere nu asteapta.
-const loadSettingsModal = () => import('./components/SettingsModal')
 const loadReportsModal = () => import('./components/ReportsModal')
 const loadVehicleHistoryModal = () => import('./components/VehicleHistoryModal')
 const loadWhatsNewModal = () => import('./components/WhatsNewModal')
-const SettingsModal = lazy(loadSettingsModal)
-const ReportsModal = lazy(loadReportsModal)
-const VehicleHistoryModal = lazy(loadVehicleHistoryModal)
-const WhatsNewModal = lazy(loadWhatsNewModal)
+const ReportsModal = lazyRetry(loadReportsModal)
+const VehicleHistoryModal = lazyRetry(loadVehicleHistoryModal)
+const WhatsNewModal = lazyRetry(loadWhatsNewModal)
 
 // Drafturile se reciteasca integral cel mult o data la atatea ms in timpul
 // salvarilor automate (plasa de siguranta); intre timp se aplica un patch local.
@@ -191,6 +193,9 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   const fisaRef = useRef(null)
   const readOnlyRef = useRef(readOnly)
   const patchDraftRef = useRef(null)
+  // Id-uri de drafturi finalizate/sterse: un callback 'saved' intarziat al
+  // autosave-ului nu are voie sa le readuca in sidebar.
+  const removedDraftIdsRef = useRef(new Set())
   const lastDraftsRefreshRef = useRef(0)
   const errorToastedRef = useRef(false)
   // true cat timp finalizam: nu trimitem update-uri catre autosaver, altfel
@@ -253,6 +258,10 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // un draft gol de refolosit - altfel castiga cursa cu IPC-ul de listDrafts
   // si salveaza un draft nou inainte sa apucam sa-l refolosim pe cel vechi.
   const [initialCheckDone, setInitialCheckDone] = useState(false)
+  // Decizia "prima rulare" (modalul Datele service-ului) se ia INAINTE ca formularul
+  // sa fie afisat/interactiv - altfel modalul apare peste ce a inceput utilizatorul sa tasteze.
+  const [firstRunChecked, setFirstRunChecked] = useState(false)
+  const firstRunShownRef = useRef(false)
 
   const draftsRef = useRef([])
   const searchBoxRef = useRef(null)
@@ -277,7 +286,6 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // Preincarcam chunk-urile modalelor rare in idle, dupa prima randare.
   useEffect(() => {
     const preload = () => {
-      loadSettingsModal()
       loadReportsModal()
       loadVehicleHistoryModal()
       loadWhatsNewModal()
@@ -363,13 +371,12 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // si dedupe-ul) sau ca plasa de siguranta, cel mult o data la 10s.
   patchDraftRef.current = (doc, id) => {
     const prev = draftsRef.current
-    if (!prev.some((d) => d.id === id)) {
+    const { action, next } = applyDraftPatch(prev, doc, id, removedDraftIdsRef.current)
+    if (action === 'ignore') return
+    if (action === 'refresh') {
       refreshDrafts()
       return
     }
-    const entry = { ...doc, id, status: 'draft', updatedAt: new Date().toISOString() }
-    // Cel mai recent modificat primul, ca in listDrafts.
-    const next = [entry, ...prev.filter((d) => d.id !== id)]
     draftsRef.current = next
     if (!sameDraftsView(prev, next)) setDrafts(next)
     if (Date.now() - lastDraftsRefreshRef.current >= DRAFTS_SAFETY_REFRESH_MS) refreshDrafts()
@@ -453,10 +460,17 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
       }
     })
     // Prima pornire: cerem numele service-ului daca nu e completat.
-    window.serviceAuto.settings.get().then((res) => {
-      if (!res.ok) return
-      if (!res.data?.numeService && lsGet(FIRST_RUN_KEY) !== '1') setFirstRunOpen(true)
-    })
+    window.serviceAuto.settings
+      .get()
+      .then((res) => {
+        if (!res.ok) return
+        if (!res.data?.numeService && lsGet(FIRST_RUN_KEY) !== '1') {
+          firstRunShownRef.current = true
+          setFirstRunOpen(true)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setFirstRunChecked(true))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -519,15 +533,22 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // "Ce e nou": o singura data dupa o actualizare, dupa ce aplicatia s-a incarcat
   // si nu e deschisa fereastra de prima configurare.
   useEffect(() => {
-    if (!initialCheckDone || firstRunOpen || whatsNewCheckedRef.current) return
+    if (!initialCheckDone || !firstRunChecked || firstRunOpen || whatsNewCheckedRef.current) return
     whatsNewCheckedRef.current = true
+    // Instalare noua (tocmai a trecut prin prima configurare): nu are ce sa afle
+    // "nou" - altfel, dupa inchiderea setarilor, ar aparea imediat inca un modal
+    // (draftul gol e deja salvat, deci main nu o mai vede ca "fresh").
+    if (firstRunShownRef.current) {
+      window.serviceAuto.app.markWhatsNewSeen().catch(() => {})
+      return
+    }
     window.serviceAuto.app
       .getWhatsNew('unseen')
       .then((res) => {
         if (res?.ok && res.data.entries.length) setWhatsNew({ entries: res.data.entries, markSeen: true })
       })
       .catch(() => {})
-  }, [initialCheckDone, firstRunOpen])
+  }, [initialCheckDone, firstRunChecked, firstRunOpen])
 
   const openWhatsNew = useCallback(async () => {
     try {
@@ -544,6 +565,14 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
       return null
     })
   }, [])
+
+  const closeSettings = () => {
+    if (firstRunOpen) lsSet(FIRST_RUN_KEY, '1')
+    setFirstRunOpen(false)
+    setSettingsOpen(false)
+  }
+  const closeReports = () => setReportsOpen(false)
+  const closeVehicleHistory = () => setVehicleHistoryQuery(null)
 
   // Starea backup-ului automat: la pornire, la 2 minute si dupa finalizare.
   const refreshBackupStatus = useCallback(async () => {
@@ -731,11 +760,13 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
         resetToNewFisa()
         setErrors({})
       }
+      removedDraftIdsRef.current.add(id)
       const res = await window.serviceAuto.fisa.deleteDraft(id)
       if (res.ok) {
         if (lsGet(LAST_DRAFT_KEY) === id) lsSet(LAST_DRAFT_KEY, null)
         refreshDrafts()
       } else {
+        removedDraftIdsRef.current.delete(id) // stergerea a esuat: draftul exista in continuare
         showToast('error', res.error.message)
         refreshDrafts()
       }
@@ -825,9 +856,10 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
     let finalizedOk = false
     try {
       const current = fisaRef.current || fisa
+      const finalId = current.id || autosaver.getId()
       let res
       try {
-        res = await window.serviceAuto.fisa.finalize({ ...current, id: current.id || autosaver.getId() })
+        res = await window.serviceAuto.fisa.finalize({ ...current, id: finalId })
       } catch (err) {
         res = { ok: false, error: { code: 'IPC', message: err?.message || 'Finalizarea a eșuat.' } }
       }
@@ -842,6 +874,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
 
       // Draftul a disparut (main l-a sters la finalizare) - nimic de mai salvat.
       finalizedOk = true
+      if (finalId) removedDraftIdsRef.current.add(finalId)
       autosaver.reset(null)
       if (lsGet(LAST_DRAFT_KEY) === (current.id || null)) lsSet(LAST_DRAFT_KEY, null)
       refreshBackupStatus()
@@ -1081,7 +1114,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   const onUpdatePillClick = updateInfo.status === 'downloaded' ? handleInstallUpdate : handleDownloadUpdate
 
   return (
-    <div className="app">
+    <div className="app" style={firstRunChecked ? undefined : { visibility: 'hidden' }}>
       <DraftsSidebar
         drafts={drafts}
         currentId={fisa.id}
@@ -1336,12 +1369,9 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
       {/* Fallback null: chunk-urile sunt preincarcate, deci modalul apare practic instant. */}
       <Suspense fallback={null}>
         {(settingsOpen || firstRunOpen) && (
+          <LazyBoundary showToast={showToast} onClose={closeSettings}>
           <SettingsModal
-            onClose={() => {
-              if (firstRunOpen) lsSet(FIRST_RUN_KEY, '1')
-              setFirstRunOpen(false)
-              setSettingsOpen(false)
-            }}
+            onClose={closeSettings}
             showToast={showToast}
             confirm={confirmAction}
             onDataChanged={onDataChanged}
@@ -1358,17 +1388,27 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
             firstRun={firstRunOpen}
             readOnly={readOnly}
           />
+          </LazyBoundary>
         )}
 
-        {whatsNew && <WhatsNewModal entries={whatsNew.entries} onClose={closeWhatsNew} />}
+        {whatsNew && (
+          <LazyBoundary showToast={showToast} onClose={closeWhatsNew}>
+            <WhatsNewModal entries={whatsNew.entries} onClose={closeWhatsNew} />
+          </LazyBoundary>
+        )}
 
-        {reportsOpen && <ReportsModal onClose={() => setReportsOpen(false)} showToast={showToast} />}
+        {reportsOpen && (
+          <LazyBoundary showToast={showToast} onClose={closeReports}>
+            <ReportsModal onClose={closeReports} showToast={showToast} />
+          </LazyBoundary>
+        )}
 
         {vehicleHistoryQuery && (
+          <LazyBoundary showToast={showToast} onClose={closeVehicleHistory}>
           <VehicleHistoryModal
             vin={vehicleHistoryQuery.vin}
             nrInmatriculare={vehicleHistoryQuery.nrInmatriculare}
-            onClose={() => setVehicleHistoryQuery(null)}
+            onClose={closeVehicleHistory}
             onOpenPdf={handleOpenPdfFromSearch}
             onPrintPdf={handlePrintPdfFromList}
             onDeleteFinalized={handleDeleteFinalized}
@@ -1376,6 +1416,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
             onNewForProfile={handleNewFisaForProfile}
             showToast={showToast}
           />
+          </LazyBoundary>
         )}
       </Suspense>
     </div>

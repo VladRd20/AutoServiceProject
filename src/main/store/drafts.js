@@ -6,6 +6,10 @@ import { assertSafeId, isTmpName, mapLimit, runExclusive, writeJsonAtomic } from
 import { readJsonHealing } from './integrity'
 import { ensureDirs, getDraftsDir, registerInvalidator } from './paths'
 
+// Autosave-ul se repeta oricum la urmatoarea schimbare: buget mic de reincercari
+// (4 incercari, ~50+100+200 = ~350-600ms) in loc de ~4s, ca sa nu blocheze coada.
+const DRAFT_RETRY = { attempts: 4, baseMs: 50, maxMs: 200 }
+
 // Lista drafturilor tinuta in memorie (Map id -> draft): autosave-ul apeleaza
 // listDrafts dupa fiecare salvare, iar recitirea tuturor fisierelor de fiecare
 // data era inutila - singurul care scrie in folderul de drafturi e acest proces.
@@ -52,7 +56,7 @@ export async function saveDraft(fisa) {
   // veche, terminata dupa una mai noua, ar suprascrie-o cu date invechite.
   return runExclusive(`draft:${id}`, async () => {
     const draft = { ...fisa, id, status: 'draft', updatedAt: new Date().toISOString() }
-    await writeJsonAtomic(path.join(getDraftsDir(), `${id}.json`), draft)
+    await writeJsonAtomic(path.join(getDraftsDir(), `${id}.json`), draft, undefined, DRAFT_RETRY)
     if (cache) cache.set(id, draft)
     else load = null // o incarcare in curs ar putea sa nu includa aceasta salvare - nu o publicam
     return id

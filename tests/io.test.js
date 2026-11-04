@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { copyFileAtomic, faults, moveFile, withRetry } from '../src/main/store/io.js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { copyFileAtomic, faults, ioHooks, moveFile, withRetry, writeJsonAtomic, writeStreamAtomic } from '../src/main/store/io.js'
 import { mkTmp } from './helpers'
 
 let dir
@@ -102,5 +102,37 @@ describe('copyFileAtomic', () => {
     await copyFileAtomic(src, dest)
     expect(fs.readFileSync(dest, 'utf-8')).toBe('y')
     expect(calls).toBe(2)
+  })
+})
+
+describe('cârlige de scriere (ioHooks)', () => {
+  afterEach(() => {
+    ioHooks.onWriteOk = null
+    ioHooks.onWriteFail = null
+  })
+
+  it('writeStreamAtomic raporteaza succesul si esecul ca writeJsonAtomic', async () => {
+    const ok = vi.fn()
+    const fail = vi.fn()
+    ioHooks.onWriteOk = ok
+    ioHooks.onWriteFail = fail
+    const f = path.join(dir, 's.txt')
+    await writeStreamAtomic(f, async (w) => w('abc'))
+    expect(ok).toHaveBeenCalledWith(f)
+    expect(fail).not.toHaveBeenCalled()
+    await expect(writeStreamAtomic(path.join(dir, 'nu', 'exista', 's.txt'), async (w) => w('x'))).rejects.toBeTruthy()
+    expect(fail).toHaveBeenCalledTimes(1)
+  })
+
+  it('writeJsonAtomic respecta bugetul de reincercari redus', async () => {
+    let calls = 0
+    faults.beforeRename = () => {
+      calls++
+      throw err('EBUSY')
+    }
+    await expect(
+      writeJsonAtomic(path.join(dir, 'd.json'), { a: 1 }, undefined, { attempts: 3, baseMs: 1, maxMs: 2 })
+    ).rejects.toBeTruthy()
+    expect(calls).toBe(3)
   })
 })

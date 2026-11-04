@@ -140,4 +140,19 @@ describe('inchidere fereastra', () => {
     await lifecycle.flushEverything()
     expect(ls(path.join(env.safety, 'fise'))).toContain(`${r.baseName}.json`)
   })
+
+  it('flush blocat (OneDrive) nu tine inchiderea peste plafon: inchide dupa 15s', async () => {
+    const io = await import('../src/main/store/io.js')
+    // O scriere care nu se termina niciodata tine coada 'fise-write' ocupata.
+    io.runExclusive('fise-write', () => new Promise(() => {}))
+    vi.useFakeTimers()
+    const win = fakeWindow()
+    lifecycle.attachWindow(win)
+    lifecycle.guardWindowClose(win)
+    win.close()
+    await vi.advanceTimersByTimeAsync(14000)
+    expect(win.destroyed).toBe(false)
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(win.destroyed).toBe(true)
+  })
 })
