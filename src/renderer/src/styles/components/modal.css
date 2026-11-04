@@ -96,3 +96,18 @@
   justify-content: flex-end;
   gap: 10px;
 }
+
+/* Dialogul primeste focus programatic (useDialog) ca Escape/Tab sa mearga imediat;
+   inelul de focus ramane pe controalele interactive, nu pe containerul in sine. */
+.modal:focus,
+.modal:focus-visible,
+.confirm-dialog:focus,
+.confirm-dialog:focus-visible {
+  outline: none;
+}
+
+.modal-header .btn-remove:focus-visible,
+.confirm-actions button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
