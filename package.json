@@ -73,6 +73,14 @@
       "provider": "github",
       "owner": "VladRd20",
       "repo": "AutoServiceProject"
+    },
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": true
     }
   },
   "allowScripts": {
