@@ -61,6 +61,7 @@ async function runCheck(manual) {
     return false
   } finally {
     checking = false
+    checkIsManual = false // verificarea s-a incheiat, indiferent de rezultat
   }
 }
 
@@ -73,12 +74,22 @@ export function initUpdater(mainWindow) {
   autoUpdater.on('error', (err) => {
     log.warn('[updater] verificare/descarcare update esuata (ignorat, aplicatia continua normal)', err)
     // erorile verificarilor periodice nu se arata; cele de la descarcare si cele cerute manual, da
-    if (checkIsManual || downloading) sendStatus('error', { message: err?.message })
+    const wasDownloading = downloading
+    if (checkIsManual || wasDownloading) sendStatus('error', { message: err?.message })
+    // Starea se reseteaza DUPA decizia de mai sus (care o citeste): altfel o descarcare
+    // esuata (autoDownload) lasa `downloading = true` si verificarile urmatoare ies imediat.
+    downloading = false
+    checkIsManual = false
+    // Descarcarea a esuat dupa ce 'update-available' oprise poller-ul: reluam verificarile.
+    if (wasDownloading) poller.resume()
   })
 
   autoUpdater.on('checking-for-update', () => sendStatus('checking'))
 
-  autoUpdater.on('update-not-available', () => sendStatus('not-available'))
+  autoUpdater.on('update-not-available', () => {
+    sendStatus('not-available')
+    checkIsManual = false
+  })
 
   autoUpdater.on('update-available', (info) => {
     log.info(`[updater] versiune noua disponibila: ${info.version}`)
@@ -86,6 +97,7 @@ export function initUpdater(mainWindow) {
     // Anuntat prin banner-ul din UI (stilizat, cu buton propriu), nu printr-un dialog nativ.
     const notes = typeof info.releaseNotes === 'string' ? info.releaseNotes.replace(/<[^>]*>/g, '').trim().slice(0, 600) : ''
     sendStatus('available', { version: info.version, notes })
+    checkIsManual = false // verificarea manuala s-a incheiat; erorile periodice ulterioare nu se arata
   })
 
   autoUpdater.on('download-progress', (progress) => {
@@ -121,9 +133,11 @@ export function downloadUpdateNow() {
   downloading = true
   sendStatus('downloading')
   autoUpdater.downloadUpdate().catch((err) => {
+    // De regula handlerul 'error' a tratat deja esecul (si a afisat eroarea) - evitam dublura.
+    const wasDownloading = downloading
     downloading = false
     log.warn('[updater] downloadUpdate esuat', err)
-    sendStatus('error', { message: err?.message })
+    if (wasDownloading) sendStatus('error', { message: err?.message })
     poller.resume() // descarcarea a esuat: reluam verificarile periodice
   })
 }
