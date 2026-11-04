@@ -48,7 +48,9 @@ export function createAutosaver({
     state = next
     lastError = extra.error || null
     if (next === 'saved') savedAt = now()
-    onState({ state, error: lastError, savedAt })
+    // `doc`/`id` (doar la o salvare reusita) = ce tocmai s-a scris, ca UI-ul sa
+    // poata actualiza local rezumatul fara sa recitesca lista de pe disc.
+    onState({ state, error: lastError, savedAt, ...(extra.doc ? { doc: extra.doc, id: extra.id } : {}) })
   }
 
   const isDirty = () => Boolean(doc) && !sameExceptId(doc, savedDoc)
@@ -84,7 +86,7 @@ export function createAutosaver({
     savedDoc = snapshot
     // Daca utilizatorul a mai scris cat timp se salva, ramane programata urmatoarea salvare.
     if (isDirty()) setState('saving')
-    else setState('saved')
+    else setState('saved', { doc: snapshot, id: currentId })
     return true
   }
 

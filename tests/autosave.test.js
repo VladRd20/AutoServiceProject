@@ -37,6 +37,26 @@ function makeSaver(opts = {}) {
   return { a, save, calls, states, ids, maxActive: () => maxActive }
 }
 
+describe('onState: rezumatul salvarii', () => {
+  it('"saved" dupa o salvare include doc-ul scris si id-ul; reset(clean) nu include doc', async () => {
+    const events = []
+    const a = createAutosaver({
+      save: async () => ({ ok: true, data: 'd1' }),
+      onState: (s) => events.push(s)
+    })
+    const f = doc({ client: { nume: 'Ion' } })
+    a.update(f)
+    await vi.advanceTimersByTimeAsync(0)
+    const saved = events.find((e) => e.state === 'saved')
+    expect(saved.doc).toBe(f)
+    expect(saved.id).toBe('d1')
+    events.length = 0
+    a.reset(doc({ id: 'd2' }), { clean: true })
+    expect(events[0].state).toBe('saved')
+    expect(events[0].doc).toBeUndefined()
+  })
+})
+
 describe('sameExceptId', () => {
   it('ignora doar id-ul; referinte diferite = diferit', () => {
     const c = { nume: 'x' }
