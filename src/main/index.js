@@ -16,6 +16,7 @@ const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000 // o data pe zi
 const REVOCATION_RECHECK_MS = 24 * 60 * 60 * 1000
 const BACKUP_INITIAL_DELAY_MS = 45 * 1000 // dupa primele incarcari IPC ale renderer-ului
 const PDF_PREWARM_DELAY_MS = 3000
+const SHOW_FALLBACK_MS = 3000 // arata fereastra oricum, daca 'ready-to-show' nu vine
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -43,11 +44,27 @@ function createWindow() {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  // Fereastra e creata ascunsa (fara palpaire alba). Cu titleBarStyle:'hidden' + titleBarOverlay,
+  // 'ready-to-show' NU se declanseaza in ~50% din porniri (masurat: lipsa lui => fereastra
+  // ramane invizibila, aplicatia pare ca nu s-a deschis). De aceea aratam fereastra la
+  // PRIMUL dintre: 'ready-to-show', 'did-finish-load' sau un timeout de siguranta.
+  const win = mainWindow
+  let shown = false
+  const showOnce = (why) => {
+    if (shown || win.isDestroyed()) return
+    shown = true
+    clearTimeout(showTimer)
+    if (why === 'timeout') log.warn(`[main] fereastra nu a devenit vizibila in ${SHOW_FALLBACK_MS}ms - o afisam fortat`)
+    win.show()
     // Worker-ul de PDF porneste dupa ce pornirea s-a linistit, ca prima fisa sa iasa repede.
     setTimeout(prewarmPdfWorker, PDF_PREWARM_DELAY_MS).unref()
-  })
+  }
+  const showTimer = setTimeout(() => showOnce('timeout'), SHOW_FALLBACK_MS)
+  showTimer.unref?.()
+  win.once('ready-to-show', () => showOnce('ready-to-show'))
+  win.webContents.once('did-finish-load', () => showOnce('did-finish-load'))
+  win.webContents.once('did-fail-load', () => showOnce('did-fail-load'))
+  win.once('closed', () => clearTimeout(showTimer))
 
   // Inchiderea asteapta salvarea draftului curent + un ultim backup.
   attachWindow(mainWindow)
