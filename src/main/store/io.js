@@ -60,6 +60,16 @@ const notify = (name, ...args) => {
   }
 }
 
+// Punct de injectare DOAR pentru teste: inmulteste pauzele de backoff (in
+// productie ramane 1, deci comportamentul e identic). Citit la incarcarea
+// modulului din SA_TEST_RETRY_SCALE (tests/setup.js), ca sa supravietuiasca la
+// vi.resetModules(). Valoare lipsa/invalida -> 1.
+const envScale = Number(process.env.SA_TEST_RETRY_SCALE)
+let retryDelayScale = envScale > 0 ? envScale : 1
+export const _setRetryDelayScale = (scale) => {
+  retryDelayScale = scale
+}
+
 // Pe Windows, antivirusul/indexerul/OneDrive poate tine un fisier deschis si
 // rename/unlink esueaza cu EPERM/EBUSY - reincercam cu backoff exponential +
 // jitter. Cu valorile implicite (8 incercari, baza 50ms, plafon 1s) bugetul
@@ -73,7 +83,7 @@ export async function withRetry(fn, attempts = 8, { baseMs = 50, maxMs = 1000 } 
       last = err
       if (!TRANSIENT.has(err?.code) || i === attempts - 1) throw err
       const delay = Math.min(maxMs, baseMs * 2 ** i)
-      await sleep(delay * (0.75 + Math.random() * 0.5))
+      await sleep(delay * (0.75 + Math.random() * 0.5) * retryDelayScale)
     }
   }
   throw last
