@@ -5,7 +5,17 @@ import fs from 'fs/promises'
 import log from '../logger'
 import { toAppError, AppError } from '../errors'
 import { getDataPathOverride, setDataPathOverride } from '../appConfig'
-import { copyFileAtomic, dirEntryCount, exists, isTmpName, listFiles, readJson, runExclusive } from './io'
+import {
+  copyFileAtomic,
+  dirEntryCount,
+  exists,
+  ioHooks,
+  isLostDriveCode,
+  isTmpName,
+  listFiles,
+  readJson,
+  runExclusive
+} from './io'
 
 
 // Previzualizarile PDF se scriu intr-un subfolder dedicat din temp; cele mai
@@ -341,6 +351,56 @@ export function ensureDirs() {
   return dirsPromise
 }
 
+// ------------------------------------------------ re-proba la esec scriere --
+// Folderul de date e probat doar la pornire. Daca dupa aceea dispare (USB
+// scos, retea cazuta), scrierile esueaza cu erori NEtranzitorii; dupa
+// WRITE_FAIL_REPROBE_THRESHOLD esecuri consecutive reluam aceeasi logica de la
+// pornire (resolveBaseDir) si trecem in folderul temporar, la fel ca la start.
+export const WRITE_FAIL_REPROBE_THRESHOLD = 3
+let consecutiveWriteFails = 0
+let reprobing = null
+
+const underBase = (filePath) => Boolean(state.baseDir) && isInside(path.resolve(filePath), path.resolve(state.baseDir))
+
+ioHooks.onWriteOk = (filePath) => {
+  if (underBase(filePath)) consecutiveWriteFails = 0
+}
+ioHooks.onWriteFail = (filePath, err) => {
+  // Doar scrierile in folderul de date curent; nu cele din safety-backup/AppData.
+  if (state.usingFallback || !underBase(filePath) || !isLostDriveCode(err?.code)) return
+  consecutiveWriteFails += 1
+  if (consecutiveWriteFails >= WRITE_FAIL_REPROBE_THRESHOLD) {
+    // Fire-and-forget: ruleaza DUPA operatia curenta (aceeasi coada 'fise-write').
+    reprobeDataDir().catch((e) => log.error('[store] re-proba folder de date esuata', e))
+  }
+}
+
+export function reprobeDataDir() {
+  reprobing ||= runExclusive('fise-write', () => runExclusive('backup', doReprobe)).finally(() => {
+    reprobing = null
+  })
+  return reprobing
+}
+
+async function doReprobe() {
+  consecutiveWriteFails = 0
+  if (state.usingFallback) return { switched: false }
+  try {
+    await tryUseDir(primaryDir())
+    return { switched: false } // folderul raspunde din nou (blocaj trecator)
+  } catch (err) {
+    log.error(`[store] folderul "${primaryDir()}" nu mai e scriptibil dupa mai multe esecuri - trec pe folderul temporar`, err)
+  }
+  resolvePromise = resolveBaseDir()
+  dirsPromise = null
+  try {
+    await ensureDirs()
+  } finally {
+    invalidateAllCaches()
+  }
+  return { switched: state.usingFallback }
+}
+
 const isInside = (child, parent) => {
   const rel = path.relative(parent, child)
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
@@ -399,6 +459,8 @@ async function doChangeDataPath(newBasePath) {
 
 // Doar pentru teste: reia rezolvarea de la zero.
 export function _resetForTests() {
+  consecutiveWriteFails = 0
+  reprobing = null
   resolvePromise = null
   dirsPromise = null
   Object.assign(state, {
