@@ -1,10 +1,33 @@
 import { app } from 'electron'
 import path from 'path'
+import os from 'os'
 import fs from 'fs/promises'
 import log from '../logger'
 import { toAppError, AppError } from '../errors'
 import { getDataPathOverride, setDataPathOverride } from '../appConfig'
 import { copyFileAtomic, dirEntryCount, exists, isTmpName, listFiles, readJson, runExclusive } from './io'
+
+
+// Previzualizarile PDF se scriu intr-un subfolder dedicat din temp; cele mai
+// vechi de 24h se sterg inainte de fiecare previzualizare noua.
+export const PREVIEW_DIR = path.join(os.tmpdir(), 'ServiceAuto-preview')
+const PREVIEW_MAX_AGE_MS = 24 * 60 * 60 * 1000
+export async function cleanupOldPreviews(dir = PREVIEW_DIR, maxAgeMs = PREVIEW_MAX_AGE_MS) {
+  try {
+    const now = Date.now()
+    for (const name of await fs.readdir(dir)) {
+      try {
+        const p = path.join(dir, name)
+        const st = await fs.stat(p)
+        if (st.isFile() && now - st.mtimeMs > maxAgeMs) await fs.unlink(p)
+      } catch (err) {
+        log.warn('[paths] curatare previzualizare esuata', err)
+      }
+    }
+  } catch (err) {
+    if (err?.code !== 'ENOENT') log.warn('[paths] curatare previzualizari esuata', err)
+  }
+}
 
 export const TRASH_RETENTION_DAYS = 30
 

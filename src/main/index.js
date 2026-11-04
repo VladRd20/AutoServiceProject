@@ -1,9 +1,11 @@
-import { app, shell, BrowserWindow, dialog, nativeTheme } from 'electron'
+import { app, session, shell, BrowserWindow, dialog, nativeTheme } from 'electron'
 import path from 'path'
+import { pathToFileURL } from 'url'
 import { is } from '@electron-toolkit/utils'
 import log, { setMainWindow } from './logger'
 import { ensureDirs, backupNow } from './fileStore'
 import { registerIpcHandlers } from './ipc'
+import { cleanupOldPreviews } from './store/paths'
 import { initUpdater } from './updater'
 import { checkRevocationOnline, isRevoked, warmFingerprint } from './license'
 import { attachWindow, guardWindowClose } from './lifecycle'
@@ -77,7 +79,7 @@ function createWindow() {
 
   // Fereastra principala nu navigheaza niciodata in afara aplicatiei.
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowed = is.dev && process.env['ELECTRON_RENDERER_URL'] ? url.startsWith(process.env['ELECTRON_RENDERER_URL']) : url.startsWith('file://')
+    const allowed = isAppUrl(url)
     if (!allowed) {
       event.preventDefault()
       if (/^https:\/\//i.test(url)) shell.openExternal(url)
@@ -92,6 +94,22 @@ function createWindow() {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+  }
+}
+
+// In dev: doar serverul de dezvoltare; in productie: doar index.html-ul aplicatiei
+// (nu orice file://). Se ignora query/hash.
+function isAppUrl(url) {
+  try {
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      return new URL(url).origin === new URL(process.env['ELECTRON_RENDERER_URL']).origin
+    }
+    const target = new URL(url)
+    if (target.protocol !== 'file:') return false
+    const own = pathToFileURL(path.join(__dirname, '../renderer/index.html'))
+    return decodeURIComponent(target.pathname).toLowerCase() === decodeURIComponent(own.pathname).toLowerCase()
+  } catch {
+    return false
   }
 }
 
@@ -113,6 +131,14 @@ app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return
 
   app.setAppUserModelId('com.serviceauto.app')
+
+  // Aplicatia nu foloseste nicio permisiune web (camera, notificari, locatie
+  // etc.; tiparirea si clipboard-ul nu trec prin acest mecanism) - refuzam tot.
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
+  session.defaultSession.setPermissionCheckHandler(() => false)
+
+  // Previzualizarile PDF vechi (>24h) din temp - best-effort, nu blocheaza pornirea.
+  cleanupOldPreviews().catch((err) => log.warn('[main] curatare previzualizari esuata', err))
 
   try {
     await ensureDirs()

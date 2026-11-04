@@ -36,6 +36,7 @@ import {
   getDefaultDataPath,
   changeDataPath
 } from './fileStore'
+import { PREVIEW_DIR, cleanupOldPreviews } from './store/paths'
 import { generatePdf, printPdf } from './pdfGenerator'
 import {
   checkForUpdatesSafe,
@@ -45,6 +46,7 @@ import {
   setAutoUpdateEnabled
 } from './updater'
 import { isActivated, isRevoked, activate } from './license'
+import { moveFile, tmpSuffix } from './store/io'
 import { handleFlushDone } from './lifecycle'
 import { getLastSeenVersion, setLastSeenVersion } from './appConfig'
 import { entriesToShow, recentEntries } from '../shared/whatsNew'
@@ -128,6 +130,9 @@ export const TITLEBAR_HEIGHT = 36
 
 const stamp = () => new Date().toISOString().slice(0, 10)
 
+// Folderul ales de utilizator in dialog (vezi settings:pickDataFolder).
+let pickedDataPath = null
+
 export function registerIpcHandlers() {
   ipcMain.handle('license:getStatus', () =>
     wrap(() => {
@@ -208,10 +213,9 @@ export function registerIpcHandlers() {
     wrapLicensed(async () => {
       const raw = fisa && typeof fisa === 'object' ? fisa : {}
       const { _replaceBaseName, ...fisaData } = sanitizeFisa(raw)
-      const pdfPath = path.join(
-        app.getPath('temp'),
-        `ServiceAuto-previzualizare-${process.pid}-${Date.now()}.pdf`
-      )
+      await cleanupOldPreviews()
+      const pdfPath = path.join(PREVIEW_DIR, `previzualizare-${process.pid}-${Date.now()}.pdf`)
+      await fs.mkdir(PREVIEW_DIR, { recursive: true })
       await generatePdf(fisaData, pdfPath)
       const result = await shell.openPath(pdfPath)
       if (result) throw new Error(result)
@@ -249,7 +253,16 @@ export function registerIpcHandlers() {
         filters: [{ name: 'CSV', extensions: ['csv'] }]
       })
       if (res.canceled || !res.filePath) return null
-      await fs.writeFile(res.filePath, csv, 'utf-8')
+      // Scriere atomica: CSV-ul intai intr-un fisier temporar langa destinatie,
+      // apoi rename - un crash nu lasa un export trunchiat sub numele final.
+      const tmpCsv = `${res.filePath}${tmpSuffix()}`
+      try {
+        await fs.writeFile(tmpCsv, csv, 'utf-8')
+        await moveFile(tmpCsv, res.filePath)
+      } catch (err) {
+        await fs.unlink(tmpCsv).catch(() => {})
+        throw err
+      }
       return { path: res.filePath, count }
     }, 'exportCsv')
   )
@@ -270,12 +283,25 @@ export function registerIpcHandlers() {
         title: 'Alege folderul pentru fișele de service'
       })
       if (result.canceled || result.filePaths.length === 0) return null
-      return result.filePaths[0]
+      pickedDataPath = result.filePaths[0]
+      return pickedDataPath
     }, 'settings:pickDataFolder')
   )
 
+  // Main accepta doar o cale pe care ea insasi a oferit-o: ultimul folder ales
+  // din dialog (de unica folosinta) sau folderul implicit (butonul de resetare).
+  // Renderer-ul nu poate impune o cale arbitrara (ex. UNC) fara dialog.
   ipcMain.handle('settings:changeDataPath', (e, newPath) =>
-    wrapLicensed(() => changeDataPath(newPath), 'settings:changeDataPath')
+    wrapLicensed(async () => {
+      const isDefault = typeof newPath === 'string' && path.resolve(newPath) === path.resolve(getDefaultDataPath())
+      const isPicked = typeof newPath === 'string' && pickedDataPath !== null && newPath === pickedDataPath
+      if (!isDefault && !isPicked) {
+        throw Object.assign(new Error('Alege folderul folosind butonul de selectare.'), { code: 'INVALID_PATH' })
+      }
+      const res = await changeDataPath(newPath)
+      if (isPicked) pickedDataPath = null
+      return res
+    }, 'settings:changeDataPath')
   )
 
   // ---- PDF ----
