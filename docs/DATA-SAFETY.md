@@ -9,7 +9,7 @@
 | Trash (30 days) | `…\date\trash` |
 | Corrupt files (kept, never deleted) | `…\date\corupte` |
 | Company settings | `…\date\setari.json` |
-| Sequence counter | `…\date\contor.json` (numbers are also re-derived from fișe + trash, so this file is not critical) |
+| Sequence counter | `…\date\contor.json` (written only AFTER the fișă is on disk, so a failed save never burns an invoice number; numbers are also re-derived from fișe + trash, so this file is not critical) |
 | Local backup mirror + overwritten versions | `…\date\backup\{mirror,history}` |
 | **Independent safety backup** | `%APPDATA%\Service Auto\safety-backup\{fise,drafturi,history,snapshots}` |
 | License (machine-bound) | `%APPDATA%\Service Auto\license.dat` |
@@ -32,6 +32,9 @@ Data is never stored next to the `.exe` (an NSIS update wipes the install folder
 | Whole data folder gone | Restored from the safety-backup at next start |
 | Custom data folder unplugged (USB/network) | Works in `date-temporar`, persistent banner; work is merged back when the folder returns |
 | Bad backup / bad edit propagating | Daily snapshot bundles (`safety-backup\snapshots`, 30 kept) |
+| Corrupt `app-config.json` (holds the custom data folder) | Bad file copied to `app-config.json.corrupt-<time>`, config restored from `app-config.json.bak` (last good version, kept on every write); writes are atomic. If no good `.bak` exists the file is left untouched and no setting is written over it |
+| Fișă briefly unreadable at start (antivirus lock) | Skipped, not quarantined; re-read on the next list/search until it loads (no restart needed) |
+| Hand-edited / oversize entry in an imported backup | Each entry is migrated + sanitized before writing; unusable ones (e.g. > 300 lines) are skipped and counted as `invalide`, the rest is imported |
 | Update installation | Draft flush + final backup before `quitAndInstall` |
 
 Manual tools (Settings → Backup): backup now, export a backup file (e.g. to USB), restore from a file or from the latest snapshot. Restore **only adds what is missing** and never overwrites an existing fișă.
