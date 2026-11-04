@@ -8,11 +8,14 @@ import { registerIpcHandlers } from './ipc'
 import { cleanupOldPreviews } from './store/paths'
 import { initUpdater } from './updater'
 import { checkRevocationOnline, isRevoked, warmFingerprint } from './license'
+import { prewarmPdfWorker, shutdownPdfWorker } from './pdfGenerator'
 import { attachWindow, guardWindowClose } from './lifecycle'
 
 let mainWindow = null
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000 // o data pe zi
 const REVOCATION_RECHECK_MS = 24 * 60 * 60 * 1000
+const BACKUP_INITIAL_DELAY_MS = 45 * 1000 // dupa primele incarcari IPC ale renderer-ului
+const PDF_PREWARM_DELAY_MS = 3000
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -40,7 +43,11 @@ function createWindow() {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow.show())
+  mainWindow.on('ready-to-show', () => {
+    mainWindow.show()
+    // Worker-ul de PDF porneste dupa ce pornirea s-a linistit, ca prima fisa sa iasa repede.
+    setTimeout(prewarmPdfWorker, PDF_PREWARM_DELAY_MS).unref()
+  })
 
   // Inchiderea asteapta salvarea draftului curent + un ultim backup.
   attachWindow(mainWindow)
@@ -178,7 +185,10 @@ app.whenReady().then(async () => {
   setInterval(recheckRevocation, REVOCATION_RECHECK_MS)
 
   // Backup zilnic, best-effort - nu blocheaza si nu opreste aplicatia daca esueaza.
-  backupNow().catch((err) => log.warn('[main] backup initial esuat', err))
+  // Primul backup e amanat: nu concureaza cu citirile initiale ale renderer-ului.
+  setTimeout(() => {
+    backupNow().catch((err) => log.warn('[main] backup initial esuat', err))
+  }, BACKUP_INITIAL_DELAY_MS).unref()
   setInterval(() => {
     backupNow().catch((err) => log.warn('[main] backup periodic esuat', err))
   }, BACKUP_INTERVAL_MS)
@@ -187,6 +197,8 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+app.on('will-quit', shutdownPdfWorker)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
