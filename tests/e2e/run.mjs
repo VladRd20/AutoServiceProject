@@ -1,20 +1,46 @@
-// End-to-end harness for the built ServiceAuto app (out/).
-//   npx electron-vite build && node tests/e2e/run.mjs            (all scenarios)
-//   node tests/e2e/run.mjs 3 6 16                                (only some)
-//   KEEP=1 node tests/e2e/run.mjs 3                              (keep temp sandboxes for inspection)
+// End-to-end harness for the built ServiceAuto app (out/). NU ruleaza build-ul: `npm run e2e` il face inainte.
+//   npm run e2e                                  build + toate scenariile, in paralel (--jobs implicit = min(4, cpus/2))
+//   npm run e2e:smoke                            build + subsetul rapid (~1 min), vezi SMOKE mai jos
+//   node tests/e2e/run.mjs 3 6 16                doar scenariile alese (id-uri; "10" include si 10b)
+//   node tests/e2e/run.mjs --jobs 1              serial, ca inainte (depanare)
+//   node tests/e2e/run.mjs --jobs 4 --smoke      se pot combina
+//   KEEP=1 node tests/e2e/run.mjs 3              pastreaza sandbox-urile din temp pentru inspectie
+// Jurnale per scenariu: tests/e2e/logs/<id>.log ; raport: tests/e2e/last-report.json.
+// Rulari paralele (si procese node diferite) sunt sigure: fiecare rulare are propria radacina de sandbox-uri,
+// iar curatarea de procese omoara doar electron.exe-urile al caror command line contine acea radacina.
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   YEAR, sleep, rnd, prepareTemplate, makeSandbox, destroySandbox, cleanupAll, launch, closeApp, hardKill,
   readDrafts, readFise, jsonFiles, listDir, readJsonFile, tryReadJson, integrityProblems, waitFor, waitDraft, isPdf,
   nameInput, phoneInput, plateInput, marcaInput, modelInput, releaseBtn, section, fillFisa,
-  waitSaved, clickFinalize, waitFinalizeDone, ipcFinalize, reload, spawnSecond, errorsOf
+  waitSaved, clickFinalize, markFinalize, waitFinalizeDone, ipcFinalize, reload, spawnSecond, errorsOf,
+  settle, waitQuiet, waitForSelector, withTimeout
 } from './helpers.mjs'
 
-const wanted = process.argv.slice(2)
+// Subsetul rapid (--smoke): boot (1), fill + autosave (2), reopen/restore (5), finalize + PDF (6),
+// cautare/paleta + setari (17: filtru de data in paleta, contor, setarea de auto-update).
+const SMOKE = ['1', '2', '5', '6', '17']
+
+const argv = process.argv.slice(2)
+let jobs = Math.max(1, Math.min(4, Math.floor(os.cpus().length / 2)))
+let smoke = false
+const wanted = []
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === '--smoke') smoke = true
+  else if (argv[i] === '--jobs' || argv[i] === '-j') jobs = Math.max(1, parseInt(argv[++i], 10) || 1)
+  else if (argv[i].startsWith('--jobs=')) jobs = Math.max(1, parseInt(argv[i].slice(7), 10) || 1)
+  else wanted.push(argv[i])
+}
+if (smoke) wanted.push(...SMOKE)
+
+// Un scenariu = una sau mai multe "parti" independente (fiecare cu propriul sandbox) care pot rula in paralel
+// in pool; `t` e comun, deci verificarile se aduna in acelasi scenariu. `weight` = durata estimata (s), ca
+// partile lungi sa porneasca primele (LPT) si coada sa nu fie dominata de ele.
 const scenarios = []
-const scenario = (id, title, fn) => scenarios.push({ id: String(id), title, fn })
+const scenario = (id, title, fn, weight = 10) => scenarios.push({ id: String(id), title, parts: [].concat(fn), weight })
 const results = []
 
 const pad2 = (n) => String(n).padStart(2, '0')
@@ -25,7 +51,7 @@ function todayDMY() {
 const newFisa = async (page) => {
   await page.locator('.btn-new').click()
   await waitFor(async () => (await nameInput(page).inputValue()) === '', { what: 'empty form after Fișă nouă' })
-  await sleep(300)
+  await settle(page)
 }
 const recentItems = (page) => page.locator('.recent-list li')
 const draftItem = (page, text) => page.locator('.drafts-list li', { hasText: text }).locator('button').first()
@@ -36,9 +62,12 @@ scenario(1, 'Boot: window, no activation screen, no console errors', async (t) =
   const h = await launch(sb)
   t.check((await h.app.windows()).length === 1, 'exactly one window')
   t.check(await nameInput(h.page).isVisible(), 'form visible')
-  t.check((await h.page.locator('text=/activare|licen[țt]/i').count()) === 0, 'no activation/licence screen text')
+  const licHits = await h.page.locator('text=/activare|licen[țt]/i').evaluateAll((els) => els.map((e) => e.className + ': ' + e.textContent.slice(0, 80)))
+  t.check(licHits.length === 0, `no activation/licence screen text (found: ${licHits.join(' // ')})`)
   t.check((await h.page.title()) !== undefined, 'has title')
-  await sleep(2500) // let revocation check / backup / location info finish
+  // PASTRAT intentionat: scenariul afirma ca NU apar erori in fereastra de pornire; nu exista un semnal de
+  // "toate task-urile de fundal s-au terminat" (revocation check cu retea, location info), deci e timp observat.
+  await sleep(2500)
   const e = errorsOf(h)
   t.check(e.console.length === 0, `no console errors: ${e.console.join(' | ')}`)
   t.check(e.pageErrors.length === 0, `no page errors: ${e.pageErrors.join(' | ')}`)
@@ -66,10 +95,11 @@ scenario(2, 'Full fișă + autosave draft matches', async (t) => {
 })
 
 // ========================================================= 3. close-flush ===
-scenario(3, 'CLOSE-FLUSH x5 (marker typed <150ms before close)', async (t) => {
-  const methods = ['BrowserWindow.close', 'app', 'BrowserWindow.close2', 'app', 'BrowserWindow.close']
-  for (let i = 0; i < 5; i++) {
-    const how = methods[i]
+// Cele 5 iteratii sunt independente (sandbox propriu) => 5 parti, rulate in paralel in pool.
+const CLOSE_METHODS = ['BrowserWindow.close', 'app', 'BrowserWindow.close2', 'app', 'BrowserWindow.close']
+scenario(3, 'CLOSE-FLUSH x5 (marker typed <150ms before close)', [0, 1, 2, 3, 4].map((i) => async (t) => {
+  {
+    const how = CLOSE_METHODS[i]
     const sb = makeSandbox(`closeflush${i}`)
     try {
       const h = await launch(sb)
@@ -96,7 +126,7 @@ scenario(3, 'CLOSE-FLUSH x5 (marker typed <150ms before close)', async (t) => {
       await destroySandbox(sb)
     }
   }
-})
+}), 12)
 
 // ======================================================== 4. switch-flush ===
 scenario(4, 'SWITCH-FLUSH: edit draft A, click draft B <100ms later', async (t) => {
@@ -206,7 +236,8 @@ scenario(7, 'Validation fail-cases block finalize; nothing written to fise/', as
   const errTexts = async () => (await p.locator('.field-error').allInnerTexts()).join(' | ')
   const attempt = async (label, expectRe, minErrors = 1) => {
     await clickFinalize(p)
-    await sleep(700)
+    // semnalul real: toast-ul de eroare + erorile de camp au aparut (validarea e sincrona in UI, nu scrie nimic)
+    await waitFor(async () => (await p.locator('.toast-error').count()) >= 1 && (await p.locator('.field-error').count()) >= 1, { what: `${label}: toast + field errors`, timeout: 5000 }).catch(() => {})
     const txt = await errTexts()
     const n = await p.locator('.field-error').count()
     t.check(n >= minErrors, `${label}: >=${minErrors} visible field errors (got ${n}: ${txt})`)
@@ -277,18 +308,20 @@ scenario(8, 'Single instance: 2nd process exits fast, 1st window alive', async (
   const before = await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
   await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize())
   const s = spawnSecond(sb)
-  const code = await Promise.race([s.exited, sleep(15000).then(() => 'TIMEOUT')])
+  const code = await withTimeout(s.exited, 15000, 'TIMEOUT')
   const ms = Date.now() - s.t0
   if (code === 'TIMEOUT') s.cp.kill()
   t.check(code !== 'TIMEOUT', `second instance exited (code ${code}) in ${ms}ms`)
   t.check(ms < 8000, `second instance exited quickly (${ms}ms)`)
   const after = await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
   t.check(before === 1 && after === 1, `still exactly one window (${before} -> ${after})`)
-  await sleep(500)
-  const st = await h.app.evaluate(({ BrowserWindow }) => {
+  const winState = () => h.app.evaluate(({ BrowserWindow }) => {
     const w = BrowserWindow.getAllWindows()[0]
     return { minimized: w.isMinimized(), visible: w.isVisible(), focused: w.isFocused() }
   })
+  // restaurarea ferestrei de catre instanta a doua e asincrona: asteptam starea, check-ul de dupa ramane acelasi
+  await waitFor(async () => { const s2 = await winState(); return !s2.minimized && s2.visible }, { what: 'first window restored', timeout: 5000 }).catch(() => {})
+  const st = await winState()
   t.check(!st.minimized && st.visible, `first window restored & visible after 2nd launch (${JSON.stringify(st)})`)
   t.info(`focus state: ${JSON.stringify(st)} (focus may be OS-restricted from a background test runner)`)
   t.check((await nameInput(h.page).inputValue()) === 'Single', 'first window still responsive with its state')
@@ -344,7 +377,8 @@ scenario(10, 'Edit recent fișă: same file, same nr, history keeps old version'
   await waitFor(async () => (await nameInput(p).inputValue()) === 'Original Name', { what: 'edit form loaded' })
   t.check((await p.locator('h1').innerText()).includes('Editare'), 'title says Editare fișă')
   await nameInput(p).fill('Edited Name')
-  await sleep(1500) // autosave of the edit draft
+  // autosave-ul draftului de editare: asteptam pe disc (chip-ul "Salvat" se aprinde si cu debounce-ul de 1s in asteptare)
+  await waitDraft(sb, (d) => d.client?.nume === 'Edited Name').catch(() => {})
   await clickFinalize(p)
   await waitFinalizeDone(p, { toast: /Fișă actualizată/ })
   const fise = readFise(sb)
@@ -410,7 +444,9 @@ async function corruptionCase(t, label, mutate) {
   const h2 = await launch(sb)
   const p = h2.page
   await waitFor(async () => (await recentItems(p).count()) === 1, { what: 'fișă listed after corruption', timeout: 10000 })
-  await sleep(500)
+  // repararea din backup scrie fisierul inainte/dupa listare: asteptam continutul valid pe disc, comparatia de mai jos ramane
+  await waitFor(() => { const c = tryReadJson(path.join(sb.fiseDir, `${base}.json`)); return c && JSON.stringify(c) === JSON.stringify(JSON.parse(original)) }, { what: 'fișă healed on disk', timeout: 5000 }).catch(() => {})
+  await waitFor(() => isPdf(path.join(sb.fiseDir, `${base}.pdf`)), { what: 'pdf valid', timeout: 5000 }).catch(() => {})
   const now = fs.readFileSync(path.join(sb.fiseDir, `${base}.json`), 'utf-8')
   t.check(now === original || JSON.stringify(JSON.parse(now)) === JSON.stringify(JSON.parse(original)), `${label}: fișă restored from backup`)
   t.check(isPdf(path.join(sb.fiseDir, `${base}.pdf`)), `${label}: PDF still valid`)
@@ -421,10 +457,12 @@ async function corruptionCase(t, label, mutate) {
   t.check(integrityProblems(sb).length === 0, `${label}: integrity ${integrityProblems(sb).join(',')}`)
   await destroySandbox(sb)
 }
-scenario(11, 'Corrupt (truncated / empty / garbage) finalized JSON is healed from backup', async (t) => {
-  await corruptionCase(t, 'truncated', (f, o) => fs.writeFileSync(f, o.slice(0, Math.floor(o.length * 0.4))))
-  await corruptionCase(t, 'zero-byte', (f) => fs.writeFileSync(f, ''))
-  await corruptionCase(t, 'garbage', (f) => fs.writeFileSync(f, Buffer.alloc(300, 0)))
+// 4 cazuri independente (sandbox propriu) => 4 parti paralele.
+scenario(11, 'Corrupt (truncated / empty / garbage) finalized JSON is healed from backup', [
+  (t) => corruptionCase(t, 'truncated', (f, o) => fs.writeFileSync(f, o.slice(0, Math.floor(o.length * 0.4)))),
+  (t) => corruptionCase(t, 'zero-byte', (f) => fs.writeFileSync(f, '')),
+  (t) => corruptionCase(t, 'garbage', (f) => fs.writeFileSync(f, Buffer.alloc(300, 0))),
+  async (t) => {
   // draft corruption
   const sb = makeSandbox('corrupt-draft')
   const h = await launch(sb)
@@ -440,7 +478,8 @@ scenario(11, 'Corrupt (truncated / empty / garbage) finalized JSON is healed fro
   t.check((await nameInput(h2.page).inputValue()) === 'Draft Corrupt', 'draft restored from backup and shown in form')
   await closeApp(h2)
   await destroySandbox(sb)
-})
+  }
+], 12)
 
 // ========================================================== 12. missing pdf ==
 scenario(12, 'Missing PDF regenerated by retryPdf', async (t) => {
@@ -467,8 +506,9 @@ scenario(12, 'Missing PDF regenerated by retryPdf', async (t) => {
 })
 
 // ===================================================== 13. data path fail ===
-scenario(13, 'Unusable data path -> temp fallback, banner, drafts + finalize still work, merge back', async (t) => {
-  for (const kind of ['nonexistent-drive', 'under-a-file']) {
+// Cele doua variante (kind) sunt independente => 2 parti paralele.
+scenario(13, 'Unusable data path -> temp fallback, banner, drafts + finalize still work, merge back', ['nonexistent-drive', 'under-a-file'].map((kind) => async (t) => {
+  {
     const sb = makeSandbox('fallback-' + kind, { seedSettings: false })
     let bad
     if (kind === 'nonexistent-drive') {
@@ -482,8 +522,8 @@ scenario(13, 'Unusable data path -> temp fallback, banner, drafts + finalize sti
     fs.writeFileSync(path.join(sb.userData, 'app-config.json'), JSON.stringify({ dataPath: bad }))
     const h = await launch(sb)
     const p = h.page
-    await sleep(800)
     const banner = p.locator('.app-banner.warn')
+    await waitFor(async () => (await banner.count()) === 1, { what: `${kind}: warning banner`, timeout: 8000 }).catch(() => {})
     t.check((await banner.count()) === 1, `${kind}: persistent warning banner visible`)
     t.check((await banner.innerText().catch(() => '')).includes('date-temporar'), `${kind}: banner names the temp folder`)
     t.check(fs.existsSync(path.join(sb.tempFallback, 'drafturi')), `${kind}: date-temporar/ created`)
@@ -505,7 +545,9 @@ scenario(13, 'Unusable data path -> temp fallback, banner, drafts + finalize sti
       const real = path.join(sb.dir, 'realdata')
       fs.writeFileSync(path.join(sb.userData, 'app-config.json'), JSON.stringify({ dataPath: real }))
       const h2 = await launch(sb)
-      await sleep(1000)
+      // fuzionarea ruleaza la pornire: asteptam semnalele ei reale (folderul temporar redenumit, fisa ajunsa in real/)
+      await waitFor(() => listDir(sb.userData).some((n) => n.startsWith('date-temporar-fuzionat-')) && jsonFiles(path.join(real, 'fise')).length === 1, { what: 'merge done', timeout: 10000 }).catch(() => {})
+      await settle(h2.page)
       t.check((await h2.page.locator('.app-banner.warn').count()) === 0, 'merge: banner gone once folder is back')
       t.check(jsonFiles(path.join(real, 'fise')).length === 1, `merge: finalized fișă merged back (${jsonFiles(path.join(real, 'fise'))})`)
       t.check(readDrafts({ draftsDir: path.join(real, 'drafturi') }).some((d) => d.client?.nume === 'Fallback Draft 2'), 'merge: draft merged back')
@@ -514,10 +556,12 @@ scenario(13, 'Unusable data path -> temp fallback, banner, drafts + finalize sti
     }
     await destroySandbox(sb)
   }
-})
+}), 15)
 
 // =================================================== 15. kill -9 crashes ====
-scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', async (t) => {
+// 15a, 15b, 15c sunt independente (sandbox propriu) => 3 parti paralele.
+scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', [
+  async (t) => {
   // 15a: kill after autosave settled
   {
     const sb = makeSandbox('kill-settled')
@@ -525,7 +569,8 @@ scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', asyn
     await fillFisa(h.page, { nume: 'Settled', plate: 'K-1' })
     await waitSaved(h.page)
     await waitDraft(sb, (d) => d.client?.nume === 'Settled' && d.lucrari?.length === 1)
-    await sleep(300)
+    // "dupa ce s-a asezat tot": fara scrieri in curs (nicio schimbare pe disc 250ms) inainte de kill
+    await waitQuiet([sb.dataDir, sb.safetyDir], { quietMs: 250 })
     await hardKill(h)
     const pre = integrityProblems(sb)
     t.check(pre.length === 0, `15a: integrity right after kill: ${pre.join(',')}`)
@@ -534,11 +579,14 @@ scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', asyn
     t.check((await h2.page.locator('.drafts-list li', { hasText: 'K-1' }).count()) === 1, '15a: draft listed in sidebar after relaunch')
     const formVal = await nameInput(h2.page).inputValue()
     t.info('15a: after kill -9 the form shows ' + (formVal === 'Settled' ? 'the in-progress draft' : 'a BLANK form (lastOpenDraftId in localStorage not yet flushed to disk when process was killed); draft is only reachable via the sidebar'))
-    await sleep(800)
+    // curatarea de la pornire (tmp ramase) e asincrona: asteptam disc curat, apoi aceeasi verificare
+    await waitFor(() => integrityProblems(sb).length === 0, { what: '15a clean after relaunch', timeout: 5000 }).catch(() => {})
     t.check(integrityProblems(sb).length === 0, `15a: integrity after relaunch ${integrityProblems(sb).join(',')}`)
     await closeApp(h2)
     await destroySandbox(sb)
   }
+  },
+  async (t) => {
   // 15b: kill at random moments while typing
   {
     const sb = makeSandbox('kill-typing')
@@ -556,6 +604,7 @@ scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', asyn
       const m = `K${i}-${rnd()}`
       markers.add(m)
       await nameInput(h.page).fill(m)
+      // PASTRAT intentionat: momentul aleatoriu al kill-ului fata de debounce-ul autosave E scopul testului
       await sleep(Math.floor(Math.random() * 1500))
       await hardKill(h)
       const probs = integrityProblems(sb)
@@ -567,7 +616,7 @@ scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', asyn
       if (v === '') blank++
       const names = readDrafts(sb).map((d) => d.client?.nume).filter(Boolean)
       t.check(names.every((n) => markers.has(n)), `15b iter ${i}: every draft on disk holds a value that was really typed (${names})`)
-      await sleep(600)
+      await waitFor(() => integrityProblems(sb).length === 0, { what: `15b iter ${i} clean after relaunch`, timeout: 5000 }).catch(() => {})
       t.check(integrityProblems(sb).length === 0, `15b iter ${i}: clean after relaunch (${integrityProblems(sb).join(',')})`)
     }
     t.info(`15b: relaunches that showed a blank form instead of the in-progress draft: ${blank}/6`)
@@ -575,6 +624,8 @@ scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', asyn
     await closeApp(h)
     await destroySandbox(sb)
   }
+  },
+  async (t) => {
   // 15c: kill during finalize -> never lose both draft and fișă
   {
     const sb = makeSandbox('kill-finalize')
@@ -587,6 +638,7 @@ scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', asyn
       await waitSaved(h.page)
       await waitDraft(sb, (d) => d.client?.nume === name && d.lucrari?.length === 1)
       await releaseBtn(h.page).click({ noWaitAfter: true })
+      // PASTRAT intentionat: kill la moment aleatoriu in timpul finalizarii
       await sleep(Math.floor(Math.random() * 350))
       await hardKill(h)
       const inDraft = readDrafts(sb).some((d) => d.client?.nume === name)
@@ -596,7 +648,7 @@ scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', asyn
       const probs = integrityProblems(sb).filter((x) => !x.startsWith('tmp leftover'))
       t.check(probs.length === 0, `15c iter ${i}: no corrupt json (${probs.join(',')})`)
       h = await launch(sb)
-      await sleep(500)
+      await settle(h.page)
       const f = readFise(sb).find((x) => x.client?.nume === name)
       if (f) t.check(isPdf(path.join(sb.fiseDir, `${f.base}.pdf`)) || true, '')
       if (f && !isPdf(path.join(sb.fiseDir, `${f.base}.pdf`))) t.info(`15c iter ${i}: finalized JSON exists but PDF missing after crash (regenerated on demand by ensurePdf/retry)`)
@@ -607,7 +659,8 @@ scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', asyn
     await closeApp(h)
     await destroySandbox(sb)
   }
-})
+  }
+], 45)
 
 // ==================================================== 16. misc data risks ===
 scenario(16, 'Misc: double finalize, repeat-open, huge paste, unicode, delete-current, Ctrl+N spam', async (t) => {
@@ -618,20 +671,22 @@ scenario(16, 'Misc: double finalize, repeat-open, huge paste, unicode, delete-cu
   // 16a: double finalize (two real dblclick events)
   await fillFisa(p, { nume: 'Dbl', plate: 'DBL-1' })
   await waitSaved(p)
+  await markFinalize(p)
   await releaseBtn(p).dblclick({ noWaitAfter: true })
-  await sleep(3500)
-  t.check(jsonFiles(sb.fiseDir).length === 1, `16a: dblclick Finalize -> exactly 1 fișă (got ${listDir(sb.fiseDir, (n) => n.endsWith('.json'))})`)
+  // finalizarea reala s-a terminat (toast + formular golit), apoi o fereastra de liniste pe fise/ prinde un al doilea fisier tardiv
   await waitFinalizeDone(p).catch(() => {})
+  await waitQuiet(sb.fiseDir, { quietMs: 600 })
+  t.check(jsonFiles(sb.fiseDir).length === 1, `16a: dblclick Finalize -> exactly 1 fișă (got ${listDir(sb.fiseDir, (n) => n.endsWith('.json'))})`)
 
   // 16a2: two clicks in the same task (before React re-renders the disabled state)
   await fillFisa(p, { nume: 'Dbl2', plate: 'DBL-2' })
   await waitSaved(p)
+  await markFinalize(p)
   await p.evaluate(() => { const b = document.querySelector('button.btn-release'); b.click(); b.click(); b.click() })
-  await sleep(3500)
+  await waitFinalizeDone(p).catch(() => {})
+  await waitQuiet(sb.fiseDir, { quietMs: 600 })
   const dbl2 = readFise(sb).filter((f) => f.client?.nume === 'Dbl2')
   t.check(dbl2.length === 1, `16a2: 3 synchronous clicks -> exactly 1 fișă for "Dbl2" (got ${dbl2.map((f) => f.base + ' ' + f.nr)})`)
-  await waitFinalizeDone(p).catch(() => {})
-  await sleep(500)
 
   // 16b: open same draft repeatedly
   await newFisa(p).catch(() => {})
@@ -645,7 +700,9 @@ scenario(16, 'Misc: double finalize, repeat-open, huge paste, unicode, delete-cu
   const before = readDrafts(sb).length
   const itemA = draftItem(p, 'REP-A')
   for (let i = 0; i < 10; i++) await itemA.click({ noWaitAfter: true, force: true })
-  await sleep(1500)
+  // semnal real: formularul a ajuns pe A; apoi liniste pe disc (eventualele scrieri induse de clickuri repetate)
+  await waitFor(async () => (await nameInput(p).inputValue()) === 'Rep A', { what: 'switched to draft A', timeout: 8000 }).catch(() => {})
+  await waitQuiet(sb.draftsDir, { quietMs: 400 })
   t.check((await nameInput(p).inputValue()) === 'Rep A', '16b: ended on draft A')
   t.check(readDrafts(sb).length === before, `16b: draft count unchanged (${before} -> ${readDrafts(sb).length})`)
   t.check(readDrafts(sb).find((d) => d.client?.nume === 'Rep A')?.auto?.nrInmatriculare === 'REP-A', '16b: A content intact on disk')
@@ -693,7 +750,9 @@ scenario(16, 'Misc: double finalize, repeat-open, huge paste, unicode, delete-cu
   const kd = await waitDraft(sb, (d) => d.client?.nume === 'Kill Me')
   await p.locator('.drafts-list li', { hasText: 'KM-1' }).locator('.btn-remove').click()
   await p.locator('.confirm-dialog .btn-danger').click()
-  await sleep(3500)
+  await waitFor(async () => (await p.locator('.drafts-list li', { hasText: 'KM-1' }).count()) === 0, { what: 'KM-1 removed from sidebar', timeout: 8000 }).catch(() => {})
+  // PASTRAT (scurtat): afirmam ABSENTA unei re-salvari tardive; autosave are debounce de 1s, deci asteptam >1s de timp real
+  await sleep(1400)
   t.check(!fs.existsSync(path.join(sb.draftsDir, kd.file)), '16e: deleted current draft stays deleted (no autosave resurrection)')
   t.check((await p.locator('.drafts-list li', { hasText: 'KM-1' }).count()) === 0, '16e: gone from sidebar')
 
@@ -701,9 +760,11 @@ scenario(16, 'Misc: double finalize, repeat-open, huge paste, unicode, delete-cu
   await newFisa(p).catch(() => {})
   await fillFisa(p, { nume: 'Spam Base', plate: 'SP-1', piesa: null, lucrare: null })
   await waitSaved(p)
+  await waitDraft(sb, (d) => d.client?.nume === 'Spam Base') // chip-ul "Salvat" poate fi aprins cu debounce-ul in asteptare: contorul trebuie luat cu draftul pe disc
   const cnt = readDrafts(sb).length
   for (let i = 0; i < 6; i++) await p.keyboard.press('Control+n')
-  await sleep(2500)
+  // liniste pe disc > debounce-ul autosave (1s): nu mai apar draft-uri suplimentare
+  await waitQuiet(sb.draftsDir, { quietMs: 1200 })
   const emptyDrafts = readDrafts(sb).filter((d) => !d.client?.nume && !d.auto?.nrInmatriculare && !d.piese?.length && !d.lucrari?.length).length
   t.check(readDrafts(sb).length <= cnt + 1, `16g: Ctrl+N x6 creates at most one extra draft (${cnt} -> ${readDrafts(sb).length}, empty=${emptyDrafts})`)
   t.check(readDrafts(sb).some((d) => d.client?.nume === 'Spam Base'), '16g: original draft still intact')
@@ -745,7 +806,8 @@ scenario(17, 'Search date filter, 200-char counter, auto-update setting', async 
   await p.locator('.palette-input').fill('')
   await dates.nth(0).fill('2026-09-30')
   await dates.nth(1).fill('2026-09-01')
-  await sleep(800)
+  // capetele inversate se normalizeaza: apar rezultatele (cautarea are debounce 300ms), apoi verificam ca nu e alerta
+  await waitFor(async () => (await p.locator('.palette-row-fisa').count()) >= 1 && (await p.locator('[data-testid="palette-loading"]').count()) === 0, { what: 'inverted range results', timeout: 6000 }).catch(() => {})
   t.check(!(await p.locator('.palette [role="alert"]').count()), 'interval inversat: fara eroare')
   // sterge filtrul + inchide
   await p.keyboard.press('Escape')
@@ -858,38 +920,82 @@ scenario(18, 'Line editing keyboard + undo, decimal inputs, store-warning banner
   t.check(seen.join('|') === 'Temă: luminoasă|Temă: întunecată|Temă: sistem', `theme cycle: ${seen}`)
   // --- overlay la inchidere (doar dupa >300ms)
   await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('app:closing', true))
-  await sleep(150)
+  await sleep(150) // PASTRAT: afirmam ca overlay-ul NU apare inainte de pragul de 300ms (timp real)
   t.check((await p.locator('.closing-overlay').count()) === 0, 'no overlay before 300ms')
   await p.locator('.closing-overlay').waitFor({ state: 'visible', timeout: 2000 })
   await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('app:closing', false))
-  await sleep(200)
+  await waitFor(async () => (await p.locator('.closing-overlay').count()) === 0, { what: 'overlay hidden', timeout: 3000 }).catch(() => {})
   t.check((await p.locator('.closing-overlay').count()) === 0, 'overlay hidden when closing is cancelled')
   await closeApp(h)
 })
 
+// Durate estimate (s, serial) per scenariu, din masuratoarea de baseline; folosite doar pentru ordinea de pornire
+// (cele mai lungi primele). Nu influenteaza rezultatul.
+const WEIGHT = { 1: 4, 2: 3, 3: 44, 4: 6, 5: 7, 6: 28, 7: 16, 8: 5, 9: 3, 10: 17, '10b': 4, 11: 25, 12: 2, 13: 21, 15: 116, 16: 46, 17: 7, 18: 11 }
+const PART_TIMEOUT_MS = 240000
+
 async function main() {
-  prepareTemplate()
   const todo = scenarios.filter((s) => !wanted.length || wanted.includes(s.id) || wanted.includes(String(parseInt(s.id))))
+  if (!todo.length) {
+    console.error(`niciun scenariu potrivit pentru: ${wanted.join(' ')}`)
+    process.exit(2)
+  }
+  const logDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'logs')
+  fs.rmSync(logDir, { recursive: true, force: true })
+  fs.mkdirSync(logDir, { recursive: true })
+  prepareTemplate() // o singura data pe rulare: copia lui out/ + build/ + package.json, reutilizata de toate sandbox-urile
+
+  // O unitate = o parte a unui scenariu. Pool simplu: `jobs` workeri iau unitati din coada (cele mai grele primele).
+  const states = new Map()
+  const units = []
   for (const s of todo) {
-    const t = { fails: [], infos: [], checks: 0, check(cond, msg) { this.checks++; if (!cond) this.fails.push(msg) }, info(m) { this.infos.push(m) } }
-    const t0 = Date.now()
-    let crash = null
-    try {
-      await Promise.race([s.fn(t), sleep(240000).then(() => { throw new Error('scenario timeout 240s') })])
-    } catch (err) {
-      crash = err
+    const st = { s, t: { fails: [], infos: [], checks: 0, check(cond, msg) { this.checks++; if (!cond) this.fails.push(msg) }, info(m) { this.infos.push(m) } }, left: s.parts.length, work: 0, start: Infinity, end: 0, crash: [] }
+    states.set(s.id, st)
+    const w = (WEIGHT[s.id] ?? s.weight) / s.parts.length
+    s.parts.forEach((fn, i) => units.push({ st, fn, idx: i, w }))
+  }
+  units.sort((a, b) => b.w - a.w)
+  const t0Run = Date.now()
+  let next = 0
+  const worker = async () => {
+    while (next < units.length) {
+      const u = units[next++]
+      const t0 = Date.now()
+      u.st.start = Math.min(u.st.start, t0)
+      try {
+        await withTimeout(u.fn(u.st.t), PART_TIMEOUT_MS)
+      } catch (err) {
+        u.st.crash.push(err?.message?.startsWith('timeout ') ? `part ${u.idx + 1}: scenario timeout ${PART_TIMEOUT_MS / 1000}s` : `part ${u.idx + 1}: ${err?.stack?.split('\n').slice(0, 3).join(' / ') || err}`)
+      }
+      const t1 = Date.now()
+      u.st.work += t1 - t0
+      u.st.end = Math.max(u.st.end, t1)
+      if (--u.st.left === 0) process.stderr.write(`  done ${u.st.s.id} (${((u.st.end - u.st.start) / 1000).toFixed(1)}s)\n`)
     }
-    if (crash) t.fails.push(`EXCEPTION: ${crash.stack?.split('\n').slice(0, 3).join(' / ') || crash}`)
+  }
+  console.log(`e2e: ${todo.length} scenarii, ${units.length} unitati, --jobs ${jobs}${smoke ? ' (smoke)' : ''}`)
+  await Promise.all(Array.from({ length: Math.min(jobs, units.length) }, worker))
+  const wall = Date.now() - t0Run
+
+  // Rezultate in ordinea scenariilor + jurnal per scenariu
+  for (const s of todo) {
+    const { t, crash, work, start, end } = states.get(s.id)
+    for (const c of crash) t.fails.push(`EXCEPTION: ${c}`)
     const status = t.fails.length ? 'FAIL' : 'PASS'
-    results.push({ id: s.id, title: s.title, status, fails: t.fails, infos: t.infos, checks: t.checks, ms: Date.now() - t0 })
-    console.log(`\n[${status}] ${s.id}. ${s.title}  (${t.checks} checks, ${((Date.now() - t0) / 1000).toFixed(1)}s)`)
-    for (const f of t.fails) console.log(`    FAIL: ${f}`)
-    for (const i of t.infos) console.log(`    info: ${i}`)
+    const r = { id: s.id, title: s.title, status, fails: t.fails, infos: t.infos, checks: t.checks, ms: end - start, workMs: work }
+    results.push(r)
+    const lines = [`[${status}] ${s.id}. ${s.title}  (${t.checks} checks, span ${(r.ms / 1000).toFixed(1)}s, work ${(work / 1000).toFixed(1)}s)`]
+    for (const f of t.fails) lines.push(`    FAIL: ${f}`)
+    for (const i of t.infos) lines.push(`    info: ${i}`)
+    fs.writeFileSync(path.join(logDir, `${s.id}.log`), lines.join('\n') + '\n')
+    console.log('\n' + lines.join('\n'))
   }
   console.log('\n================ SUMMARY ================')
-  for (const r of results) console.log(`${r.status.padEnd(5)} ${String(r.id).padEnd(4)} ${r.title}`)
-  fs.writeFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'last-report.json'), JSON.stringify(results, null, 2))
+  for (const r of results) console.log(`${r.status.padEnd(5)} ${String(r.id).padEnd(4)} ${(r.workMs / 1000).toFixed(1).padStart(6)}s work  ${(r.ms / 1000).toFixed(1).padStart(6)}s span  ${r.title}`)
+  console.log(`WALL ${(wall / 1000).toFixed(1)}s  (jobs ${jobs}, work total ${(results.reduce((a, r) => a + r.workMs, 0) / 1000).toFixed(1)}s)`)
+  fs.writeFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'last-report.json'), JSON.stringify({ wallMs: wall, jobs, results }, null, 2))
   cleanupAll()
   process.exit(results.some((r) => r.status === 'FAIL') ? 1 : 0)
 }
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { cleanupAll(); process.exit(130) })
 main().catch((e) => { console.error(e); cleanupAll(); process.exit(2) })

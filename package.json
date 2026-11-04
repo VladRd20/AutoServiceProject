@@ -16,7 +16,9 @@
     "test:watch": "vitest",
     "keys:backup": "node scripts/keys-backup.js backup",
     "keys:restore": "node scripts/keys-backup.js restore",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "e2e": "electron-vite build && node tests/e2e/run.mjs",
+    "e2e:smoke": "electron-vite build && node tests/e2e/run.mjs --smoke"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
