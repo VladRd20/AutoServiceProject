@@ -45,3 +45,78 @@
   line-height: normal;
   font-weight: 600;
 }
+
+/* Maner de reordonare (drag) si spatiatorul lui din antetul coloanelor. */
+.linie-grip,
+.linie-grip-spacer {
+  flex: none;
+  width: 18px;
+}
+
+.linie-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-h);
+  align-self: flex-start;
+  color: var(--text-faint);
+  cursor: grab;
+  border-radius: var(--radius-control);
+  opacity: 0.55;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease;
+}
+
+.linie:hover .linie-grip,
+.linie-grip:hover {
+  opacity: 1;
+  color: var(--text-muted);
+}
+
+.linie-grip:active {
+  cursor: grabbing;
+}
+
+.linie.is-dragging {
+  opacity: 0.45;
+}
+
+.linie.is-drop-target {
+  box-shadow: 0 -2px 0 0 var(--accent);
+}
+
+/* Anunturi pentru cititoare de ecran (ex: "Rând mutat pe poziția 2 din 5"). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Ferestre inguste: antetul de coloane ramane vizibil si aliniat cu randurile
+   (aceleasi latimi), iar coloanele se strang in loc sa se rupa. */
+@media (max-width: 960px) {
+  .linie {
+    gap: 6px;
+  }
+
+  .linie .field-small,
+  .linie-head .field-small {
+    width: 80px;
+  }
+
+  .linie .field-cod,
+  .linie-head .field-cod {
+    width: 96px;
+  }
+
+  .linie-total {
+    min-width: 84px;
+  }
+}

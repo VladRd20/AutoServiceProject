@@ -84,7 +84,12 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
     modalOpen,
     releasingRef: editor.releasingRef,
     searchInputRef,
-    onNewFisa: draftsApi.handleNewFisa
+    onNewFisa: draftsApi.handleNewFisa,
+    autosaver: editor.autosaver,
+    showToast,
+    onRelease: release.handleRelease,
+    onPreview: release.handlePreviewPdf,
+    readOnly
   })
 
   // Pornirea: ordinea apelurilor = ordinea in care pornesc cererile IPC.
@@ -190,7 +195,8 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           errorPrefix="piese"
           errors={errors}
           suggestions={lists.autocomplete.piese}
-          confirm={confirmAction}
+          showToast={showToast}
+          resetKey={fisa.id}
         />
 
         <ListaItems
@@ -203,7 +209,8 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           errorPrefix="lucrari"
           errors={errors}
           suggestions={lists.autocomplete.lucrari}
-          confirm={confirmAction}
+          showToast={showToast}
+          resetKey={fisa.id}
         />
 
         <Totaluri

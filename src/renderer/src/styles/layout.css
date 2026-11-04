@@ -162,8 +162,17 @@ body,
 
 .release-bar-actions {
   display: flex;
+  align-items: center;
   gap: var(--space-3);
   margin-left: auto;
+}
+
+/* Separator intre actiunile secundare (Previzualizeaza) si cea principala (Finalizeaza). */
+.release-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: var(--space-1) var(--space-2);
+  background: var(--border);
 }
 
 .main > .release-bar {

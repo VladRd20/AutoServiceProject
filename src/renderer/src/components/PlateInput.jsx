@@ -15,7 +15,16 @@ function MoldovaFlag() {
 // Numar de inmatriculare: camp obisnuit (aceeasi tema ca restul formularului),
 // cu drapelul MD ca icon mic in stanga. Formatul cerut: "ABC 123" sau "A BC 123".
 // Se integreaza cu <Field> din FisaForm (primeste id/value/maxLength ca un <input>).
-export default function PlateInput({ id, value, onChange, placeholder, maxLength, invalid }) {
+export default function PlateInput({
+  id,
+  value,
+  onChange,
+  placeholder,
+  maxLength,
+  invalid,
+  'aria-invalid': ariaInvalid,
+  'aria-describedby': ariaDescribedBy
+}) {
   return (
     <div className="md-plate">
       <MoldovaFlag />
@@ -30,7 +39,8 @@ export default function PlateInput({ id, value, onChange, placeholder, maxLength
         maxLength={maxLength}
         value={value ?? ''}
         onChange={onChange}
-        aria-invalid={invalid ? 'true' : undefined}
+        aria-invalid={ariaInvalid ?? (invalid ? 'true' : undefined)}
+        aria-describedby={ariaDescribedBy}
       />
     </div>
   )

@@ -6,6 +6,76 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : 0
 }
 
+// ---------------------------------------------------------------------------
+// Helperi de parsare/formatare pentru campurile numerice din formular. Sunt
+// folositi DOAR la introducere (UI); calcTotaluri/validateFisa continua sa
+// foloseasca toNumber() de mai sus, deci rezultatele pentru datele existente
+// raman neschimbate. Valorile normalizate se stocheaza cu punct ("12.50"),
+// iar toNumber()/validarea accepta oricum si virgula.
+
+/**
+ * "12,5" / "12.5" / "1 234,50" / "1.234,50" -> numar; gol sau ne-numeric -> null.
+ * Daca apar si virgula si punct, ultimul separator e cel zecimal.
+ */
+export function parseDecimal(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  let s = String(value ?? '').replace(/[\s\u00a0]/g, '')
+  if (!s) return null
+  const lastComma = s.lastIndexOf(',')
+  const lastDot = s.lastIndexOf('.')
+  if (lastComma >= 0 && lastDot >= 0) {
+    const dec = lastComma > lastDot ? ',' : '.'
+    const thousands = dec === ',' ? /\./g : /,/g
+    s = s.replace(thousands, '').replace(dec, '.')
+  } else if (lastComma >= 0) {
+    // o singura virgula = zecimala; mai multe = separatori de mii
+    s = s.indexOf(',') === lastComma ? s.replace(',', '.') : s.replace(/,/g, '')
+  }
+  if (!/^\d*\.?\d*$/.test(s) || s === '.') return null
+  const n = Number(s)
+  return Number.isFinite(n) ? n : null
+}
+
+/** Pastreaza doar cifre si separatori (. ,) cat se tasteaza. */
+export function sanitizeDecimalText(text) {
+  return String(text ?? '').replace(/[^\d.,]/g, '')
+}
+
+/** Pret: 2 zecimale ("12,5" -> "12.50"). Gol/ne-numeric ramane neschimbat. */
+export function formatPrice(value) {
+  const n = parseDecimal(value)
+  if (n === null) return value == null ? '' : String(value)
+  return round2(n).toFixed(2)
+}
+
+/** Cantitate: pana la 3 zecimale, fara zerouri finale ("2,500" -> "2.5"). */
+export function formatQuantity(value) {
+  const n = parseDecimal(value)
+  if (n === null) return value == null ? '' : String(value)
+  return String(Math.round((n + Number.EPSILON) * 1000) / 1000)
+}
+
+/** Procent de reducere: limitat 0-100, pana la 2 zecimale; gol -> "0". */
+export function clampPercentText(value) {
+  if (/^\s*-/.test(String(value ?? ''))) return '0'
+  const n = parseDecimal(value)
+  if (n === null) return String(value ?? '').trim() === '' ? '0' : String(value)
+  return String(Math.round(Math.min(100, Math.max(0, n)) * 100) / 100)
+}
+
+/** Kilometraj tastat -> numar intreg (doar cifrele conteaza); gol -> ''. */
+export function parseKm(text) {
+  const digits = String(text ?? '').replace(/\D/g, '')
+  return digits === '' ? '' : Number(digits)
+}
+
+/** Kilometraj pentru afisare, cu spatiu la mii: 185000 -> "185 000". */
+export function formatKm(value) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  if (digits === '') return String(value ?? '')
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0')
+}
+
 export function calcLinieTotal(cantitate, pret) {
   return round2(toNumber(cantitate) * toNumber(pret))
 }

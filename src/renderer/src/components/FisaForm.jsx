@@ -1,5 +1,6 @@
 import React, { useId } from 'react'
-import { foldForMatch } from '../../../shared/calculations'
+import { foldForMatch, formatKm, parseKm } from '../../../shared/calculations'
+import DecimalInput from './DecimalInput'
 import Autocomplete from './Autocomplete'
 import PlateInput from './PlateInput'
 import Icon from './Icon'
@@ -180,13 +181,13 @@ function FisaForm({ fisa, onChange, errors, autocomplete, onShowVehicleHistory }
             />
           </Field>
           <Field label="Kilometraj (opțional)" error={errors['km']}>
-            <input
-              type="text"
+            <DecimalInput
               inputMode="numeric"
-              placeholder="ex: 185000"
+              placeholder="ex: 185 000"
               maxLength={12}
               value={fisa.km ?? ''}
-              onChange={(e) => onChange({ ...fisa, km: e.target.value })}
+              display={formatKm}
+              onChange={(v) => onChange({ ...fisa, km: parseKm(v) })}
             />
           </Field>
           <Field label="Capacitate cilindrică (cmc)" error={errors['auto.capacitate']}>

@@ -1,6 +1,13 @@
 import React, { memo } from 'react'
-import { calcTotaluri } from '../../../shared/calculations'
+import { calcTotaluri, clampPercentText, parseDecimal, sanitizeDecimalText } from '../../../shared/calculations'
+import DecimalInput from './DecimalInput'
 import { formatLei } from '../format'
+
+// Cat se tasteaza: peste 100 se taie direct la "100" (la blur se normalizeaza complet).
+function parsePercentLive(text) {
+  const n = parseDecimal(text)
+  return n !== null && n > 100 ? '100' : text
+}
 
 function Totaluri({
   piese,
@@ -48,20 +55,23 @@ function Totaluri({
             <span className="td-label">{r.label}</span>
             <span className="td-num">{formatLei(r.subtotal)}</span>
             <span className="td-input">
-              <input
+              <DecimalInput
                 id={`reducere-${r.key}`}
-                type="number"
-                min="0"
-                max="100"
-                step="1"
                 aria-label={`Reducere ${r.label.toLowerCase()} (%)`}
                 value={r.percent ?? 0}
                 aria-invalid={r.error ? 'true' : undefined}
+                aria-describedby={r.error ? `reducere-${r.key}-error` : undefined}
                 title={r.error || undefined}
-                onChange={(e) => r.onChange(e.target.value)}
+                sanitize={sanitizeDecimalText}
+                normalize={clampPercentText}
+                onChange={(v) => r.onChange(parsePercentLive(v))}
               />
               <span className="unit">%</span>
-              {r.error && <span className="field-error">{r.error}</span>}
+              {r.error && (
+                <span className="field-error" id={`reducere-${r.key}-error`}>
+                  {r.error}
+                </span>
+              )}
             </span>
             <span className={`td-num ${r.reducere > 0 ? 'reducere-valoare' : 'muted'}`}>
               {r.reducere > 0 ? `−${formatLei(r.reducere)}` : '—'}

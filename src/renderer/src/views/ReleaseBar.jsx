@@ -60,7 +60,7 @@ export default function ReleaseBar({
         <button
           type="button"
           disabled={previewingPdf || fisaGoala}
-          title="Generează și deschide un PDF cu fișa curentă, fără să o finalizezi (util pentru o ofertă)"
+          title="Previzualizează PDF (Ctrl+P) — generează și deschide un PDF cu fișa curentă, fără să o finalizezi (util pentru o ofertă)"
           onClick={onPreview}
         >
           {previewingPdf ? (
@@ -73,11 +73,12 @@ export default function ReleaseBar({
             </>
           )}
         </button>
+        <span className="release-divider" aria-hidden="true" />
         <button
           type="button"
           className="btn-primary btn-release"
           disabled={releasing || readOnly}
-          title={readOnly ? 'Licență revocată — mod doar-citire' : undefined}
+          title={readOnly ? 'Licență revocată — mod doar-citire' : 'Finalizează (Ctrl+Enter)'}
           onClick={onRelease}
         >
           {releasing ? (
