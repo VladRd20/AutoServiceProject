@@ -88,6 +88,9 @@ describe('inchidere fereastra', () => {
   })
 
   it('daca fereastra ramane deschisa dupa flush (inchidere oprita), overlay-ul e ascuns (app:closing=false)', async () => {
+    // Doar setTimeout e fals: flush-ul foloseste I/O real, iar pauza de 1.5s
+    // (CLOSE_ABORT_CHECK_MS) se parcurge prin avansarea timerelor, nu prin asteptare.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const win = fakeWindow()
     win.close = vi.fn(() => {
       const event = {
@@ -103,8 +106,11 @@ describe('inchidere fereastra', () => {
     lifecycle.guardWindowClose(win)
     win.close()
     expect(win.events).toEqual([['app:closing', true]])
-    // Flush-ul foloseste I/O real, deci asteptam cu timere reale (~1.5s dupa flush).
-    await vi.waitFor(() => expect(win.events).toHaveLength(2), { timeout: 4000 })
+    // Avansam timpul fals pas cu pas, lasand I/O-ul real al flush-ului sa se termine.
+    for (let i = 0; i < 400 && win.events.length < 2; i++) {
+      await vi.advanceTimersByTimeAsync(100)
+      await new Promise((r) => setImmediate(r))
+    }
     expect(win.events[1]).toEqual(['app:closing', false])
   })
 
