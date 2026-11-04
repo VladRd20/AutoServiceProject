@@ -24,12 +24,21 @@ export function LengthCounter({ value, max }) {
 
 function Field({ label, error, children, className = '' }) {
   const id = useId()
+  const errId = `${id}-error`
   return (
     <div className={`field ${className}`.trim()}>
       <label htmlFor={id}>{label}</label>
-      {React.cloneElement(children, { id })}
+      {React.cloneElement(children, {
+        id,
+        'aria-invalid': error ? 'true' : undefined,
+        'aria-describedby': error ? errId : undefined
+      })}
       <LengthCounter value={children.props.value} max={children.props.maxLength} />
-      {error && <span className="field-error">{error}</span>}
+      {error && (
+        <span className="field-error" id={errId}>
+          {error}
+        </span>
+      )}
     </div>
   )
 }

@@ -2,6 +2,17 @@ import { useState } from 'react'
 import { validateFisa, isFisaEmpty } from '../../../shared/calculations'
 import { LAST_DRAFT_KEY, lsGet, lsSet } from '../fisaModel'
 
+// Dupa ce erorile ajung in DOM (aria-invalid pe campuri), deruleaza si da focus
+// primului camp invalid, in ordinea documentului.
+function focusFirstInvalid() {
+  requestAnimationFrame(() => {
+    const el = document.querySelector('[aria-invalid="true"]')
+    if (!el) return
+    el.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    el.focus({ preventScroll: true })
+  })
+}
+
 // Finalizarea fisei (validare, salvare, PDF, trecere la urmatoarea fisa),
 // previzualizarea PDF si reincercarea PDF-ului esuat.
 export default function useRelease({
@@ -28,6 +39,7 @@ export default function useRelease({
     setErrors(localErrors)
     if (!valid) {
       showToast('error', 'Fișa conține câmpuri incomplete sau invalide. Verifică câmpurile evidențiate cu roșu.')
+      focusFirstInvalid()
       return
     }
 
@@ -58,7 +70,10 @@ export default function useRelease({
       if (!res.ok) {
         suspendAutosaveRef.current = false
         autosaver.update(fisaRef.current)
-        if (res.error.code === 'VALIDATION' && res.error.fields) setErrors(res.error.fields)
+        if (res.error.code === 'VALIDATION' && res.error.fields) {
+          setErrors(res.error.fields)
+          focusFirstInvalid()
+        }
         showToast('error', res.error.message)
         return
       }
