@@ -1,6 +1,9 @@
 import path from 'path'
 import fs from 'fs/promises'
 import log from '../logger'
+import { sanitizeFisa } from '../sanitize'
+import { migrateFisa } from '../../shared/schema'
+import { LIMITS } from '../../shared/calculations'
 import { AppError, toAppError } from '../errors'
 import {
   assertSafeId,
@@ -30,7 +33,10 @@ import {
 const SNAPSHOT_KEEP = 30
 const SNAPSHOT_MIN_INTERVAL_MS = 10 * 60 * 1000
 const BUNDLE_FORMAT = 'service-auto-backup'
-const BUNDLE_MAX_BYTES = 200 * 1024 * 1024
+// Limita la IMPORT trebuie sa fie >= orice poate produce snapshot-ul/exportul
+// (buildBundle nu are plafon). 512 MB ~ limita unui string V8 - peste, citirea
+// ca text esueaza oricum. Nu e o limita de securitate.
+const BUNDLE_MAX_BYTES = 512 * 1024 * 1024
 
 const status = { lastBackupAt: null, lastError: null, lastSnapshotAt: 0 }
 
@@ -179,7 +185,24 @@ export async function exportBackup(destFile) {
   return { path: destFile, fise: Object.keys(bundle.fise).length, drafturi: Object.keys(bundle.drafturi).length }
 }
 
-const looksLikeFisa = (f) => f && typeof f === 'object' && !Array.isArray(f) && f.client && f.auto
+const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v)
+const looksLikeFisa = (f) => isObj(f) && isObj(f.client) && isObj(f.auto)
+
+// Intrare restaurata: migrare (forma veche -> curenta) + sanitize (tipuri/
+// lungimi), ca un backup editat de mana sa nu poata scrie date nevalide pe
+// disc. Intoarce null daca intrarea nu e salvabila (ex. liste peste limita -
+// truncarea ar pierde linii dintr-o factura). Nu arunca niciodata.
+function cleanRestored(value) {
+  try {
+    for (const k of ['piese', 'lucrari']) {
+      if (Array.isArray(value[k]) && value[k].length > LIMITS.linii) return null
+    }
+    const clean = sanitizeFisa(migrateFisa(value))
+    return looksLikeFisa(clean) ? clean : null
+  } catch {
+    return null
+  }
+}
 
 // Restaurare din fisier de backup: adauga doar ce LIPSESTE. Nu suprascrie
 // niciodata o fisa existenta (una diferita e numarata ca "conflict" si lasata
@@ -225,13 +248,18 @@ export function importBackup(srcFile) {
           result.invalide++
           continue
         }
+        const clean = cleanRestored(value)
+        if (!clean) {
+          result.invalide++
+          continue
+        }
         const target = path.join(dir, `${name}.json`)
         if (counters.compare && trashBases.has(name) && !(await exists(target))) {
           result.fiseInCos++
         } else if (counters.compare && !(await exists(target)) && value.nr && usedNr.has(value.nr)) {
           result.conflicte++
         } else if (!(await exists(target))) {
-          await writeJsonAtomic(target, value)
+          await writeJsonAtomic(target, clean)
           result[counters.ok]++
         } else if (counters.compare) {
           const cur = await readJson(target)

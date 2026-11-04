@@ -67,8 +67,15 @@ let fiseList = null
 let fiseGen = 0
 let fiseVersion = 0
 let autocompleteMemo = null
+// Fisiere sarite la incarcare pentru ca citirea a esuat TEMPORAR (antivirus,
+// handle-uri): cache-ul nu e complet cat timp exista; se reincearca la fiecare
+// citire a listei (vezi retryPendingFise), nu ramân lipsa pana la restart.
+let fisePending = new Set()
+let pendingRetry = null
 
 export function invalidateFiseCache() {
+  fisePending = new Set()
+  pendingRetry = null
   fiseMap = null
   fiseLoad = null
   fiseList = null
@@ -86,14 +93,37 @@ function touched() {
 }
 function cacheUpsert(file, fisa) {
   touched()
+  fisePending.delete(file)
   if (fiseMap) fiseMap.set(file, fisa)
 }
 function cacheRemove(file) {
   touched()
+  fisePending.delete(file)
   if (fiseMap) fiseMap.delete(file)
 }
 
+// Reciteste fisierele sarite din cauza unei erori temporare de citire.
+function retryPendingFise() {
+  if (pendingRetry) return pendingRetry
+  const p = (async () => {
+    const gen = fiseGen
+    for (const f of [...fisePending]) {
+      const res = await readJsonHealing(path.join(getFiseDir(), f), 'fise')
+      if (fiseGen !== gen && !fisePending.has(f)) continue // modificat intre timp
+      if (res.ok) cacheUpsert(f, { ...migrateFisa(res.value), _file: f })
+      else if (!res.transient) fisePending.delete(f) // lipsa/corupt: nu mai e "in asteptare"
+    }
+  })()
+  pendingRetry = p
+  const clear = () => {
+    if (pendingRetry === p) pendingRetry = null
+  }
+  p.then(clear, clear)
+  return p
+}
+
 export async function readAllFiseFinalizate() {
+  if (fiseMap && fisePending.size) await retryPendingFise()
   for (let attempt = 0; attempt < 3 && !fiseMap; attempt++) {
     if (!fiseLoad) {
       const genAtStart = fiseGen
@@ -105,16 +135,22 @@ export async function readAllFiseFinalizate() {
           throw toAppError(err, 'Nu s-a putut citi lista de fișe finalizate.')
         }
         const map = new Map()
+        const pending = new Set()
         await mapLimit(files, 32, async (f) => {
           const res = await readJsonHealing(path.join(getFiseDir(), f), 'fise')
           if (res.ok) map.set(f, { ...migrateFisa(res.value), _file: f })
+          else if (res.transient) pending.add(f)
         })
+        map.pending = pending
         return map
       })()
       fiseLoad = p
       p.then(
         (map) => {
-          if (fiseLoad === p && fiseGen === genAtStart) fiseMap = map
+          if (fiseLoad === p && fiseGen === genAtStart) {
+            fisePending = map.pending
+            fiseMap = map
+          }
         },
         () => {
           if (fiseLoad === p) fiseLoad = null
@@ -226,13 +262,21 @@ async function maxNrForYear(year) {
   return max
 }
 
+// Doar CALCULEAZA urmatorul numar; nu scrie nimic. Contorul se salveaza abia
+// dupa ce fisa e pe disc (commitCounter) - altfel o scriere esuata a fisei
+// ar arde numarul definitiv. Apelat doar in coada 'fise-write', deci doua
+// finalizari nu pot vedea acelasi maxim. Dupa un crash intre fisa si contor,
+// maxNrForYear re-deriva numarul din fisele de pe disc (contorul nu e critic).
 async function nextNr(year) {
   const n = (await maxNrForYear(year)) + 1
-  const nr = `${year}-${String(n).padStart(4, '0')}`
+  return { nr: `${year}-${String(n).padStart(4, '0')}`, n, year }
+}
+
+async function commitCounter({ year, n }) {
   const counter = await readJson(getCounterPath())
-  const next = { ...(counter.ok ? counter.value : {}), [year]: n }
+  const prev = counter.ok ? counter.value : {}
+  const next = { ...prev, [year]: Math.max(Number(prev[year]) || 0, n) }
   await writeJsonAtomic(getCounterPath(), next).catch((err) => log.warn('[fise] contor nescris', err))
-  return nr
 }
 
 // ------------------------------------------------------- finalize ---------
@@ -281,6 +325,7 @@ async function doFinalize(fisa, options) {
   // (altfel s-ar schimba si numele fisierului, si data de pe factura deja emisa).
   if (original?.data && fisa.dataCurenta) data = original.data
 
+  let reserved = null
   const { nr: _ignoredNr, ...fisaFaraNr } = fisa
   const finalFisa = {
     ...fisaFaraNr,
@@ -294,7 +339,8 @@ async function doFinalize(fisa, options) {
   if (original) {
     if (original.nr) finalFisa.nr = original.nr
   } else {
-    finalFisa.nr = await nextNr(now.getFullYear())
+    reserved = await nextNr(now.getFullYear())
+    finalFisa.nr = reserved.nr
   }
 
   const baseName = await uniqueFinalBaseName(fisaBaseName(finalFisa), original ? replaceBaseName : null)
@@ -302,6 +348,7 @@ async function doFinalize(fisa, options) {
 
   if (original) await archiveVersion(replaceBaseName)
   await writeJsonAtomic(jsonPath, finalFisa)
+  if (reserved) await commitCounter(reserved)
 
   if (original && replaceBaseName !== baseName) {
     // Numele calculat s-a schimbat (nr. inmatriculare/data): scriem sub noul
