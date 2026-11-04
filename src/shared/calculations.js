@@ -13,6 +13,8 @@ function toNumber(value) {
 // raman neschimbate. Valorile normalizate se stocheaza cu punct ("12.50"),
 // iar toNumber()/validarea accepta oricum si virgula.
 
+export const MAX_INT_DIGITS = 12
+
 /**
  * "12,5" / "12.5" / "1 234,50" / "1.234,50" -> numar; gol sau ne-numeric -> null.
  * Daca apar si virgula si punct, ultimul separator e cel zecimal.
@@ -32,6 +34,8 @@ export function parseDecimal(value) {
     s = s.indexOf(',') === lastComma ? s.replace(',', '.') : s.replace(/,/g, '')
   }
   if (!/^\d*\.?\d*$/.test(s) || s === '.') return null
+  // Maxim 12 cifre la partea intreaga: peste, Number() ar da 1e+21 in afisare.
+  if (s.split('.')[0].length > MAX_INT_DIGITS) return null
   const n = Number(s)
   return Number.isFinite(n) ? n : null
 }
@@ -73,6 +77,35 @@ export function formatKm(value) {
 
 export function calcLinieTotal(cantitate, pret) {
   return round2(toNumber(cantitate) * toNumber(pret))
+}
+
+/**
+ * Total de linie pentru UI (live, in timpul tastarii): foloseste acelasi parser
+ * ca si campurile ("1 234" = 1234, "1.234,50" = 1234.5); ne-numeric -> 0.
+ * calcTotaluri/PDF/CSV raman pe toNumber() - neschimbate.
+ */
+export function calcLinieTotalLive(cantitate, pret) {
+  return round2((parseDecimal(cantitate) ?? 0) * (parseDecimal(pret) ?? 0))
+}
+
+/**
+ * Text pentru AFISARE in campuri (utilizator roman): punctul zecimal -> virgula
+ * ("48.50" -> "48,50"). Valoarea STOCATA ramane neschimbata (punct, ca pana acum).
+ * Textul care contine deja virgula sau mai multe puncte se lasa asa cum e.
+ */
+export function toDisplayDecimal(value) {
+  const s = value == null ? '' : String(value)
+  if (s.includes(',') || (s.match(/\./g) || []).length !== 1) return s
+  return s.replace('.', ',')
+}
+
+/** true daca textul are mai mult de MAX_INT_DIGITS cifre la partea intreaga. */
+export function exceedsIntDigits(text) {
+  const s = String(text ?? '').replace(/\s/g, '')
+  const m = s.match(/^[\d.,]*/)[0]
+  // partea intreaga = pana la ultimul separator daca exista unul zecimal probabil
+  const cut = m.search(/[.,]/)
+  return (cut < 0 ? m : m.slice(0, cut)).replace(/\D/g, '').length > MAX_INT_DIGITS
 }
 
 export function round2(value) {
