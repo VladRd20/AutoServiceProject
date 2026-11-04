@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import Modal from './Modal'
 import BackupPanel from './BackupPanel'
 import TrashPanel from './TrashPanel'
+import { getDensity, setDensity } from '../theme'
 
 export default function SettingsModal({ onClose, showToast, confirm, firstRun = false, readOnly = false, onDataChanged, update }) {
   const [loading, setLoading] = useState(true)
@@ -13,6 +14,7 @@ export default function SettingsModal({ onClose, showToast, confirm, firstRun = 
   const [appVersion, setAppVersion] = useState('')
   const [autoUpdate, setAutoUpdate] = useState(false)
   const [autoUpdateBusy, setAutoUpdateBusy] = useState(false)
+  const [density, setDensityState] = useState(getDensity)
   const mounted = useRef(true)
 
   useEffect(() => {
@@ -224,6 +226,33 @@ export default function SettingsModal({ onClose, showToast, confirm, firstRun = 
               >
                 {saving ? 'Se salvează...' : 'Salvează'}
               </button>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <h3>Afișare</h3>
+            <div role="radiogroup" aria-label="Afișare" style={{ display: 'flex', gap: 20 }}>
+              {[
+                ['compact', 'Compactă'],
+                ['comfortable', 'Confortabilă']
+              ].map(([value, label]) => (
+                <label key={value} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="density"
+                    value={value}
+                    checked={density === value}
+                    onChange={() => {
+                      setDensity(value)
+                      setDensityState(value)
+                    }}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div className="hint" style={{ marginTop: 4 }}>
+              Confortabilă face câmpurile și butoanele puțin mai înalte, mai ușor de atins.
             </div>
           </div>
 

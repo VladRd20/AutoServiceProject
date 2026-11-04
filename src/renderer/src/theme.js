@@ -17,6 +17,24 @@ export function setStoredTheme(theme) {
   }
 }
 
+// Modul ales de utilizator: 'light' | 'dark' | 'system' (= nu e nimic salvat).
+export function getThemeMode() {
+  const stored = getStoredTheme()
+  return stored === 'light' || stored === 'dark' ? stored : 'system'
+}
+
+// Ciclul butonului din bara de sus: Luminoasa -> Intunecata -> Sistem.
+export function nextThemeMode(mode) {
+  return mode === 'light' ? 'dark' : mode === 'dark' ? 'system' : 'light'
+}
+
+// Salveaza + aplica un mod ('light' | 'dark' | 'system'). Pentru 'system' nu
+// ramane niciun atribut pe <html>: CSS-ul urmeaza prefers-color-scheme live.
+export function setThemeMode(mode) {
+  setStoredTheme(mode)
+  applyTheme(mode)
+}
+
 export function getEffectiveTheme() {
   const stored = getStoredTheme()
   if (stored === 'light' || stored === 'dark') return stored
@@ -41,4 +59,45 @@ export function applyTheme(theme) {
 export function initTheme() {
   const stored = getStoredTheme()
   if (stored === 'light' || stored === 'dark') applyTheme(stored)
+  initDensity()
+}
+
+// ---------------------------------------------------------------------------
+// Densitatea interfetei ("Afisare: Compacta / Confortabila"), salvata ca tema,
+// in localStorage, si aplicata pe <html> ca data-density. Compacta (implicit) =
+// niciun atribut; Confortabila = data-density="comfortable" (campuri ~40px, vezi
+// tokens.css). Folosire din Setari:
+//   import { getDensity, setDensity } from '../theme'
+//   setDensity('comfortable')   // salveaza + aplica imediat
+//   getDensity()                // 'compact' | 'comfortable'
+const DENSITY_KEY = 'service-auto-density'
+
+export function getDensity() {
+  try {
+    return localStorage.getItem(DENSITY_KEY) === 'comfortable' ? 'comfortable' : 'compact'
+  } catch {
+    return 'compact'
+  }
+}
+
+export function applyDensity(density) {
+  const root = document.documentElement
+  if (density === 'comfortable') root.setAttribute('data-density', 'comfortable')
+  else root.removeAttribute('data-density')
+}
+
+export function setDensity(density) {
+  const value = density === 'comfortable' ? 'comfortable' : 'compact'
+  try {
+    if (value === 'comfortable') localStorage.setItem(DENSITY_KEY, value)
+    else localStorage.removeItem(DENSITY_KEY)
+  } catch {
+    // localStorage indisponibil: ramane doar pentru sesiunea curenta.
+  }
+  applyDensity(value)
+}
+
+// Apelata din initTheme(), inainte de primul render.
+export function initDensity() {
+  applyDensity(getDensity())
 }
