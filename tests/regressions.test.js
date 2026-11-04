@@ -134,7 +134,8 @@ describe('garda de inchidere', () => {
     win.webContents = {
       isDestroyed: () => false,
       isCrashed: () => false,
-      send: (_c, id) => {
+      send: (channel, id) => {
+        if (channel !== 'app:flush') return // app:closing nu e o cerere de flush
         sent.push(id)
         setTimeout(() => lifecycle.handleFlushDone(id), 1)
       }

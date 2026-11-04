@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { reduceriDinFisa, isFisaEmpty, calcTotaluri } from '../../../shared/calculations'
 import { applyDraftPatch } from '../draftPatch'
-import { LAST_DRAFT_KEY, lsGet, lsSet, normalizeFisa } from '../fisaModel'
+import { LAST_DRAFT_KEY, lsGet, lsSet, normalizeFisa, pickStartupDraft } from '../fisaModel'
 
 // Drafturile se reciteasca integral cel mult o data la atatea ms in timpul
 // salvarilor automate (plasa de siguranta); intre timp se aplica un patch local.
@@ -122,13 +122,8 @@ export default function useDrafts({
   // Returneaza promisiunea "drafturile sunt incarcate" (apelantul decide ce urmeaza).
   function loadInitialDrafts() {
     return refreshDrafts().then((deduped) => {
-      // Mai intai revenim la ultimul draft deschis (daca exista si are continut),
-      // altfel refolosim un draft gol existent.
-      const lastId = lsGet(LAST_DRAFT_KEY)
-      const last = lastId ? deduped.find((d) => d.id === lastId && !isFisaEmpty(d)) : null
-      // Fara un "ultim draft" valid (ex: localStorage nescris dupa o inchidere fortata),
-      // deschidem cel mai recent draft cu continut, apoi unul gol.
-      const target = last || deduped.find((d) => !isFisaEmpty(d)) || deduped.find((d) => isFisaEmpty(d))
+      // Cel mai recent modificat draft cu continut, altfel unul gol (vezi pickStartupDraft).
+      const target = pickStartupDraft(deduped)
       if (target) {
         const loaded = normalizeFisa(target)
         autosaver.reset(loaded, { clean: true })

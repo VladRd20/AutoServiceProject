@@ -17,10 +17,12 @@ import useLocationInfo from './hooks/useLocationInfo'
 import useFirstRun from './hooks/useFirstRun'
 import useRelease from './hooks/useRelease'
 import useShortcuts from './hooks/useShortcuts'
+import useStoreWarnings from './hooks/useStoreWarnings'
 import Banners from './views/Banners'
 import Topbar from './views/Topbar'
 import ReleaseBar from './views/ReleaseBar'
 import ModalHost from './views/ModalHost'
+import ClosingOverlay from './views/ClosingOverlay'
 
 // Radacina de compozitie: leaga hook-urile (starea si fluxurile) de view-uri.
 // Ordinea hook-urilor conteaza (fiecare primeste ce a returnat unul anterior).
@@ -54,6 +56,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
     refreshAutocomplete: lists.refreshAutocomplete
   })
   const { locationBanner, checkLocation } = useLocationInfo({ showToast })
+  const storeWarnings = useStoreWarnings()
   const firstRun = useFirstRun({ initialCheckDone })
   const release = useRelease({
     fisa,
@@ -121,16 +124,20 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // Dupa o restaurare din backup/trash (din Setari) listele din bara laterala trebuie reimprospatate.
   const { refreshDrafts } = draftsApi
   const { refreshRecentFise, refreshAutocomplete } = lists
+  const refreshStoreWarnings = storeWarnings.refresh
   const onDataChanged = useCallback(() => {
     refreshDrafts()
     refreshRecentFise()
     refreshAutocomplete()
-  }, [refreshDrafts, refreshRecentFise, refreshAutocomplete])
+    refreshStoreWarnings()
+  }, [refreshDrafts, refreshRecentFise, refreshAutocomplete, refreshStoreWarnings])
 
   const fisaGoala = isFisaEmpty(fisa)
 
   return (
-    <div className="app" style={firstRun.firstRunChecked ? undefined : { visibility: 'hidden' }}>
+    // Ascuns pana se stie si decizia de prima rulare, si draftul de deschis: altfel
+    // se vede (si se poate tasta in) un formular gol, peste care apare apoi draftul.
+    <div className="app" style={firstRun.firstRunChecked && initialCheckDone ? undefined : { visibility: 'hidden' }}>
       <DraftsSidebar
         drafts={draftsApi.drafts}
         currentId={fisa.id}
@@ -153,6 +160,8 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           readOnly={readOnly}
           onRequestActivation={onRequestActivation}
           locationBanner={locationBanner}
+          storeWarnings={storeWarnings.warnings}
+          onDismissStoreWarnings={storeWarnings.dismiss}
           updateInfo={updater.updateInfo}
           onDownload={updater.handleDownloadUpdate}
           onInstall={updater.handleInstallUpdate}
@@ -241,6 +250,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
       </main>
 
       <Toast toasts={toasts} onClose={closeToast} />
+      <ClosingOverlay />
 
       <ConfirmDialog state={confirmState} onResult={handleConfirmResult} />
 

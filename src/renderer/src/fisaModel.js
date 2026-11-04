@@ -1,5 +1,5 @@
 // Modelul fisei si utilitare pure (fara React) - folosite de App si de hook-uri.
-import { reduceriDinFisa } from '../../shared/calculations'
+import { isFisaEmpty, reduceriDinFisa } from '../../shared/calculations'
 
 // Ultimul draft deschis - la pornire revenim direct la el.
 export const LAST_DRAFT_KEY = 'lastOpenDraftId'
@@ -95,6 +95,17 @@ export function normalizeFisa(f) {
   const { reducerePercent: _legacy, ...rest } = f
   const r = reduceriDinFisa(f)
   return { ...rest, reducerePiesePercent: r.piese, reducereLucrariPercent: r.lucrari }
+}
+
+// Draftul de deschis la pornire: cel mai recent MODIFICAT (updatedAt) dintre cele
+// cu continut; fara asa ceva, unul gol (reutilizat, ca sa nu se adune "Fisa noua").
+// NU ne bazam pe localStorage (lastOpenDraftId): dupa o inchidere fortata el poate
+// lipsi sau indica un draft mai vechi, iar formularul ar porni gol / pe alta fisa.
+export function pickStartupDraft(drafts) {
+  const byRecency = [...(drafts || [])].sort(
+    (a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '') || (b.id || '').localeCompare(a.id || '')
+  )
+  return byRecency.find((d) => !isFisaEmpty(d)) || byRecency[0] || null
 }
 
 // Chip discret pentru starea backup-ului automat.

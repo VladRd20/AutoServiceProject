@@ -75,6 +75,23 @@ export async function flushWithCap(capMs = CLOSE_FLUSH_CAP_MS) {
   }
 }
 
+// Anunta renderer-ul ca flush-ul la inchidere a inceput (`closing = true`) sau
+// ca inchiderea nu a avut loc (`false`), ca sa poata arata "Se salveaza datele...".
+// Renderer-ul afiseaza overlay-ul abia dupa ~300ms: o inchidere rapida nu palpaie.
+export function notifyClosing(w, closing) {
+  try {
+    const wc = w && !w.isDestroyed() ? w.webContents : null
+    if (!wc || wc.isDestroyed() || wc.isCrashed()) return
+    wc.send('app:closing', closing)
+  } catch (err) {
+    log.warn('[lifecycle] anuntul de inchidere a esuat', err)
+  }
+}
+
+// Daca dupa w.close() fereastra inca exista (ex: beforeunload a oprit inchiderea
+// dupa un flush esuat), overlay-ul trebuie ascuns, altfel ar bloca aplicatia.
+const CLOSE_ABORT_CHECK_MS = 1500
+
 // Amana inchiderea ferestrei pana dupa flush. Idempotent: inchideri repetate
 // (dublu-click pe X, Alt+F4 + quit) nu declanseaza flush-uri suprapuse.
 export function guardWindowClose(w) {
@@ -95,6 +112,7 @@ export function guardWindowClose(w) {
     event.preventDefault()
     if (closing) return
     closing = true
+    notifyClosing(w, true)
     flushWithCap()
       .catch((err) => log.error('[lifecycle] flush la inchidere esuat', err))
       .finally(() => {
@@ -104,6 +122,8 @@ export function guardWindowClose(w) {
         if (!w.isDestroyed()) {
           forcedClose = true
           w.close()
+          const t = setTimeout(() => notifyClosing(w, false), CLOSE_ABORT_CHECK_MS)
+          t.unref?.()
         }
       })
   })

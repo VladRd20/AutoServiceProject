@@ -201,10 +201,14 @@ function ListaItems({
   // Enter (daca Autocomplete nu l-a folosit deja pentru o sugestie) trece pe
   // primul camp al randului urmator; pe ultimul rand adauga o linie noua.
   function handleRowKeyDown(e, index) {
-    if (e.key !== 'Enter' || e.target.tagName !== 'INPUT' || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return
+    if (e.key !== 'Enter' || e.target.tagName !== 'INPUT' || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey)
+      return
     e.preventDefault()
     if (index < items.length - 1) {
-      rowRefs.current.get(items[index + 1].id)?.querySelector('input')?.focus()
+      rowRefs.current
+        .get(items[index + 1].id)
+        ?.querySelector('input')
+        ?.focus()
     } else {
       addItem()
     }

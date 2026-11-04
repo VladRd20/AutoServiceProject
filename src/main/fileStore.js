@@ -27,6 +27,7 @@ export {
   listRecentFise,
   getAutocompleteData,
   getVehicleHistory,
+  getStoreWarnings,
   fisaBaseName,
   toLocalISO
 } from './store/fise'

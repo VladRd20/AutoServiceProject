@@ -16,6 +16,7 @@ afterEach(() => {
 function fakeWindow({ crashed = false, ack = true, destroyed = false } = {}) {
   const win = new EventEmitter()
   const sent = []
+  const events = []
   win.destroyed = destroyed
   win.isDestroyed = () => win.destroyed
   win.close = vi.fn(() => {
@@ -28,11 +29,16 @@ function fakeWindow({ crashed = false, ack = true, destroyed = false } = {}) {
     isDestroyed: () => false,
     isCrashed: () => crashed,
     send: vi.fn((channel, id) => {
+      if (channel !== 'app:flush') {
+        events.push([channel, id])
+        return
+      }
       sent.push([channel, id])
       if (ack) setTimeout(() => lifecycle.handleFlushDone(id), 5)
     })
   }
-  win.sent = sent
+  win.sent = sent // doar cererile de flush
+  win.events = events // alte evenimente catre renderer (ex: app:closing)
   return win
 }
 
@@ -47,6 +53,49 @@ describe('inchidere fereastra', () => {
     await vi.waitFor(() => expect(win.destroyed).toBe(true))
     expect(win.sent).toHaveLength(1)
     expect(win.sent[0][0]).toBe('app:flush')
+  })
+
+  it('anunta renderer-ul ca inchiderea a inceput (app:closing) inainte de flush', async () => {
+    const win = fakeWindow()
+    lifecycle.attachWindow(win)
+    lifecycle.guardWindowClose(win)
+    win.close()
+    expect(win.events).toEqual([['app:closing', true]])
+    await vi.waitFor(() => expect(win.destroyed).toBe(true))
+    expect(win.events).toHaveLength(1)
+  })
+
+  it('fara renderer viu nu se trimite app:closing; inchideri repetate il trimit o singura data', async () => {
+    const crashed = fakeWindow({ crashed: true })
+    lifecycle.attachWindow(crashed)
+    lifecycle.guardWindowClose(crashed)
+    crashed.close()
+    await vi.waitFor(() => expect(crashed.destroyed).toBe(true))
+    expect(crashed.events).toHaveLength(0)
+
+    const win = fakeWindow()
+    lifecycle.attachWindow(win)
+    lifecycle.guardWindowClose(win)
+    win.close()
+    win.close()
+    await vi.waitFor(() => expect(win.destroyed).toBe(true))
+    expect(win.events.filter(([c]) => c === 'app:closing')).toHaveLength(1)
+  })
+
+  it('daca fereastra ramane deschisa dupa flush (inchidere oprita), overlay-ul e ascuns (app:closing=false)', async () => {
+    const win = fakeWindow()
+    win.close = vi.fn(() => {
+      const event = { prevented: false, preventDefault() { this.prevented = true } }
+      win.emit('close', event)
+      return event // fereastra NU se distruge: beforeunload a oprit inchiderea
+    })
+    lifecycle.attachWindow(win)
+    lifecycle.guardWindowClose(win)
+    win.close()
+    expect(win.events).toEqual([['app:closing', true]])
+    // Flush-ul foloseste I/O real, deci asteptam cu timere reale (~1.5s dupa flush).
+    await vi.waitFor(() => expect(win.events).toHaveLength(2), { timeout: 4000 })
+    expect(win.events[1]).toEqual(['app:closing', false])
   })
 
   it('renderer care NU raspunde: inchiderea continua dupa timeout (nu ramane blocata)', async () => {
@@ -119,7 +168,8 @@ describe('inchidere fereastra', () => {
     win.webContents = {
       isDestroyed: () => false,
       isCrashed: () => false,
-      send: (_c, id) => {
+      send: (channel, id) => {
+        if (channel !== 'app:flush') return
         sent.push(id)
         setTimeout(() => lifecycle.handleFlushDone(id), 1)
       }

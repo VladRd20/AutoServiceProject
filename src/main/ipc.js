@@ -30,6 +30,7 @@ import {
   getSettings,
   saveSettings,
   getVehicleHistory,
+  getStoreWarnings,
   getRapoarte,
   exportFiseCsv,
   getCurrentDataPath,
@@ -227,6 +228,8 @@ export function registerIpcHandlers() {
   ipcMain.handle('fisa:deleteFinalizata', (e, fileName) =>
     wrapLicensed(() => deleteFinalizedFisa(fileName), 'deleteFinalizata')
   )
+  // Avertismente despre folderul de date: copii de sincronizare (OneDrive) si numere de fisa duplicate.
+  ipcMain.handle('store:getWarnings', () => readOnly(() => getStoreWarnings(), 'store:getWarnings'))
   ipcMain.handle('trash:list', () => readOnly(() => listTrash(), 'trash:list'))
   ipcMain.handle('trash:restore', (e, trashId) => wrapLicensed(() => restoreFromTrash(trashId), 'trash:restore'))
 

@@ -49,6 +49,7 @@ describe('ipc: poarta de licenta (wrapLicensed)', () => {
       ['fisa:saveDraft', fisa()],
       ['fisa:listDrafts'],
       ['settings:get'],
+      ['store:getWarnings'],
       ['fisa:deleteDraft', 'x']
     ]) {
       const res = await call(ch, arg)
@@ -96,6 +97,9 @@ describe('ipc: mod doar-citire (licenta revocata)', () => {
     expect((await call('fisa:listDrafts')).ok).toBe(true)
     expect((await call('settings:get')).ok).toBe(true)
     expect((await call('trash:list')).ok).toBe(true)
+    const w = await call('store:getWarnings')
+    expect(w.ok).toBe(true)
+    expect(w.data).toEqual({ conflictCopies: [], duplicateNr: [] })
   })
 
   it('daca nu e activata, nici citirile nu merg (NOT_LICENSED primeaza)', async () => {

@@ -33,6 +33,10 @@ const api = {
     list: () => ipcRenderer.invoke('trash:list'),
     restore: (trashId) => ipcRenderer.invoke('trash:restore', trashId)
   },
+  store: {
+    // { conflictCopies: [fisier], duplicateNr: [{ nr, files: [fisier] }] }
+    getWarnings: () => ipcRenderer.invoke('store:getWarnings')
+  },
   fise: {
     openFolder: () => ipcRenderer.invoke('fise:openFolder'),
     openPdf: (fileName) => ipcRenderer.invoke('fise:openPdf', fileName),
@@ -77,6 +81,13 @@ const api = {
       return () => ipcRenderer.removeListener('app:flush', listener)
     },
     flushDone: (id) => ipcRenderer.send('app:flushDone', id),
+    // Main a inceput salvarea finala dinaintea inchiderii (callback(true)); callback(false)
+    // daca inchiderea nu a avut loc. Renderer-ul arata "Se salveaza datele...".
+    onClosing: (callback) => {
+      const listener = (_e, closing) => callback(Boolean(closing))
+      ipcRenderer.on('app:closing', listener)
+      return () => ipcRenderer.removeListener('app:closing', listener)
+    },
     onFatalError: (callback) => {
       const listener = (_e, payload) => callback(payload)
       ipcRenderer.on('app:fatalError', listener)

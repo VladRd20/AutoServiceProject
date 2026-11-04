@@ -27,6 +27,78 @@
   flex-shrink: 0;
 }
 
+/* Avertismente despre folderul de date: text + butoane pe un rand, lista de
+   fisiere (cu scroll daca e lunga) dedesubt. */
+.app-banner.store-warning {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.store-warning-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.store-warning-details {
+  max-height: 160px;
+  overflow: auto;
+  font-size: var(--fs-xs);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.store-warning-details ul {
+  margin: var(--space-1) 0 var(--space-2);
+  padding-left: var(--space-5);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.store-warning-details p {
+  margin: 0;
+  opacity: 0.85;
+}
+
+/* Overlay "Se salveaza datele..." la inchiderea aplicatiei. */
+.closing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--scrim);
+  backdrop-filter: blur(2px);
+  cursor: progress;
+}
+
+.closing-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-8, 40px);
+  background: var(--elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.closing-card strong {
+  font-family: var(--font-heading);
+  font-size: var(--fs-lg);
+}
+
+.closing-card span {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
 .update-banner {
   display: flex;
   align-items: center;

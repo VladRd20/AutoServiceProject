@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import ListaItems from '../../src/renderer/src/components/ListaItems'
@@ -8,10 +8,13 @@ import { getDensity, setDensity } from '../../src/renderer/src/theme'
 
 const mk = (id, denumire, pret = 0) => ({ id, denumire, cod: '', cantitate: 1, pretUnitar: pret })
 
-let latest
+// Ultima lista de randuri randata (actualizata intr-un effect, nu in timpul randarii).
+const last = { items: [] }
 function Harness({ initial, showToast, errors }) {
   const [items, setItems] = useState(initial)
-  latest = items
+  useEffect(() => {
+    last.items = items
+  })
   return (
     <ListaItems
       titlu="Piese"
@@ -66,26 +69,26 @@ describe('ListaItems: tastatura', () => {
   it('Ctrl+D dubleaza randul curent (cu id nou) imediat dupa el', () => {
     render(<Harness initial={[mk('a', 'Filtru', 10), mk('b', 'Ulei')]} />)
     fireEvent.keyDown(nameInputs()[0], { key: 'd', ctrlKey: true })
-    expect(latest.map((i) => i.denumire)).toEqual(['Filtru', 'Filtru', 'Ulei'])
-    expect(latest[1].id).not.toBe('a')
-    expect(latest[1].pretUnitar).toBe(10)
+    expect(last.items.map((i) => i.denumire)).toEqual(['Filtru', 'Filtru', 'Ulei'])
+    expect(last.items[1].id).not.toBe('a')
+    expect(last.items[1].pretUnitar).toBe(10)
   })
 
   it('Alt+sageti muta randul si pastreaza focusul pe el', () => {
     render(<Harness initial={[mk('a', 'A'), mk('b', 'B'), mk('c', 'C')]} />)
     fireEvent.keyDown(nameInputs()[0], { key: 'ArrowDown', altKey: true })
-    expect(latest.map((i) => i.denumire)).toEqual(['B', 'A', 'C'])
+    expect(last.items.map((i) => i.denumire)).toEqual(['B', 'A', 'C'])
     expect(document.activeElement).toBe(nameInputs()[1])
     fireEvent.keyDown(nameInputs()[1], { key: 'ArrowUp', altKey: true })
-    expect(latest.map((i) => i.denumire)).toEqual(['A', 'B', 'C'])
+    expect(last.items.map((i) => i.denumire)).toEqual(['A', 'B', 'C'])
   })
 
   it('Ctrl+Backspace sterge doar un rand gol', () => {
     render(<Harness initial={[mk('a', 'A'), mk('b', '')]} />)
     fireEvent.keyDown(nameInputs()[0], { key: 'Backspace', ctrlKey: true })
-    expect(latest.length).toBe(2)
+    expect(last.items.length).toBe(2)
     fireEvent.keyDown(nameInputs()[1], { key: 'Backspace', ctrlKey: true })
-    expect(latest.map((i) => i.id)).toEqual(['a'])
+    expect(last.items.map((i) => i.id)).toEqual(['a'])
     expect(document.activeElement).toBe(nameInputs()[0])
   })
 })
@@ -95,21 +98,21 @@ describe('ListaItems: stergere cu anulare', () => {
     const showToast = vi.fn()
     render(<Harness initial={[mk('a', 'A'), mk('b', 'B'), mk('c', 'C')]} showToast={showToast} />)
     fireEvent.click(screen.getAllByLabelText('Șterge linia')[1])
-    expect(latest.map((i) => i.id)).toEqual(['a', 'c'])
+    expect(last.items.map((i) => i.id)).toEqual(['a', 'c'])
     const [type, message, action, opts] = showToast.mock.calls[0]
     expect(type).toBe('success')
     expect(message).toContain('B')
     expect(action.label).toBe('Anulează')
     expect(opts.duration).toBe(8000)
     act(() => action.onClick())
-    expect(latest.map((i) => i.id)).toEqual(['a', 'b', 'c'])
+    expect(last.items.map((i) => i.id)).toEqual(['a', 'b', 'c'])
   })
 
   it('un rand gol se sterge fara toast', () => {
     const showToast = vi.fn()
     render(<Harness initial={[mk('a', '')]} showToast={showToast} />)
     fireEvent.click(screen.getByLabelText('Șterge linia'))
-    expect(latest).toEqual([])
+    expect(last.items).toEqual([])
     expect(showToast).not.toHaveBeenCalled()
   })
 })
@@ -120,12 +123,12 @@ describe('ListaItems: campuri numerice', () => {
     const qty = screen.getByLabelText('Cantitate')
     const price = screen.getByLabelText('Preț unitar')
     fireEvent.change(price, { target: { value: '12,5' } })
-    expect(latest[0].pretUnitar).toBe('12,5')
+    expect(last.items[0].pretUnitar).toBe('12,5')
     fireEvent.blur(price)
-    expect(latest[0].pretUnitar).toBe('12.50')
+    expect(last.items[0].pretUnitar).toBe('12.50')
     fireEvent.change(qty, { target: { value: '2,500' } })
     fireEvent.blur(qty)
-    expect(latest[0].cantitate).toBe('2.5')
+    expect(last.items[0].cantitate).toBe('2.5')
   })
 
   it('campurile cu eroare primesc aria-invalid si aria-describedby', () => {

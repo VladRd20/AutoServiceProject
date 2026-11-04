@@ -7,26 +7,16 @@ const globals = require('globals')
 const react = require('eslint-plugin-react')
 const reactHooks = require('eslint-plugin-react-hooks')
 
-module.exports = [
-  { ignores: ['out/**', 'dist/**', 'node_modules/**', 'date/**', 'keys/**', 'tests/e2e/last-report.json'] },
-  js.configs.recommended,
-  {
-    files: ['src/main/**/*.js', 'src/preload/**/*.js', 'src/shared/**/*.js', 'electron.vite.config.js', 'vitest.config.js'],
-    languageOptions: { ecmaVersion: 2023, sourceType: 'module', globals: { ...globals.node } },
-    rules: {
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }],
-      'no-empty': ['error', { allowEmptyCatch: true }],
-      'no-console': ['warn', { allow: ['warn', 'error'] }]
-    }
-  },
-  {
-    files: ['src/renderer/**/*.{js,jsx}'],
+// Regulile React/hooks comune codului din src/renderer si testelor de componente.
+function reactBlock(files, envGlobals) {
+  return {
+    files,
     plugins: { react, 'react-hooks': reactHooks },
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',
       parserOptions: { ecmaFeatures: { jsx: true } },
-      globals: { ...globals.browser }
+      globals: envGlobals
     },
     settings: { react: { version: 'detect' } },
     rules: {
@@ -46,7 +36,24 @@ module.exports = [
       'react-hooks/preserve-manual-memoization': 'off',
       'react-hooks/static-components': 'off'
     }
+  }
+}
+
+module.exports = [
+  { ignores: ['out/**', 'dist/**', 'node_modules/**', 'date/**', 'keys/**', 'tests/e2e/last-report.json'] },
+  js.configs.recommended,
+  {
+    files: ['src/main/**/*.js', 'src/preload/**/*.js', 'src/shared/**/*.js', 'electron.vite.config.js', 'vitest.config.js'],
+    languageOptions: { ecmaVersion: 2023, sourceType: 'module', globals: { ...globals.node } },
+    rules: {
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }],
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-console': ['warn', { allow: ['warn', 'error'] }]
+    }
   },
+  reactBlock(['src/renderer/**/*.{js,jsx}'], { ...globals.browser }),
+  // Testele de componente (jsdom) folosesc JSX: aceleasi reguli React ca in src/renderer.
+  reactBlock(['tests/**/*.jsx'], { ...globals.browser, ...globals.node }),
   {
     files: ['eslint.config.js'],
     languageOptions: { ecmaVersion: 2023, sourceType: 'commonjs', globals: { ...globals.node } }
