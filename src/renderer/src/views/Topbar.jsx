@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import SearchModal from '../components/SearchModal'
 import OverflowMenu from '../components/OverflowMenu'
 import ThemeToggle from '../components/ThemeToggle'
+import ShortcutsOverlay from '../components/ShortcutsOverlay'
+import { openShortcutsHelp } from '../hooks/useShortcuts'
 import Icon from '../components/Icon'
 
 // Bara de sus: titlul fisei, cautarea (cu filtre pe data), butonul de update
@@ -143,6 +145,7 @@ export default function Topbar({
           items={[
             { label: 'Rapoarte', icon: 'chart', onClick: onOpenReports },
             { label: 'Ce e nou', icon: 'info', onClick: onOpenWhatsNew },
+            { label: 'Scurtături de tastatură', icon: 'info', onClick: openShortcutsHelp },
             { label: 'Deschide folderul cu fișe', icon: 'folder', onClick: handleOpenFolder },
             {
               label: exportingLogs ? 'Se exportă...' : 'Exportă loguri',
@@ -153,6 +156,7 @@ export default function Topbar({
         />
         <ThemeToggle />
       </div>
+      <ShortcutsOverlay />
     </header>
   )
 }
