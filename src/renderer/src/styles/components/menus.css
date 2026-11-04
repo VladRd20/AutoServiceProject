@@ -1,6 +1,7 @@
 /* ===== Dropdown-uri: autocomplete si meniul "..." (overflow). ===== */
 
-.autocomplete-dropdown {
+.autocomplete-dropdown,
+.menu-dropdown {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
@@ -17,7 +18,8 @@
   overflow-y: auto;
 }
 
-.autocomplete-dropdown li {
+.autocomplete-dropdown li,
+.menu-dropdown li {
   padding: 7px 10px;
   border-radius: var(--radius-control);
   font-size: var(--fs-sm);
@@ -26,16 +28,22 @@
 }
 
 .autocomplete-dropdown li.active,
-.autocomplete-dropdown li:hover {
+.autocomplete-dropdown li:hover,
+.menu-dropdown li:hover {
   background: var(--info-bg);
   color: var(--accent-hover);
+}
+
+/* Containerul meniului (inainte refolosea clasa .autocomplete). */
+.menu {
+  position: relative;
 }
 
 .overflow-menu {
   width: auto;
 }
 
-.overflow-menu .autocomplete-dropdown {
+.overflow-menu .menu-dropdown {
   left: auto;
   right: 0;
   min-width: 220px;
@@ -45,11 +53,11 @@
 /* Itemii sunt <li><button>: padding-ul sta pe <button> (elementul focusabil
    real), li ramane doar wrapper - hover-ul de mai sus tot functioneaza, iar
    :focus-within acopera navigarea cu Tab. */
-.overflow-menu .autocomplete-dropdown li {
+.overflow-menu .menu-dropdown li {
   padding: 0;
 }
 
-.overflow-menu .autocomplete-dropdown li button {
+.overflow-menu .menu-dropdown li button {
   --btn-min-h: 0;
   display: flex;
   align-items: center;
@@ -70,11 +78,28 @@
   cursor: pointer;
 }
 
-.overflow-menu .autocomplete-dropdown li button:disabled {
+.overflow-menu .menu-dropdown li button:disabled {
   opacity: 0.5;
 }
 
-.overflow-menu .autocomplete-dropdown li:focus-within {
+.overflow-menu .menu-dropdown li:focus-within {
   background: var(--info-bg);
   color: var(--accent-hover);
+}
+
+.overflow-menu .menu-dropdown li button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* Indiciul "+N rezultate" de la capatul listei Autocomplete (nu e o optiune). */
+.autocomplete-dropdown li.autocomplete-hint {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  cursor: default;
+}
+
+.autocomplete-dropdown li.autocomplete-hint:hover {
+  background: none;
+  color: var(--text-muted);
 }
