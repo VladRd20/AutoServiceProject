@@ -7,7 +7,6 @@ import { toAppError, AppError } from '../errors'
 import { getDataPathOverride, setDataPathOverride } from '../appConfig'
 import { copyFileAtomic, dirEntryCount, exists, isTmpName, listFiles, readJson, runExclusive } from './io'
 
-
 // Previzualizarile PDF se scriu intr-un subfolder dedicat din temp; cele mai
 // vechi de 24h se sterg inainte de fiecare previzualizare noua.
 export const PREVIEW_DIR = path.join(os.tmpdir(), 'ServiceAuto-preview')
@@ -384,7 +383,14 @@ async function doChangeDataPath(newBasePath) {
     throw toAppError(err, 'Copierea datelor existente în noul folder a eșuat. Nimic nu a fost schimbat.')
   }
 
-  setDataPathOverride(path.resolve(getDefaultDataPath()) === resolvedNew ? null : resolvedNew)
+  // Scriem config-ul INAINTE de a comuta baseDir: daca nu se poate scrie,
+  // anulam curat (baseDir ramane pe folderul vechi, utilizatorul vede eroarea).
+  // Altfel, dupa repornire aplicatia ar citi folderul vechi si fisele noi par pierdute.
+  try {
+    setDataPathOverride(path.resolve(getDefaultDataPath()) === resolvedNew ? null : resolvedNew)
+  } catch (err) {
+    throw toAppError(err, 'Nu s-a putut salva noul folder de date. Nimic nu a fost schimbat.')
+  }
   state.baseDir = resolvedNew
   state.usingFallback = false
   state.overrideUnavailable = null
