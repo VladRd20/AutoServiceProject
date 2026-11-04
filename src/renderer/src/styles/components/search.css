@@ -1,5 +1,5 @@
-/* ===== Cautare: campul din topbar, panoul de rezultate (dropdown ancorat sub
-   input), filtre pe interval, randurile de rezultate. ===== */
+/* ===== Cautare: declansatorul din topbar si filtrele pe interval (folosite de
+   paleta de comenzi; vezi palette.css). ===== */
 
 .search-box {
   position: relative;
@@ -20,21 +20,12 @@
   background: var(--surface);
   color: var(--text);
   box-shadow: none;
-  transition: width 150ms ease, border-color 120ms ease, background-color 120ms ease;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .topbar-search::placeholder {
   color: var(--text-faint);
-}
-
-/* Loc pentru butonul de filtre din dreapta */
-.search-box .topbar-search {
-  padding-right: 34px;
-}
-
-.topbar-search:focus-visible {
-  width: 240px;
-  padding-right: 12px;
 }
 
 .search-icon {
@@ -48,69 +39,6 @@
   position: absolute;
   right: var(--space-2);
   pointer-events: none;
-}
-
-.topbar-search:focus ~ .search-kbd {
-  display: none;
-}
-
-.search-filter-btn {
-  --btn-min-h: 0;
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  width: 28px;
-  height: 28px;
-  margin-top: -14px; /* centrare fara transform: `button:active` are propriul transform si l-ar rupe */
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-/* Fara animatie de apasare: butonul ramane exact pe loc la hover / click /
-   focus. Specificitatea (0,2,0) bate `button:active` (0,1,1), deci nu mai
-   e nevoie de !important. */
-.search-filter-btn,
-.search-filter-btn:hover,
-.search-filter-btn:active,
-.search-filter-btn:focus,
-.search-filter-btn:focus-visible {
-  transform: none;
-  transition: none;
-}
-
-.search-filter-btn.active {
-  color: var(--accent);
-}
-
-.search-panel {
-  position: absolute;
-  top: calc(100% + var(--space-2));
-  right: 0;
-  width: 480px;
-  max-width: min(90vw, 480px);
-  max-height: 60vh;
-  overflow-y: auto;
-  background: var(--elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-lg);
-  z-index: 60;
-  padding: 14px;
-}
-
-.search-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.search-panel-header h3 {
-  font-size: var(--fs-md);
-  font-weight: 600;
 }
 
 .search-filters {
@@ -146,73 +74,4 @@
   gap: 2px;
   font-size: var(--fs-xs);
   color: var(--text-muted);
-}
-
-.search-input {
-  width: 100%;
-  padding: 10px var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  font-size: var(--fs-md);
-  margin-bottom: 14px;
-  background: var(--surface);
-  color: var(--text);
-}
-
-.search-results {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.search-result {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 10px var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-control);
-}
-
-.search-result-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-}
-
-.search-result-main strong {
-  font-size: var(--fs-md);
-  font-family: var(--font-mono);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.search-result-main span {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-}
-
-.search-result-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.search-result-actions button {
-  --btn-min-h: 0;
-  font-size: var(--fs-xs);
-  padding: 6px var(--space-3);
-}
-
-.search-result-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  min-width: 100px;
-  font-family: var(--font-mono);
 }

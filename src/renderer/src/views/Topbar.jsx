@@ -1,14 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import SearchModal from '../components/SearchModal'
+import React, { useCallback, useEffect, useState } from 'react'
+import CommandPalette from '../components/CommandPalette'
 import OverflowMenu from '../components/OverflowMenu'
 import ThemeToggle from '../components/ThemeToggle'
 import ShortcutsOverlay from '../components/ShortcutsOverlay'
-import { openShortcutsHelp } from '../hooks/useShortcuts'
+import { OPEN_PALETTE_EVENT, openShortcutsHelp } from '../hooks/useShortcuts'
 import Icon from '../components/Icon'
 
-// Bara de sus: titlul fisei, cautarea (cu filtre pe data), butonul de update
-// si meniul "mai multe". Starea cautarii e locala aici; App primeste doar
-// referinta input-ului (searchInputRef) pentru scurtatura Ctrl+K.
+// Bara de sus: titlul fisei, declansatorul paletei de comenzi (cautare +
+// actiuni), butonul de update si meniul "mai multe". Paleta se deschide din
+// clic pe camp sau din Ctrl+K (eveniment OPEN_PALETTE_EVENT).
 export default function Topbar({
   fisa,
   fisaGoala,
@@ -24,36 +24,24 @@ export default function Topbar({
   onPrintPdf,
   onDeleteFinalized,
   onEditRecent,
-  onNewForProfile
+  onNewForProfile,
+  drafts,
+  recentFise,
+  onOpenDraft,
+  onNewFisa,
+  onOpenSettings,
+  onShowVehicleHistory
 }) {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchRange, setSearchRange] = useState({ from: '', to: '' })
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [exportingLogs, setExportingLogs] = useState(false)
-  const searchBoxRef = useRef(null)
-  const searchActive = Boolean(searchQuery.trim() || searchRange.from || searchRange.to || filtersOpen)
-  const closeSearch = useCallback(() => {
-    setSearchQuery('')
-    setSearchRange({ from: '', to: '' })
-    setFiltersOpen(false)
-  }, [])
+  const openPalette = useCallback(() => setPaletteOpen(true), [])
+  const closePalette = useCallback(() => setPaletteOpen(false), [])
 
-  // Panoul de rezultate e un dropdown ancorat (nu mai are propriul backdrop
-  // intunecat peste tot ecranul) - fara asta, click-ul in afara lui n-ar mai
-  // avea cum sa-l inchida. Aceeasi conventie ca la Autocomplete/OverflowMenu.
+  // Ctrl+K (useShortcuts) cere deschiderea paletei printr-un eveniment.
   useEffect(() => {
-    if (!searchActive) return undefined
-    function handleClickOutside(e) {
-      // Nu inchidem panoul de cautare la click-uri in alte overlay-uri proprii
-      // (ex: ConfirmDialog deschis din interiorul SearchModal, la stergerea
-      // unui rezultat) - acelea sunt randate la nivel de App, in afara
-      // .search-box, dar fac parte din acelasi flux, nu sunt "in afara".
-      if (e.target.closest?.('.confirm-overlay')) return
-      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target)) closeSearch()
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [searchActive, closeSearch])
+    window.addEventListener(OPEN_PALETTE_EVENT, openPalette)
+    return () => window.removeEventListener(OPEN_PALETTE_EVENT, openPalette)
+  }, [openPalette])
 
   async function handleOpenFolder() {
     const res = await window.serviceAuto.fise.openFolder()
@@ -91,45 +79,48 @@ export default function Topbar({
         )}
       </div>
       <div className="topbar-actions">
-        <div className="search-box" ref={searchBoxRef}>
+        <div className="search-box">
           <Icon name="search" size={15} className="search-icon" />
+          {/* Doar declansator: paleta isi are propriul input (vezi CommandPalette). */}
           <input
             type="text"
+            readOnly
             ref={searchInputRef}
             className="topbar-search"
             placeholder="Caută"
-            aria-label="Caută fișe"
+            aria-label="Caută"
+            aria-haspopup="dialog"
+            aria-expanded={paletteOpen}
             title="Caută (Ctrl+K)"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value=""
+            onClick={openPalette}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') closeSearch()
+              if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+                e.preventDefault()
+                openPalette()
+              }
             }}
           />
-          <button
-            type="button"
-            className={`btn-sm search-filter-btn${filtersOpen || searchRange.from || searchRange.to ? ' active' : ''}`}
-            title="Filtrează după dată"
-            aria-label="Filtrează după dată"
-            onClick={() => setFiltersOpen((v) => !v)}
-          >
-            <Icon name="calendar" size={14} />
-          </button>
-          {searchActive && (
-            <SearchModal
-              query={searchQuery}
-              range={searchRange}
-              onRangeChange={setSearchRange}
-              onClose={closeSearch}
-              onOpenPdf={onOpenPdf}
-              onPrintPdf={onPrintPdf}
-              onDeleteFinalized={onDeleteFinalized}
-              onEditRecent={onEditRecent}
-              onNewForProfile={onNewForProfile}
-              showToast={showToast}
-            />
-          )}
+          <kbd className="search-kbd">Ctrl+K</kbd>
         </div>
+        {paletteOpen && (
+          <CommandPalette
+            fisa={fisa}
+            drafts={drafts}
+            recentFise={recentFise}
+            onClose={closePalette}
+            onOpenPdf={onOpenPdf}
+            onPrintPdf={onPrintPdf}
+            onDeleteFinalized={onDeleteFinalized}
+            onEditRecent={onEditRecent}
+            onNewForProfile={onNewForProfile}
+            onOpenDraft={onOpenDraft}
+            onNewFisa={onNewFisa}
+            onOpenReports={onOpenReports}
+            onOpenSettings={onOpenSettings}
+            onShowVehicleHistory={onShowVehicleHistory}
+          />
+        )}
         {showUpdatePill && (
           <button
             type="button"

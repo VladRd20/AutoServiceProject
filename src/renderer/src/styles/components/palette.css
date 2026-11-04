@@ -1,0 +1,229 @@
+/* ===== Paleta de comenzi (Ctrl+K): overlay centrat sus, input propriu,
+   rezultate grupate. Doar tokeni - fara culori brute. ===== */
+
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: clamp(16px, 10vh, 96px);
+  z-index: 100;
+}
+
+.palette {
+  width: min(640px, calc(100vw - 2 * var(--space-4)));
+  max-height: min(70vh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: var(--elevated);
+  color: var(--text);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: palette-in 120ms ease-out;
+}
+
+.palette:focus {
+  outline: none;
+}
+
+@keyframes palette-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette {
+    animation: none;
+  }
+}
+
+.palette-input-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.palette-input-icon {
+  position: absolute;
+  left: var(--space-4);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.palette-input {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0 52px 0 calc(var(--space-4) + 28px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+  font-family: var(--font-body);
+  font-size: var(--fs-lg);
+}
+
+.palette-input::placeholder {
+  color: var(--text-faint);
+}
+
+.palette-filter-btn {
+  --btn-min-h: 0;
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  margin-top: -14px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.palette-filter-btn,
+.palette-filter-btn:hover,
+.palette-filter-btn:active {
+  transform: none;
+  transition: none;
+}
+
+.palette-filter-btn.active {
+  color: var(--accent);
+}
+
+.palette-body {
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.palette-msg {
+  margin: 0;
+  padding: var(--space-3);
+}
+
+.palette-shimmer {
+  height: 36px;
+  margin: var(--space-1) var(--space-1) var(--space-2);
+}
+
+.palette-list,
+.palette-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.palette-group + .palette-group {
+  margin-top: var(--space-2);
+}
+
+.palette-group-label {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  font-size: var(--fs-md);
+}
+
+.palette-row.active {
+  background: var(--surface-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.palette-row-icon {
+  color: var(--text-muted);
+  flex: none;
+}
+
+.palette-row-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.palette-hint {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.palette-more {
+  color: var(--accent);
+  font-size: var(--fs-sm);
+}
+
+.palette-row-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.palette-row-draft .palette-row-meta {
+  font-family: var(--font-body);
+}
+
+.palette-fisa-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.palette-fisa-main strong {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.palette-fisa-main span {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.palette-fisa-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.palette-fisa-actions button {
+  --btn-min-h: 0;
+  font-size: var(--fs-xs);
+  padding: 6px var(--space-3);
+}
+
+.palette mark {
+  background: var(--amber-200);
+  color: var(--ink-900);
+  border-radius: 2px;
+  padding: 0 1px;
+}

@@ -63,8 +63,11 @@ describe('useShortcuts', () => {
     expect(h.onPreview).toHaveBeenCalledTimes(1)
     key('n', { ctrlKey: true })
     expect(h.onNewFisa).toHaveBeenCalledTimes(1)
+    const opened = vi.fn()
+    window.addEventListener('serviceauto:open-palette', opened)
     key('k', { ctrlKey: true })
-    expect(document.activeElement).toBe(screen.getByLabelText('camp'))
+    window.removeEventListener('serviceauto:open-palette', opened)
+    expect(opened).toHaveBeenCalledTimes(1)
   })
 
   it('Ctrl+P face preventDefault (nu se deschide print-ul Chromium), chiar si blocat', () => {

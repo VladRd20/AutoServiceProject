@@ -183,6 +183,12 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           onDeleteFinalized={lists.handleDeleteFinalized}
           onEditRecent={editor.handleEditRecent}
           onNewForProfile={editor.handleNewFisaForProfile}
+          drafts={draftsApi.drafts}
+          recentFise={lists.recentFise}
+          onOpenDraft={draftsApi.handleOpenDraft}
+          onNewFisa={draftsApi.handleNewFisa}
+          onOpenSettings={handleOpenSettings}
+          onShowVehicleHistory={handleShowVehicleHistory}
         />
 
         <FisaForm

@@ -2,7 +2,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 
 // Lista unica a scurtaturilor - o citesc atat handlerul, cat si ShortcutsOverlay.
 export const SHORTCUTS = [
-  { keys: 'Ctrl+K', label: 'Caută fișe' },
+  { keys: 'Ctrl+K', label: 'Caută și comenzi rapide' },
   { keys: 'Ctrl+N', label: 'Fișă nouă' },
   { keys: 'Ctrl+S', label: 'Salvează acum' },
   { keys: 'Ctrl+Enter', label: 'Finalizează fișa' },
@@ -20,6 +20,9 @@ function setHelpOpen(v) {
   helpOpen = v
   listeners.forEach((l) => l())
 }
+// Ctrl+K cere deschiderea paletei de comenzi (o asculta Topbar).
+export const OPEN_PALETTE_EVENT = 'serviceauto:open-palette'
+
 export const openShortcutsHelp = () => setHelpOpen(true)
 export const closeShortcutsHelp = () => setHelpOpen(false)
 export function useShortcutsHelpOpen() {
@@ -47,7 +50,6 @@ function isTyping(el) {
 export default function useShortcuts({
   modalOpen,
   releasingRef,
-  searchInputRef,
   onNewFisa,
   autosaver,
   showToast,
@@ -120,8 +122,7 @@ export default function useShortcuts({
       if (blocked || e.shiftKey) return
       if (k === 'k') {
         e.preventDefault()
-        searchInputRef?.current?.focus()
-        searchInputRef?.current?.select()
+        window.dispatchEvent(new CustomEvent(OPEN_PALETTE_EVENT))
       } else if (k === 'n') {
         e.preventDefault()
         handlersRef.current.onNewFisa?.()
@@ -140,5 +141,5 @@ export default function useShortcuts({
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [releasingRef, searchInputRef])
+  }, [releasingRef])
 }
