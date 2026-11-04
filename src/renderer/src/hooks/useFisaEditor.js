@@ -33,8 +33,14 @@ export default function useFisaEditor({ readOnly, showToast, initialCheckDone })
 
   const isCurrentEmpty = useCallback(() => isFisaEmpty(fisaRef.current), [])
 
-  const [autosaver] = useState(() =>
-    createAutosaver({
+  // Token al sesiunii de editare: creste cand se deschide alta fisa, se reseteaza
+  // sau se creeaza una noua (toate trec prin autosaver.reset), dar NU cand aceeasi
+  // fisa primeste id de la primul autosave (onId). Il foloseste ListaItems pentru
+  // "Anuleaza stergerea" (id-ul fisei nu e bun: null -> id, si doua fise noi au null).
+  const [sessionKey, setSessionKey] = useState(0)
+
+  const [autosaver] = useState(() => {
+    const base = createAutosaver({
       save: (f) => window.serviceAuto.fisa.saveDraft(f),
       onState: ({ state, error, savedAt, doc, id }) => {
         setSaveState(state)
@@ -57,7 +63,14 @@ export default function useFisaEditor({ readOnly, showToast, initialCheckDone })
       },
       onId: (id) => setFisa((f) => (f.id ? f : { ...f, id }))
     })
-  )
+    return {
+      ...base,
+      reset: (...args) => {
+        setSessionKey((k) => k + 1)
+        return base.reset(...args)
+      }
+    }
+  })
 
   // Totalurile se recalculeaza doar cand se schimba piesele/lucrarile/reducerile,
   // nu la fiecare re-randare (ex: schimbari de stare ale salvarii).
@@ -203,6 +216,7 @@ export default function useFisaEditor({ readOnly, showToast, initialCheckDone })
   return {
     fisa,
     setFisa,
+    sessionKey,
     errors,
     setErrors,
     pdfRetry,

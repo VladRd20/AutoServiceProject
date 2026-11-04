@@ -205,7 +205,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           errors={errors}
           suggestions={lists.autocomplete.piese}
           showToast={showToast}
-          resetKey={fisa.id}
+          resetKey={editor.sessionKey}
         />
 
         <ListaItems
@@ -219,7 +219,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           errors={errors}
           suggestions={lists.autocomplete.lucrari}
           showToast={showToast}
-          resetKey={fisa.id}
+          resetKey={editor.sessionKey}
         />
 
         <Totaluri

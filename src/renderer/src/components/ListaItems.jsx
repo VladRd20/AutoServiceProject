@@ -1,6 +1,6 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  calcLinieTotal,
+  calcLinieTotalLive,
   foldForMatch,
   formatPrice,
   formatQuantity,
@@ -48,8 +48,12 @@ function isRowEmpty(item, priceKey, codKey) {
 // handlePieseChange/handleLucrariChange) - fara alte props instabile,
 // comparatia shallow a memo() evita re-randarea listei de piese la fiecare
 // litera tastata in campurile de client/auto, sau in lista de lucrari.
-// `showToast` (stabil) afiseaza "Rând șters · Anulează"; `resetKey` (id-ul
-// fisei) invalideaza anularea daca intre timp s-a deschis alta fisa.
+// `showToast` (stabil) afiseaza "Rând șters · Anulează"; `resetKey` (tokenul
+// sesiunii de editare din useFisaEditor, NU id-ul fisei: id-ul trece din null in
+// valoare dupa primul autosave, iar doua fise nesalvate au ambele id null)
+// invalideaza anularea daca intre timp s-a deschis/resetat alta fisa.
+// NOTA: un rand sters traieste doar in closure-ul de anulare; daca aplicatia se
+// inchide in cele UNDO_MS (8s), randul se pierde. Acceptat.
 function ListaItems({
   titlu,
   singular,
@@ -106,7 +110,7 @@ function ListaItems({
     }
   }
 
-  const subtotal = items.reduce((sum, it) => sum + calcLinieTotal(it.cantitate, it[priceKey]), 0)
+  const subtotal = items.reduce((sum, it) => sum + calcLinieTotalLive(it.cantitate, it[priceKey]), 0)
 
   const atLimit = items.length >= MAX_LINII
 
@@ -372,7 +376,7 @@ function ListaItems({
               />
               {errorText(priceKey)}
             </div>
-            <div className="linie-total">{formatLei(calcLinieTotal(item.cantitate, item[priceKey]))}</div>
+            <div className="linie-total">{formatLei(calcLinieTotalLive(item.cantitate, item[priceKey]))}</div>
             <button
               type="button"
               className="btn-remove"
