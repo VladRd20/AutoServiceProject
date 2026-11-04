@@ -6,6 +6,7 @@ import Toast from './components/Toast'
 import ConfirmDialog from './components/ConfirmDialog'
 import DraftsSidebar from './components/DraftsSidebar'
 import SearchModal from './components/SearchModal'
+import SettingsModal from './components/SettingsModal'
 import UpdateBanner from './components/UpdateBanner'
 import ThemeToggle from './components/ThemeToggle'
 import OverflowMenu from './components/OverflowMenu'
@@ -19,13 +20,12 @@ import LazyBoundary, { lazyRetry } from './components/LazyBoundary'
 import './app-extra.css'
 
 // Modalele rare se incarca la cerere (chunk separat) - nu cresc bundle-ul de
-// pornire. SearchModal ramane eager (Ctrl+K trebuie sa fie instant). Chunk-urile
+// pornire. SettingsModal e eager (~21 KB): modalul de prima rulare trebuie sa apara
+// imediat, nu dupa ce formularul e deja interactiv. SearchModal ramane eager (Ctrl+K trebuie sa fie instant). Chunk-urile
 // se preincarca in idle dupa prima randare, deci prima deschidere nu asteapta.
-const loadSettingsModal = () => import('./components/SettingsModal')
 const loadReportsModal = () => import('./components/ReportsModal')
 const loadVehicleHistoryModal = () => import('./components/VehicleHistoryModal')
 const loadWhatsNewModal = () => import('./components/WhatsNewModal')
-const SettingsModal = lazyRetry(loadSettingsModal)
 const ReportsModal = lazyRetry(loadReportsModal)
 const VehicleHistoryModal = lazyRetry(loadVehicleHistoryModal)
 const WhatsNewModal = lazyRetry(loadWhatsNewModal)
@@ -259,6 +259,10 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // un draft gol de refolosit - altfel castiga cursa cu IPC-ul de listDrafts
   // si salveaza un draft nou inainte sa apucam sa-l refolosim pe cel vechi.
   const [initialCheckDone, setInitialCheckDone] = useState(false)
+  // Decizia "prima rulare" (modalul Datele service-ului) se ia INAINTE ca formularul
+  // sa fie afisat/interactiv - altfel modalul apare peste ce a inceput utilizatorul sa tasteze.
+  const [firstRunChecked, setFirstRunChecked] = useState(false)
+  const firstRunShownRef = useRef(false)
 
   const draftsRef = useRef([])
   const searchBoxRef = useRef(null)
@@ -283,7 +287,6 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // Preincarcam chunk-urile modalelor rare in idle, dupa prima randare.
   useEffect(() => {
     const preload = () => {
-      loadSettingsModal()
       loadReportsModal()
       loadVehicleHistoryModal()
       loadWhatsNewModal()
@@ -458,10 +461,17 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
       }
     })
     // Prima pornire: cerem numele service-ului daca nu e completat.
-    window.serviceAuto.settings.get().then((res) => {
-      if (!res.ok) return
-      if (!res.data?.numeService && lsGet(FIRST_RUN_KEY) !== '1') setFirstRunOpen(true)
-    })
+    window.serviceAuto.settings
+      .get()
+      .then((res) => {
+        if (!res.ok) return
+        if (!res.data?.numeService && lsGet(FIRST_RUN_KEY) !== '1') {
+          firstRunShownRef.current = true
+          setFirstRunOpen(true)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setFirstRunChecked(true))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -524,15 +534,22 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // "Ce e nou": o singura data dupa o actualizare, dupa ce aplicatia s-a incarcat
   // si nu e deschisa fereastra de prima configurare.
   useEffect(() => {
-    if (!initialCheckDone || firstRunOpen || whatsNewCheckedRef.current) return
+    if (!initialCheckDone || !firstRunChecked || firstRunOpen || whatsNewCheckedRef.current) return
     whatsNewCheckedRef.current = true
+    // Instalare noua (tocmai a trecut prin prima configurare): nu are ce sa afle
+    // "nou" - altfel, dupa inchiderea setarilor, ar aparea imediat inca un modal
+    // (draftul gol e deja salvat, deci main nu o mai vede ca "fresh").
+    if (firstRunShownRef.current) {
+      window.serviceAuto.app.markWhatsNewSeen().catch(() => {})
+      return
+    }
     window.serviceAuto.app
       .getWhatsNew('unseen')
       .then((res) => {
         if (res?.ok && res.data.entries.length) setWhatsNew({ entries: res.data.entries, markSeen: true })
       })
       .catch(() => {})
-  }, [initialCheckDone, firstRunOpen])
+  }, [initialCheckDone, firstRunChecked, firstRunOpen])
 
   const openWhatsNew = useCallback(async () => {
     try {
@@ -1098,7 +1115,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   const onUpdatePillClick = updateInfo.status === 'downloaded' ? handleInstallUpdate : handleDownloadUpdate
 
   return (
-    <div className="app">
+    <div className="app" style={firstRunChecked ? undefined : { visibility: 'hidden' }}>
       <DraftsSidebar
         drafts={drafts}
         currentId={fisa.id}
