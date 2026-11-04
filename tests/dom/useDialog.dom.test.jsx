@@ -115,3 +115,44 @@ describe('useDialog / Modal', () => {
     expect(screen.getByRole('alertdialog')).toBeTruthy()
   })
 })
+
+describe('useDialog - focus cand openerul a disparut', () => {
+  function Gone({ withHome }) {
+    const [open, setOpen] = useState(false)
+    const [btn, setBtn] = useState(true)
+    return (
+      <div>
+        <div className="form-columns">
+          <input aria-label="primul" />
+        </div>
+        {withHome && <button data-focus-home>acasa</button>}
+        {btn && <button onClick={() => setOpen(true)}>Deschide</button>}
+        {open && (
+          <Modal
+            title="T"
+            onClose={() => {
+              setBtn(false)
+              setOpen(false)
+            }}
+          >
+            <p>x</p>
+          </Modal>
+        )}
+      </div>
+    )
+  }
+  it('cade pe [data-focus-home]', async () => {
+    const user = userEvent.setup()
+    render(<Gone withHome />)
+    await user.click(screen.getByText('Deschide'))
+    await user.keyboard('{Escape}')
+    expect(document.activeElement).toBe(screen.getByText('acasa'))
+  })
+  it('fara data-focus-home cade pe primul camp al formularului', async () => {
+    const user = userEvent.setup()
+    render(<Gone />)
+    await user.click(screen.getByText('Deschide'))
+    await user.keyboard('{Escape}')
+    expect(document.activeElement).toBe(screen.getByLabelText('primul'))
+  })
+})

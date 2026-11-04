@@ -12,6 +12,10 @@ const stack = []
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+// Primul camp din formularul principal (FisaForm nu e in lista fisierelor editabile
+// aici, deci nu are data-focus-home; folosim selectorul).
+const FORM_FIRST_INPUT = '.form-columns input:not([disabled]):not([type="hidden"])'
+
 function getFocusable(container) {
   return Array.from(container.querySelectorAll(FOCUSABLE)).filter((el) => !el.hidden && !el.closest('[hidden]'))
 }
@@ -81,7 +85,18 @@ export default function useDialog(ref, { onClose, initialFocus = 'container', tr
       document.removeEventListener('keydown', onKeyDown)
       const i = stack.indexOf(token)
       if (i >= 0) stack.splice(i, 1)
-      if (opener && opener !== document.body && opener.isConnected) opener.focus?.()
+      if (!opener || opener === document.body) return
+      if (opener.isConnected) {
+        opener.focus?.()
+        return
+      }
+      // Openerul a disparut din DOM (ex: randul/butonul care a deschis dialogul):
+      // focusul nu ramane in aer - mergem la [data-focus-home], altfel la primul
+      // camp al formularului principal (Nume client, in .form-columns din FisaForm).
+      const home =
+        document.querySelector('[data-focus-home]') ||
+        document.querySelector(FORM_FIRST_INPUT)
+      home?.focus?.()
     }
   }, [ref, trap])
 
