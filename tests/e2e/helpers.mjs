@@ -157,6 +157,10 @@ export async function launch(sb, { env = {}, waitReady = true } = {}) {
   sb.live.push(h)
   const page = await app.firstWindow()
   h.page = page
+  // Uneori 'ready-to-show' nu se declanseaza la timp si fereastra ramane ascunsa
+  // (fara cadre rAF => Playwright asteapta la nesfarsit "element stable"). Daca dupa
+  // 2s tot e ascunsa, o aratam din harness, ca scenariile sa nu depinda de acest flake.
+  sleep(2000).then(() => app.evaluate(({ BrowserWindow }) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isVisible()) w.show() }).catch(() => {}))
   page.on('console', (m) => {
     if (m.type() === 'error' || m.type() === 'warning') h.logs.console.push(`[${m.type()}] ${m.text()}`)
   })
