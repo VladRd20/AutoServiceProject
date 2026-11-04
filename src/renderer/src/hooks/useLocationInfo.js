@@ -53,6 +53,7 @@ export default function useLocationInfo({ showToast }) {
           showToast('info', `${fise(d.quarantinedRestored)} ${d.quarantinedRestored === 1 ? 'coruptă a fost refăcută' : 'corupte au fost refăcute'} automat din backup.`)
         }
       })
+      .catch((err) => console.warn('[startup] getLocationInfo a esuat:', err))
   }
 
   return { locationBanner, checkLocation }

@@ -23,6 +23,7 @@ import Topbar from './views/Topbar'
 import ReleaseBar from './views/ReleaseBar'
 import ModalHost from './views/ModalHost'
 import ClosingOverlay from './views/ClosingOverlay'
+import { runStartup } from './startup'
 
 // Radacina de compozitie: leaga hook-urile (starea si fluxurile) de view-uri.
 // Ordinea hook-urilor conteaza (fiecare primeste ce a returnat unul anterior).
@@ -98,12 +99,17 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // Pornirea: ordinea apelurilor = ordinea in care pornesc cererile IPC.
   // Decizia "prima rulare" se ia INAINTE ca formularul sa fie afisat/interactiv
   // (vezi useFirstRun), iar initialCheckDone se seteaza dupa incarcarea drafturilor.
+  // Fiecare pas e izolat si exista un timeout care deschide poarta de vizibilitate (vezi startup.js).
   useEffect(() => {
-    const draftsReady = draftsApi.loadInitialDrafts().finally(() => setInitialCheckDone(true))
-    const recentReady = lists.refreshRecentFise()
-    lists.refreshAutocomplete()
-    checkLocation(Promise.all([draftsReady, recentReady]))
-    firstRun.checkFirstRun()
+    return runStartup({
+      loadInitialDrafts: draftsApi.loadInitialDrafts,
+      refreshRecentFise: lists.refreshRecentFise,
+      refreshAutocomplete: lists.refreshAutocomplete,
+      checkLocation,
+      checkFirstRun: firstRun.checkFirstRun,
+      markInitialDone: () => setInitialCheckDone(true),
+      markFirstRunChecked: firstRun.markFirstRunChecked
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

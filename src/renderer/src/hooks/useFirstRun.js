@@ -16,8 +16,9 @@ export default function useFirstRun({ initialCheckDone }) {
   const whatsNewCheckedRef = useRef(false)
 
   // Prima pornire: cerem numele service-ului daca nu e completat.
+  // Intoarce promisiunea (mereu rezolvata) - folosita de poarta de vizibilitate din App.
   function checkFirstRun() {
-    window.serviceAuto.settings
+    return window.serviceAuto.settings
       .get()
       .then((res) => {
         if (!res.ok) return
@@ -29,6 +30,8 @@ export default function useFirstRun({ initialCheckDone }) {
       .catch(() => {})
       .finally(() => setFirstRunChecked(true))
   }
+
+  const markFirstRunChecked = useCallback(() => setFirstRunChecked(true), [])
 
   // "Ce e nou": o singura data dupa o actualizare, dupa ce aplicatia s-a incarcat
   // si nu e deschisa fereastra de prima configurare.
@@ -72,5 +75,5 @@ export default function useFirstRun({ initialCheckDone }) {
     setFirstRunOpen(false)
   }
 
-  return { firstRunOpen, firstRunChecked, whatsNew, checkFirstRun, openWhatsNew, closeWhatsNew, closeFirstRun }
+  return { firstRunOpen, firstRunChecked, whatsNew, checkFirstRun, markFirstRunChecked, openWhatsNew, closeWhatsNew, closeFirstRun }
 }

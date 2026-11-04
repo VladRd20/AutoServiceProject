@@ -123,11 +123,17 @@ export default function useDrafts({
   function loadInitialDrafts() {
     return refreshDrafts().then((deduped) => {
       // Cel mai recent modificat draft cu continut, altfel unul gol (vezi pickStartupDraft).
-      const target = pickStartupDraft(deduped)
-      if (target) {
-        const loaded = normalizeFisa(target)
-        autosaver.reset(loaded, { clean: true })
-        setFisa(loaded)
+      try {
+        const target = pickStartupDraft(deduped)
+        if (target) {
+          const loaded = normalizeFisa(target)
+          autosaver.reset(loaded, { clean: true })
+          setFisa(loaded)
+        }
+      } catch (err) {
+        // Un draft stricat nu are voie sa blocheze pornirea: ramane fisa noua goala.
+        showToast('error', 'Draftul de la pornire nu a putut fi deschis.')
+        console.warn('[startup] draft neutilizabil:', err)
       }
     })
   }
