@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import FisaForm from './components/FisaForm'
 import ListaItems from './components/ListaItems'
 import Totaluri from './components/Totaluri'
@@ -8,10 +8,6 @@ import DraftsSidebar from './components/DraftsSidebar'
 import SearchModal from './components/SearchModal'
 import UpdateBanner from './components/UpdateBanner'
 import ThemeToggle from './components/ThemeToggle'
-import SettingsModal from './components/SettingsModal'
-import ReportsModal from './components/ReportsModal'
-import VehicleHistoryModal from './components/VehicleHistoryModal'
-import WhatsNewModal from './components/WhatsNewModal'
 import OverflowMenu from './components/OverflowMenu'
 import Icon from './components/Icon'
 import { formatLei } from './format'
@@ -19,6 +15,48 @@ import { validateFisa, reduceriDinFisa, isFisaEmpty, calcTotaluri } from '../../
 import { draftBackupRef, autosaverRef } from './draftBackup'
 import { createAutosaver } from './autosave'
 import './app-extra.css'
+
+// Modalele rare se incarca la cerere (chunk separat) - nu cresc bundle-ul de
+// pornire. SearchModal ramane eager (Ctrl+K trebuie sa fie instant). Chunk-urile
+// se preincarca in idle dupa prima randare, deci prima deschidere nu asteapta.
+const loadSettingsModal = () => import('./components/SettingsModal')
+const loadReportsModal = () => import('./components/ReportsModal')
+const loadVehicleHistoryModal = () => import('./components/VehicleHistoryModal')
+const loadWhatsNewModal = () => import('./components/WhatsNewModal')
+const SettingsModal = lazy(loadSettingsModal)
+const ReportsModal = lazy(loadReportsModal)
+const VehicleHistoryModal = lazy(loadVehicleHistoryModal)
+const WhatsNewModal = lazy(loadWhatsNewModal)
+
+// Drafturile se reciteasca integral cel mult o data la atatea ms in timpul
+// salvarilor automate (plasa de siguranta); intre timp se aplica un patch local.
+const DRAFTS_SAFETY_REFRESH_MS = 10 * 1000
+
+// Ce vede sidebar-ul pentru un draft (plita, client, total, daca e goala).
+// Memoizat pe referinta obiectului, ca sa nu recalculam totalurile degeaba.
+const draftViewCache = new WeakMap()
+function draftView(d) {
+  let v = draftViewCache.get(d)
+  if (v === undefined) {
+    let total = 0
+    try {
+      const r = reduceriDinFisa(d)
+      total = calcTotaluri(d.piese, d.lucrari, r.piese, r.lucrari).totalFinal
+    } catch {
+      // ca in DraftsSidebar: total necalculabil = 0
+    }
+    v = `${d.id}${d.auto?.nrInmatriculare ?? ''}${d.client?.nume ?? ''}${total}${isFisaEmpty(d)}`
+    draftViewCache.set(d, v)
+  }
+  return v
+}
+// true daca sidebar-ul ar arata exact la fel (aceeasi ordine, aceleasi campuri vizibile).
+function sameDraftsView(a, b) {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && draftView(a[i]) !== draftView(b[i])) return false
+  return true
+}
 
 // Ultimul draft deschis - la pornire revenim direct la el.
 const LAST_DRAFT_KEY = 'lastOpenDraftId'
@@ -153,7 +191,8 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // Refuri ca handlerele stabile (autosaver, evenimente) sa vada mereu valorile curente.
   const fisaRef = useRef(null)
   const readOnlyRef = useRef(readOnly)
-  const refreshDraftsRef = useRef(null)
+  const patchDraftRef = useRef(null)
+  const lastDraftsRefreshRef = useRef(0)
   const errorToastedRef = useRef(false)
   // true cat timp finalizam: nu trimitem update-uri catre autosaver, altfel
   // dupa reset(null) fisa finalizata ar fi re-salvata ca draft "fantoma".
@@ -168,7 +207,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   const [autosaver] = useState(() =>
     createAutosaver({
       save: (f) => window.serviceAuto.fisa.saveDraft(f),
-      onState: ({ state, error, savedAt }) => {
+      onState: ({ state, error, savedAt, doc, id }) => {
         setSaveState(state)
         if (savedAt) setSavedAt(savedAt)
         if (state === 'error') {
@@ -181,7 +220,10 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
         } else {
           setSaveError(null)
           errorToastedRef.current = false
-          if (state === 'saved') refreshDraftsRef.current?.()
+          // Patch local din datele deja salvate (fara IPC + re-randare a listei
+          // la fiecare ~1s de tastat). 'saved' fara `doc` = fisa deschisa de pe
+          // disc: lista nu s-a schimbat, nu e nimic de facut.
+          if (state === 'saved' && doc) patchDraftRef.current?.(doc, id)
         }
       },
       onId: (id) => setFisa((f) => (f.id ? f : { ...f, id }))
@@ -225,6 +267,29 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   showToastRef.current = showToast
   fisaRef.current = fisa
   readOnlyRef.current = readOnly
+
+  // Totalurile se recalculeaza doar cand se schimba piesele/lucrarile/reducerile,
+  // nu la fiecare re-randare (ex: schimbari de stare ale salvarii).
+  const totals = useMemo(
+    () => calcTotaluri(fisa.piese, fisa.lucrari, fisa.reducerePiesePercent, fisa.reducereLucrariPercent),
+    [fisa.piese, fisa.lucrari, fisa.reducerePiesePercent, fisa.reducereLucrariPercent]
+  )
+
+  // Preincarcam chunk-urile modalelor rare in idle, dupa prima randare.
+  useEffect(() => {
+    const preload = () => {
+      loadSettingsModal()
+      loadReportsModal()
+      loadVehicleHistoryModal()
+      loadWhatsNewModal()
+    }
+    if (typeof window.requestIdleCallback === 'function') {
+      const h = window.requestIdleCallback(preload, { timeout: 5000 })
+      return () => window.cancelIdleCallback?.(h)
+    }
+    const t = setTimeout(preload, 2000)
+    return () => clearTimeout(t)
+  }, [])
 
   const closeToast = useCallback((id) => setToasts((ts) => ts.filter((t) => t.id !== id)), [])
 
@@ -285,11 +350,31 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
         // curatarea drafturilor goale e un confort - lista ramane cea citita
       }
     }
+    lastDraftsRefreshRef.current = Date.now()
+    // Daca sidebar-ul ar arata identic, nu mai setam state-ul (sidebar-ul e memo).
+    // Ref-ul pastreaza mereu datele complete (handleNewFisa le citeste de acolo).
+    const changed = !sameDraftsView(draftsRef.current, deduped)
     draftsRef.current = deduped
-    setDrafts(deduped)
+    if (changed) setDrafts(deduped)
     return deduped
   }, [showToast, autosaver])
-  refreshDraftsRef.current = refreshDrafts
+
+  // Dupa o salvare reusita: actualizam local intrarea draftului din datele
+  // salvate. Refresh complet doar pentru draft nou (nu e inca in lista - acopera
+  // si dedupe-ul) sau ca plasa de siguranta, cel mult o data la 10s.
+  patchDraftRef.current = (doc, id) => {
+    const prev = draftsRef.current
+    if (!prev.some((d) => d.id === id)) {
+      refreshDrafts()
+      return
+    }
+    const entry = { ...doc, id, status: 'draft', updatedAt: new Date().toISOString() }
+    // Cel mai recent modificat primul, ca in listDrafts.
+    const next = [entry, ...prev.filter((d) => d.id !== id)]
+    draftsRef.current = next
+    if (!sameDraftsView(prev, next)) setDrafts(next)
+    if (Date.now() - lastDraftsRefreshRef.current >= DRAFTS_SAFETY_REFRESH_MS) refreshDrafts()
+  }
 
   const refreshRecentFise = useCallback(async () => {
     const res = await window.serviceAuto.fisa.listRecent(8)
@@ -985,7 +1070,6 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
 
   const updateBtn = getUpdateButtonState()
-  const totals = calcTotaluri(fisa.piese, fisa.lucrari, fisa.reducerePiesePercent, fisa.reducereLucrariPercent)
   const plate = fisa.auto.nrInmatriculare?.trim()
   const vehicul = [fisa.auto.marca, fisa.auto.model].map((x) => x?.trim()).filter(Boolean).join(' ')
   const fisaGoala = isFisaEmpty(fisa)
@@ -1250,48 +1334,51 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
 
       <ConfirmDialog state={confirmState} onResult={handleConfirmResult} />
 
-      {(settingsOpen || firstRunOpen) && (
-        <SettingsModal
-          onClose={() => {
-            if (firstRunOpen) lsSet(FIRST_RUN_KEY, '1')
-            setFirstRunOpen(false)
-            setSettingsOpen(false)
-          }}
-          showToast={showToast}
-          confirm={confirmAction}
-          onDataChanged={onDataChanged}
-          update={{
-            status: updateInfo.status,
-            version: updateInfo.version,
-            text: updateBtn.text,
-            variant: updateBtn.variant,
-            checking: checkingUpdates,
-            onCheck: handleCheckForUpdates,
-            onDownload: handleDownloadUpdate,
-            onInstall: handleInstallUpdate
-          }}
-          firstRun={firstRunOpen}
-          readOnly={readOnly}
-        />
-      )}
+      {/* Fallback null: chunk-urile sunt preincarcate, deci modalul apare practic instant. */}
+      <Suspense fallback={null}>
+        {(settingsOpen || firstRunOpen) && (
+          <SettingsModal
+            onClose={() => {
+              if (firstRunOpen) lsSet(FIRST_RUN_KEY, '1')
+              setFirstRunOpen(false)
+              setSettingsOpen(false)
+            }}
+            showToast={showToast}
+            confirm={confirmAction}
+            onDataChanged={onDataChanged}
+            update={{
+              status: updateInfo.status,
+              version: updateInfo.version,
+              text: updateBtn.text,
+              variant: updateBtn.variant,
+              checking: checkingUpdates,
+              onCheck: handleCheckForUpdates,
+              onDownload: handleDownloadUpdate,
+              onInstall: handleInstallUpdate
+            }}
+            firstRun={firstRunOpen}
+            readOnly={readOnly}
+          />
+        )}
 
-      {whatsNew && <WhatsNewModal entries={whatsNew.entries} onClose={closeWhatsNew} />}
+        {whatsNew && <WhatsNewModal entries={whatsNew.entries} onClose={closeWhatsNew} />}
 
-      {reportsOpen && <ReportsModal onClose={() => setReportsOpen(false)} showToast={showToast} />}
+        {reportsOpen && <ReportsModal onClose={() => setReportsOpen(false)} showToast={showToast} />}
 
-      {vehicleHistoryQuery && (
-        <VehicleHistoryModal
-          vin={vehicleHistoryQuery.vin}
-          nrInmatriculare={vehicleHistoryQuery.nrInmatriculare}
-          onClose={() => setVehicleHistoryQuery(null)}
-          onOpenPdf={handleOpenPdfFromSearch}
-          onPrintPdf={handlePrintPdfFromList}
-          onDeleteFinalized={handleDeleteFinalized}
-          onEditRecent={handleEditRecent}
-          onNewForProfile={handleNewFisaForProfile}
-          showToast={showToast}
-        />
-      )}
+        {vehicleHistoryQuery && (
+          <VehicleHistoryModal
+            vin={vehicleHistoryQuery.vin}
+            nrInmatriculare={vehicleHistoryQuery.nrInmatriculare}
+            onClose={() => setVehicleHistoryQuery(null)}
+            onOpenPdf={handleOpenPdfFromSearch}
+            onPrintPdf={handlePrintPdfFromList}
+            onDeleteFinalized={handleDeleteFinalized}
+            onEditRecent={handleEditRecent}
+            onNewForProfile={handleNewFisaForProfile}
+            showToast={showToast}
+          />
+        )}
+      </Suspense>
     </div>
   )
 }
