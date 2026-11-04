@@ -64,6 +64,8 @@ export default function useShortcuts({
   const handlersRef = useRef({})
   handlersRef.current = { autosaver, showToast, onRelease, onPreview, onNewFisa }
   const busyRef = useRef(false)
+  // Ctrl+P: o previzualizare PDF in curs nu mai porneste una a doua.
+  const previewBusyRef = useRef(false)
 
   useEffect(() => {
     async function save() {
@@ -78,7 +80,19 @@ export default function useShortcuts({
       }
     }
 
+    async function preview() {
+      if (previewBusyRef.current) return
+      previewBusyRef.current = true
+      try {
+        await handlersRef.current.onPreview?.()
+      } finally {
+        previewBusyRef.current = false
+      }
+    }
+
     function onKey(e) {
+      // Compunere IME (tastatura pe cai multiple): tastele nu sunt scurtaturi.
+      if (e.isComposing || e.keyCode === 229) return
       const isTypingNow = isTyping(e.target)
       // Dezactivate in spatele unui dialog/modal deschis sau cat timp se finalizeaza;
       // cele care modifica/produc date (S, Enter, P) si in modul doar-citire
@@ -98,8 +112,9 @@ export default function useShortcuts({
       // Ctrl+P: preventDefault chiar si cand e blocat, ca Chromium sa nu deschida print-ul nativ.
       if (k === 'p' && !e.shiftKey) {
         e.preventDefault()
-        if (blockedWrite) return
-        handlersRef.current.onPreview?.()
+        // Tasta tinuta apasata (repeat) nu declanseaza a doua previzualizare.
+        if (blockedWrite || e.repeat) return
+        preview()
         return
       }
       if (blocked || e.shiftKey) return
@@ -112,10 +127,15 @@ export default function useShortcuts({
         handlersRef.current.onNewFisa?.()
       } else if (k === 's') {
         e.preventDefault()
-        if (!blockedWrite) save()
+        if (!blockedWrite && !e.repeat) save()
       } else if (k === 'enter') {
         e.preventDefault()
-        if (!blockedWrite) handlersRef.current.onRelease?.()
+        // Ctrl+Enter tinut apasat nu finalizeaza mai multe fise la rand; nici cat
+        // timp e deschisa o lista Autocomplete (aria-expanded="true").
+        const expanded =
+          e.target?.getAttribute?.('aria-expanded') === 'true' ||
+          document.activeElement?.getAttribute?.('aria-expanded') === 'true'
+        if (!blockedWrite && !e.repeat && !expanded) handlersRef.current.onRelease?.()
       }
     }
     document.addEventListener('keydown', onKey)

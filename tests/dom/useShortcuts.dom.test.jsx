@@ -124,4 +124,55 @@ describe('useShortcuts', () => {
     key('Escape')
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+
+  it('tasta tinuta (repeat): Ctrl+Enter / Ctrl+S / Ctrl+P actioneaza o singura data', async () => {
+    const { h, C } = mk()
+    render(<C />)
+    key('Enter', { ctrlKey: true })
+    for (let i = 0; i < 5; i++) key('Enter', { ctrlKey: true, repeat: true })
+    key('p', { ctrlKey: true })
+    for (let i = 0; i < 5; i++) key('p', { ctrlKey: true, repeat: true })
+    for (let i = 0; i < 5; i++) key('s', { ctrlKey: true, repeat: true })
+    await act(async () => {})
+    expect(h.onRelease).toHaveBeenCalledTimes(1)
+    expect(h.onPreview).toHaveBeenCalledTimes(1)
+    expect(h.autosaver.flush).not.toHaveBeenCalled()
+  })
+
+  it('compunere IME ignorata', () => {
+    const { h, C } = mk()
+    render(<C />)
+    key('Enter', { ctrlKey: true, isComposing: true })
+    key('Enter', { ctrlKey: true, keyCode: 229 })
+    expect(h.onRelease).not.toHaveBeenCalled()
+  })
+
+  it('Ctrl+Enter ignorat cand tinta are aria-expanded="true" (Autocomplete deschis)', () => {
+    const { h, C } = mk()
+    render(<C />)
+    const input = screen.getByLabelText('camp')
+    const fire = () =>
+      act(() => {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }))
+      })
+    input.setAttribute('aria-expanded', 'true')
+    fire()
+    expect(h.onRelease).not.toHaveBeenCalled()
+    input.setAttribute('aria-expanded', 'false')
+    fire()
+    expect(h.onRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('Ctrl+P nu porneste a doua previzualizare cat timp prima e in curs', async () => {
+    let done
+    const onPreview = vi.fn(() => new Promise((r) => (done = r)))
+    const { h, C } = mk({ onPreview })
+    render(<C />)
+    key('p', { ctrlKey: true })
+    key('p', { ctrlKey: true })
+    expect(h.onPreview).toHaveBeenCalledTimes(1)
+    await act(async () => done())
+    key('p', { ctrlKey: true })
+    expect(h.onPreview).toHaveBeenCalledTimes(2)
+  })
 })
