@@ -6,7 +6,11 @@ const gol = (id, updatedAt) => ({ id, updatedAt, client: { nume: '' }, piese: []
 
 describe('pickStartupDraft', () => {
   it('alege cel mai recent modificat draft cu continut', () => {
-    const list = [draft('a', '2026-01-01T10:00:00Z'), draft('b', '2026-01-01T12:00:00Z'), draft('c', '2026-01-01T11:00:00Z')]
+    const list = [
+      draft('a', '2026-01-01T10:00:00Z'),
+      draft('b', '2026-01-01T12:00:00Z'),
+      draft('c', '2026-01-01T11:00:00Z')
+    ]
     expect(pickStartupDraft(list).id).toBe('b')
   })
 

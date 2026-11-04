@@ -20,7 +20,12 @@ function fakeWindow({ crashed = false, ack = true, destroyed = false } = {}) {
   win.destroyed = destroyed
   win.isDestroyed = () => win.destroyed
   win.close = vi.fn(() => {
-    const event = { prevented: false, preventDefault() { this.prevented = true } }
+    const event = {
+      prevented: false,
+      preventDefault() {
+        this.prevented = true
+      }
+    }
     win.emit('close', event)
     if (!event.prevented) win.destroyed = true
     return event
@@ -85,7 +90,12 @@ describe('inchidere fereastra', () => {
   it('daca fereastra ramane deschisa dupa flush (inchidere oprita), overlay-ul e ascuns (app:closing=false)', async () => {
     const win = fakeWindow()
     win.close = vi.fn(() => {
-      const event = { prevented: false, preventDefault() { this.prevented = true } }
+      const event = {
+        prevented: false,
+        preventDefault() {
+          this.prevented = true
+        }
+      }
       win.emit('close', event)
       return event // fereastra NU se distruge: beforeunload a oprit inchiderea
     })
@@ -159,7 +169,12 @@ describe('inchidere fereastra', () => {
     win.isDestroyed = () => win.destroyed
     win.close = vi.fn(() => {
       setTimeout(() => {
-        const event = { prevented: false, preventDefault() { this.prevented = true } }
+        const event = {
+          prevented: false,
+          preventDefault() {
+            this.prevented = true
+          }
+        }
         win.emit('close', event)
         if (!event.prevented) win.destroyed = true
       }, 0)

@@ -54,12 +54,12 @@ scenario(2, 'Full fișă + autosave draft matches', async (t) => {
   const h = await launch(sb)
   await fillFisa(h.page, { vin: '' })
   await waitSaved(h.page)
-  const d = await waitDraft(sb, (x) => x.piese?.length === 1 && x.lucrari?.length === 1 && x.piese[0].denumire === 'Filtru ulei' && x.lucrari[0].pret === '120')
+  const d = await waitDraft(sb, (x) => x.piese?.length === 1 && x.lucrari?.length === 1 && x.piese[0].denumire === 'Filtru ulei' && Number(x.lucrari[0].pret) === 120)
   t.check(d.client.nume === 'Ion Popescu', 'client.nume')
   t.check(d.client.telefon === '0691234567', 'telefon')
   t.check(d.auto.nrInmatriculare === 'B-123-ABC', 'plate')
   t.check(d.auto.marca === 'Dacia' && d.auto.model === 'Logan', 'marca/model')
-  t.check(String(d.piese[0].cantitate) === '2' && String(d.piese[0].pretUnitar) === '50', 'piesa qty/price')
+  t.check(Number(d.piese[0].cantitate) === 2 && Number(d.piese[0].pretUnitar) === 50, 'piesa qty/price (pretul se normalizeaza la 2 zecimale la blur: "50.00")')
   t.check(d.status === 'draft', 'status draft')
   t.check(readDrafts(sb).length === 1, `exactly 1 draft on disk (got ${readDrafts(sb).length})`)
   await closeApp(h)
@@ -545,6 +545,10 @@ scenario(15, 'Abrupt kill: data intact, no tmp leftovers / zero-byte json', asyn
     let h = await launch(sb)
     await fillFisa(h.page, { nume: 'K0', plate: 'K-2' })
     await waitSaved(h.page)
+    // Chip-ul "Salvat" ramane aprins si cat timp o modificare asteapta debounce-ul (1s): fara
+    // aceasta asteptare, K0 putea sa nu fie niciodata pe disc, iar relansarea arata (corect)
+    // draftul gol de la pornire - nu o cursa a aplicatiei.
+    await waitDraft(sb, (d) => d.client?.nume === 'K0' && d.lucrari?.length === 1)
     const markers = new Set(['K0'])
     let tmpLeft = 0
     let blank = 0
@@ -771,6 +775,96 @@ scenario(17, 'Search date filter, 200-char counter, auto-update setting', async 
   const a2 = await h2.page.evaluate(() => window.serviceAuto.app.getAutoUpdate())
   t.check(a2.ok && a2.data === true, 'setarea persista dupa repornire')
   await closeApp(h2)
+})
+
+scenario(18, 'Line editing keyboard + undo, decimal inputs, store-warning banner, closing overlay', async (t) => {
+  const sb = makeSandbox('editing')
+  fs.mkdirSync(sb.fiseDir, { recursive: true })
+  const old = {
+    schemaVersion: 2, client: { nume: 'Old Client', telefon: '0691234567', cui: '' },
+    auto: { nrInmatriculare: 'OLD-1', marca: 'Dacia', model: 'Logan', vin: '', an: '' }, km: '', observatii: '',
+    plata: { status: '', metoda: '' }, data: '2026-01-05T10:00:00', dataCurenta: true,
+    piese: [{ id: 'p', denumire: 'Filtru', cantitate: 1, pretUnitar: 10 }], lucrari: [{ id: 'l', denumire: 'Man', cantitate: 1, pret: 10 }],
+    reducerePiesePercent: 0, reducereLucrariPercent: 0, status: 'finalizata', finalizedAt: '2026-01-05T08:00:00.000Z', nr: '2026-0001'
+  }
+  fs.writeFileSync(path.join(sb.fiseDir, 'OLD-1_05-01-2026.json'), JSON.stringify(old))
+  fs.writeFileSync(path.join(sb.fiseDir, 'OLD-1_05-01-2026-DESKTOP-ABC123.json'), JSON.stringify(old))
+  const h = await launch(sb)
+  const p = h.page
+  const focusedIs = (loc) => loc.evaluate((el) => el === document.activeElement)
+  // --- bannerul de avertismente despre folderul de date
+  const banner = p.locator('.store-warning')
+  await banner.waitFor({ state: 'visible', timeout: 8000 })
+  const bannerText = await banner.innerText()
+  t.check(/1 copie de sincronizare \(OneDrive\) și 1 număr de fișă duplicat/.test(bannerText), `warning text: ${bannerText}`)
+  await banner.getByRole('button', { name: 'Arată detalii' }).click()
+  t.check((await banner.locator('.store-warning-details li').count()) === 2, 'details list the files')
+  await banner.getByRole('button', { name: 'Închide' }).click()
+  t.check((await banner.count()) === 0, 'banner dismissed')
+  // --- campuri numerice
+  await nameInput(p).fill('Edit Test')
+  const piese = section(p, 'Piese')
+  await piese.locator('.card-header-right button.btn-sm').first().click()
+  const rows = piese.locator('.linie:not(.linie-head)')
+  const row0 = rows.nth(0)
+  await row0.getByPlaceholder('Denumire').fill('Filtru')
+  await row0.getByLabel('Cantitate').fill('2,500')
+  await row0.getByLabel('Preț unitar').fill('12,5')
+  await row0.getByLabel('Cantitate').focus()
+  await row0.getByLabel('Preț unitar').focus()
+  await row0.getByPlaceholder('Denumire').focus()
+  t.check((await row0.getByLabel('Preț unitar').inputValue()) === '12.50', 'price normalized to 2 decimals')
+  t.check((await row0.getByLabel('Cantitate').inputValue()) === '2.5', 'quantity trimmed')
+  const lineTotal = await row0.locator('.linie-total').innerText()
+  t.check(/31,25/.test(lineTotal), `line total 31,25 (${lineTotal})`)
+  const km = p.getByLabel('Kilometraj (opțional)')
+  await km.fill('185000')
+  await km.blur()
+  const kmShown = (await km.inputValue()).replace(/\u00a0/g, ' ')
+  t.check(kmShown === '185 000', `km grouped: ${kmShown}`)
+  const red = p.getByLabel('Reducere piese (%)')
+  await red.fill('150')
+  await red.blur()
+  t.check((await red.inputValue()) === '100', 'discount clamped to 100')
+  await red.fill('0')
+  await red.blur()
+  // --- tastatura pe randuri: Ctrl+D dubleaza, Alt+sageti muta, Enter, Ctrl+Backspace pe rand gol
+  await row0.getByPlaceholder('Denumire').focus()
+  await p.keyboard.press('Control+d')
+  t.check((await rows.count()) === 2, 'Ctrl+D duplicates the row')
+  await rows.nth(1).getByPlaceholder('Denumire').fill('Ulei')
+  await p.keyboard.press('Alt+ArrowUp')
+  t.check((await rows.nth(0).getByPlaceholder('Denumire').inputValue()) === 'Ulei', 'Alt+Up moves row up')
+  t.check(await focusedIs(rows.nth(0).getByPlaceholder('Denumire')), 'focus stays on moved row')
+  await p.keyboard.press('Enter')
+  t.check(await focusedIs(rows.nth(1).getByPlaceholder('Denumire')), 'Enter moves to the next row')
+  await p.keyboard.press('Enter')
+  t.check((await rows.count()) === 3, 'Enter on the last row adds a line')
+  await p.keyboard.press('Control+Backspace')
+  t.check((await rows.count()) === 2, 'Ctrl+Backspace removes the empty row')
+  // --- stergere instanta + Anuleaza
+  await rows.nth(0).getByLabel('Șterge linia').click()
+  t.check((await rows.count()) === 1, 'non-empty row deleted instantly')
+  t.check((await p.locator('.confirm-dialog').count()) === 0, 'no blocking confirm')
+  await p.locator('.toast button', { hasText: 'Anulează' }).click()
+  t.check((await rows.count()) === 2 && (await rows.nth(0).getByPlaceholder('Denumire').inputValue()) === 'Ulei', 'undo restores the row in place')
+  // --- tema: Luminoasa -> Intunecata -> Sistem
+  const tg = p.locator('.theme-toggle')
+  const seen = []
+  for (let i = 0; i < 3; i++) {
+    await tg.click()
+    seen.push(await tg.getAttribute('aria-label'))
+  }
+  t.check(seen.join('|') === 'Temă: luminoasă|Temă: întunecată|Temă: sistem', `theme cycle: ${seen}`)
+  // --- overlay la inchidere (doar dupa >300ms)
+  await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('app:closing', true))
+  await sleep(150)
+  t.check((await p.locator('.closing-overlay').count()) === 0, 'no overlay before 300ms')
+  await p.locator('.closing-overlay').waitFor({ state: 'visible', timeout: 2000 })
+  await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('app:closing', false))
+  await sleep(200)
+  t.check((await p.locator('.closing-overlay').count()) === 0, 'overlay hidden when closing is cancelled')
+  await closeApp(h)
 })
 
 async function main() {

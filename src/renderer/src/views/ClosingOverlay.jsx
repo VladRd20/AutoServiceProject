@@ -9,7 +9,13 @@ export default function ClosingOverlay() {
   const show = useClosing()
   if (!show) return null
   return (
-    <div className="closing-overlay" role="alertdialog" aria-modal="true" aria-live="assertive" aria-label="Se salvează datele">
+    <div
+      className="closing-overlay"
+      role="alertdialog"
+      aria-modal="true"
+      aria-live="assertive"
+      aria-label="Se salvează datele"
+    >
       <div className="closing-card">
         <Icon name="loader" size={26} className="spin" />
         <strong>Se salvează datele…</strong>

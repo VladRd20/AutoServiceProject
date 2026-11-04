@@ -79,9 +79,7 @@ export default function Banners({
     <>
       {readOnly && (
         <div className="app-banner" role="alert">
-          <span>
-            Licență revocată — mod doar-citire. Poți deschide, căuta, tipări și exporta fișele existente.
-          </span>
+          <span>Licență revocată — mod doar-citire. Poți deschide, căuta, tipări și exporta fișele existente.</span>
           <button type="button" onClick={onRequestActivation}>
             Introdu cheie nouă
           </button>
@@ -91,8 +89,8 @@ export default function Banners({
         <div className="app-banner warn" role="alert">
           <span>
             Folderul de date «{locationBanner.override}» nu este disponibil (unitate scoasă/rețea căzută?). Lucrezi
-            temporar în «{locationBanner.dir}». Reconectează folderul și repornește aplicația — datele de acum vor
-            fi aduse înapoi automat.
+            temporar în «{locationBanner.dir}». Reconectează folderul și repornește aplicația — datele de acum vor fi
+            aduse înapoi automat.
           </span>
         </div>
       )}

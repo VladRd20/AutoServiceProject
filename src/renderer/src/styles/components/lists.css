@@ -44,6 +44,8 @@
 .linie-head .linie-total {
   line-height: normal;
   font-weight: 600;
+  font-family: inherit;
+  font-size: inherit;
 }
 
 /* Maner de reordonare (drag) si spatiatorul lui din antetul coloanelor. */
