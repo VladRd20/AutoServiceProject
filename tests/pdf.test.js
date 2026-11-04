@@ -8,8 +8,8 @@ vi.mock('../src/main/fileStore', () => ({ getSettings: vi.fn(async () => ({ nume
 vi.mock('../src/main/logger', () => ({ default: { warn() {}, error() {}, info() {} } }))
 
 import { buildDocDefinition } from '../src/main/pdfDoc'
-import { handlePdfRequest } from '../src/main/pdfRender'
-import { generatePdf, _setWorkerFactory } from '../src/main/pdfGenerator'
+import { handlePdfRequest, installFailureGuard } from '../src/main/pdfRender'
+import { generatePdf, shutdownPdfWorker, _setWorkerFactory } from '../src/main/pdfGenerator'
 
 const fisa = {
   nr: '12',
@@ -54,6 +54,49 @@ describe('pdfRender (calea reala a worker-ului)', () => {
     })
     expect(r.ok).toBe(false)
     expect(r.code).toBe('FONT_MISSING')
+  })
+})
+
+describe('pdfRender: respingeri necapturate in worker (Electron 37+ nu mai opreste procesul)', () => {
+  it('unhandledRejection raspunde cu eroare la cererea aflata in lucru', async () => {
+    const fakeProcess = new EventEmitter()
+    const replies = []
+    installFailureGuard(fakeProcess, (m) => replies.push(m))
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'))
+    const dest = path.join(dir, 'g.pdf')
+
+    const p = handlePdfRequest({ id: 42, fisa, settings: null, destPath: dest, fontsDir }) // inca in lucru (citeste fonturile)
+    fakeProcess.emit('unhandledRejection', new Error('boom din stream'))
+    expect(replies).toHaveLength(1)
+    expect(replies[0]).toMatchObject({ id: 42, ok: false })
+    expect(replies[0].detail).toContain('boom din stream')
+
+    await p // cererea reala se termina normal; raspunsul tardiv e ignorat de client
+    // fara cereri in lucru nu se mai trimite nimic
+    fakeProcess.emit('uncaughtException', new Error('altceva'))
+    expect(replies).toHaveLength(1)
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('end-to-end: o respingere in worker respinge job-ul client imediat, nu dupa timeout', async () => {
+    process.env.SA_APPPATH ||= process.cwd()
+    const workerProcess = new EventEmitter()
+    _setWorkerFactory(() => {
+      const proc = new EventEmitter()
+      installFailureGuard(workerProcess, (m) => proc.emit('message', m))
+      proc.postMessage = (m) => {
+        // cererea ajunge in worker, dar pdfmake "pierde" o promisiune: nu exista raspuns normal
+        handlePdfRequest({ ...m, fontsDir: path.join(os.tmpdir(), 'nu-exista-fonts') }).then(() => {})
+        queueMicrotask(() => workerProcess.emit('unhandledRejection', new Error('scapata')))
+      }
+      proc.kill = () => proc.emit('exit', 1)
+      return proc
+    })
+    try {
+      await expect(generatePdf(fisa, path.join(os.tmpdir(), 'zz.pdf'))).rejects.toMatchObject({ code: expect.any(String) })
+    } finally {
+      shutdownPdfWorker() // nu lasam worker-ul fals in starea modulului pentru testele urmatoare
+    }
   })
 })
 

@@ -86,20 +86,51 @@ export async function renderPdf({ fisa, settings, destPath, fontsDir }) {
   })
 }
 
+// Cereri aflate in lucru in acest worker (id-urile), ca sa putem raspunde cu
+// eroare daca procesul are o respingere/exceptie necapturata.
+const inFlight = new Set()
+
+function errorReply(id, err) {
+  const e = toAppError(err, 'Generarea PDF-ului a eșuat.')
+  return {
+    id,
+    ok: false,
+    code: e.code,
+    userMessage: e.userMessage,
+    detail: String(e.cause?.message || e.message)
+  }
+}
+
+// Din Electron 37, un unhandledRejection intr-un utilityProcess NU mai opreste
+// procesul. Fara asta, o respingere scapata (ex. dintr-un callback de stream)
+// ar lasa cererea fara raspuns pana la timeout-ul de 30s din procesul principal.
+// Aici raspundem cu eroare la toate cererile aflate in lucru. `proc` e `process`
+// (injectabil in teste); `reply` trimite raspunsul prin parentPort.
+export function installFailureGuard(proc, reply) {
+  const failAll = (reason) => {
+    for (const id of [...inFlight]) {
+      inFlight.delete(id)
+      try {
+        reply(errorReply(id, reason instanceof Error ? reason : new Error(String(reason))))
+      } catch {
+        /* canalul spre procesul principal s-a inchis */
+      }
+    }
+  }
+  proc.on('unhandledRejection', failAll)
+  proc.on('uncaughtException', failAll)
+}
+
 // Protocol: {id, fisa, settings, destPath, fontsDir}
 //   -> {id, ok:true, path} | {id, ok:false, code, userMessage, detail}
 export async function handlePdfRequest(msg) {
+  inFlight.add(msg.id)
   try {
     const out = await renderPdf(msg)
     return { id: msg.id, ok: true, path: out }
   } catch (err) {
-    const e = toAppError(err, 'Generarea PDF-ului a eșuat.')
-    return {
-      id: msg.id,
-      ok: false,
-      code: e.code,
-      userMessage: e.userMessage,
-      detail: String(e.cause?.message || e.message)
-    }
+    return errorReply(msg.id, err)
+  } finally {
+    inFlight.delete(msg.id)
   }
 }

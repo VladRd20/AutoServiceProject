@@ -1,9 +1,12 @@
-import { handlePdfRequest } from './pdfRender'
+import { handlePdfRequest, installFailureGuard } from './pdfRender'
 
 // Punctul de intrare al utilityProcess-ului de generare PDF. Primeste cereri
 // prin parentPort si raspunde cu rezultatul; procesul ramane viu intre cereri
 // (pdfmake + fonturile se incarca o singura data).
+const reply = (msg) => process.parentPort.postMessage(msg)
+
+installFailureGuard(process, reply)
+
 process.parentPort.on('message', async (e) => {
-  const reply = await handlePdfRequest(e.data)
-  process.parentPort.postMessage(reply)
+  reply(await handlePdfRequest(e.data))
 })

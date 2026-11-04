@@ -1,4 +1,5 @@
 import path from 'path'
+import fs from 'fs'
 import { app, BrowserWindow, utilityProcess } from 'electron'
 import { toAppError, AppError } from './errors'
 import { getSettings } from './fileStore'
@@ -14,9 +15,7 @@ const REQUEST_TIMEOUT_MS = 30000
 
 // build/fonts in dev, resources/fonts dupa build (vezi extraResources in package.json)
 function fontsDir() {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'fonts')
-    : path.join(app.getAppPath(), 'build', 'fonts')
+  return app.isPackaged ? path.join(process.resourcesPath, 'fonts') : path.join(app.getAppPath(), 'build', 'fonts')
 }
 
 let child = null
@@ -61,7 +60,13 @@ function ensureWorker() {
     const owned = [...pending.values()].some((p) => p.proc === proc)
     if (owned) {
       log.error(`[pdfGenerator] worker oprit neasteptat (cod ${code})`)
-      failOwned(proc, new AppError('PDF_WORKER_CRASH', 'Generarea PDF-ului a eșuat (procesul de generare s-a oprit). Încearcă din nou.'))
+      failOwned(
+        proc,
+        new AppError(
+          'PDF_WORKER_CRASH',
+          'Generarea PDF-ului a eșuat (procesul de generare s-a oprit). Încearcă din nou.'
+        )
+      )
     }
   })
   return proc
@@ -119,7 +124,13 @@ export async function generatePdf(fisa, destPath) {
       } catch {
         /* deja oprit */
       }
-      failOwned(proc, new AppError('PDF_WORKER_CRASH', 'Generarea PDF-ului a eșuat (procesul de generare s-a oprit). Încearcă din nou.'))
+      failOwned(
+        proc,
+        new AppError(
+          'PDF_WORKER_CRASH',
+          'Generarea PDF-ului a eșuat (procesul de generare s-a oprit). Încearcă din nou.'
+        )
+      )
       reject(new AppError('PDF_TIMEOUT', 'Generarea PDF-ului a durat prea mult. Încearcă din nou.'))
     }, REQUEST_TIMEOUT_MS)
     pending.set(id, { resolve, reject, timer, proc })
@@ -131,6 +142,28 @@ export async function generatePdf(fisa, destPath) {
       reject(toAppError(err, 'Generarea PDF-ului a eșuat.'))
     }
   })
+}
+
+// Din Electron 41 viewer-ul PDF ruleaza in acelasi WebContents (nu mai e guest view)
+// si isi navigheaza singur frame-ul dupa did-finish-load: loadFile() rezolva
+// INAINTE ca documentul sa fie randat, iar un print() imediat tipareste un viewer
+// gol (printToPDF intoarce ~740 B) sau esueaza cu "Printing failed". Asteptam deci
+// pana cand o proba printToPDF produce un document de marime comparabila cu PDF-ul
+// sursa (in practica ~200 ms) si abia apoi tiparim.
+const PDF_READY_POLL_MS = 150
+
+async function waitPdfRendered(win, pdfPath) {
+  const srcSize = (await fs.promises.stat(pdfPath)).size
+  for (;;) {
+    if (win.isDestroyed()) throw new Error('fereastra de printare a fost inchisa')
+    try {
+      const probe = await win.webContents.printToPDF({ printBackground: true })
+      if (probe.length >= srcSize * 0.5) return
+    } catch {
+      /* viewer-ul inca navigheaza - reincercam (limita de timp e la apelant) */
+    }
+    await new Promise((r) => setTimeout(r, PDF_READY_POLL_MS))
+  }
 }
 
 // Trimite PDF-ul direct la dialogul de printare, fara sa fie nevoie sa fie
@@ -152,7 +185,7 @@ export function printPdf(pdfPath) {
       loadTimer = setTimeout(() => rej(new Error('timeout la incarcarea PDF-ului')), 20000)
     })
 
-    Promise.race([printWin.loadFile(pdfPath), loadTimeout])
+    Promise.race([printWin.loadFile(pdfPath).then(() => waitPdfRendered(printWin, pdfPath)), loadTimeout])
       .then(() => {
         clearTimeout(loadTimer)
         printWin.webContents.print({ silent: false, printBackground: true }, (success, errorType) => {
