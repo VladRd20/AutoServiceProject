@@ -1,5 +1,5 @@
 import React, { memo } from 'react'
-import { calcTotaluri, clampPercentText, parseDecimal, sanitizeDecimalText } from '../../../shared/calculations'
+import { calcTotaluri, clampPercentText, parseDecimal } from '../../../shared/calculations'
 import DecimalInput from './DecimalInput'
 import { formatLei } from '../format'
 
@@ -62,7 +62,6 @@ function Totaluri({
                 aria-invalid={r.error ? 'true' : undefined}
                 aria-describedby={r.error ? `reducere-${r.key}-error` : undefined}
                 title={r.error || undefined}
-                sanitize={sanitizeDecimalText}
                 normalize={clampPercentText}
                 onChange={(v) => r.onChange(parsePercentLive(v))}
               />

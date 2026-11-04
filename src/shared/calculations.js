@@ -36,11 +36,6 @@ export function parseDecimal(value) {
   return Number.isFinite(n) ? n : null
 }
 
-/** Pastreaza doar cifre si separatori (. ,) cat se tasteaza. */
-export function sanitizeDecimalText(text) {
-  return String(text ?? '').replace(/[^\d.,]/g, '')
-}
-
 /** Pret: 2 zecimale ("12,5" -> "12.50"). Gol/ne-numeric ramane neschimbat. */
 export function formatPrice(value) {
   const n = parseDecimal(value)

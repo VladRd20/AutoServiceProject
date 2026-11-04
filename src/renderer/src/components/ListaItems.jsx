@@ -4,8 +4,7 @@ import {
   foldForMatch,
   formatPrice,
   formatQuantity,
-  parseDecimal,
-  sanitizeDecimalText
+  parseDecimal
 } from '../../../shared/calculations'
 import { LengthCounter } from './FisaForm'
 import Autocomplete from './Autocomplete'
@@ -356,7 +355,6 @@ function ListaItems({
                 placeholder="Cant."
                 aria-label="Cantitate"
                 value={item.cantitate}
-                sanitize={sanitizeDecimalText}
                 normalize={formatQuantity}
                 onChange={(v) => updateItem(item.id, { cantitate: v })}
                 {...a11y('cantitate')}
@@ -368,7 +366,6 @@ function ListaItems({
                 placeholder={priceLabel}
                 aria-label={priceLabel}
                 value={item[priceKey]}
-                sanitize={sanitizeDecimalText}
                 normalize={formatPrice}
                 onChange={(v) => updateItem(item.id, { [priceKey]: v })}
                 {...a11y(priceKey)}

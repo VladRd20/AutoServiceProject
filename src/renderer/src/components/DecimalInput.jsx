@@ -3,7 +3,9 @@ import React, { useEffect, useRef, useState } from 'react'
 // Camp numeric din formular (cantitate, pret, reducere, km): text simplu (fara
 // sageti de incrementare), tastatura numerica, selectare integrala la focus si
 // normalizare la blur.
-//  - `sanitize(raw)`: curata textul tastat (ex: doar cifre si separatori).
+//  - `sanitize(raw)` (optional): curata textul tastat; campurile de pret/cantitate NU il
+//    folosesc - un "abc" sau "-5" ramane vizibil si e semnalat la validare, nu e
+//    transformat in tacere in alta valoare.
 //  - `normalize(value)`: valoarea finala la blur (ex: "12,5" -> "12.50").
 //  - `display(value)`: cum se arata cand campul NU are focus (ex: "185 000");
 //    in timpul editarii se vede valoarea simpla, ca cursorul sa nu sara.

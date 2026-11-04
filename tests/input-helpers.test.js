@@ -7,7 +7,6 @@ import {
   formatQuantity,
   parseDecimal,
   parseKm,
-  sanitizeDecimalText,
   validateFisa
 } from '../src/shared/calculations'
 
@@ -56,9 +55,6 @@ describe('formatare la blur', () => {
     expect(clampPercentText('12,5')).toBe('12.5')
     expect(clampPercentText('')).toBe('0')
     expect(clampPercentText('-5')).toBe('0')
-  })
-  it('sanitizeDecimalText pastreaza doar cifre si separatori', () => {
-    expect(sanitizeDecimalText('1a2,5 lei')).toBe('12,5')
   })
 })
 
