@@ -1,4 +1,4 @@
-import { calcTotaluri, calcLinieTotal, foldForMatch, reduceriDinFisa, round2 } from '../../shared/calculations'
+import { calcTotaluri, calcLinieTotal, foldForMatch, reduceriDinFisa, round2, parseDecimal } from '../../shared/calculations'
 import { fisaDay, hasRange, inRange, normalizeRange } from '../../shared/dateRange'
 import { ensureDirs } from './paths'
 import { readAllFiseFinalizate } from './fise'
@@ -63,7 +63,7 @@ export async function getRapoarte(period, range) {
     if (!denumire) return
     const key = foldForMatch(denumire)
     const entry = map.get(key) || { denumire, count: 0, valoare: 0 }
-    entry.count += Number(cantitate) || 0
+    entry.count += parseDecimal(cantitate) ?? 0
     entry.valoare = round2(entry.valoare + valoare)
     map.set(key, entry)
   }

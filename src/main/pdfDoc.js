@@ -1,4 +1,4 @@
-import { calcTotaluri, calcLinieTotal, reduceriDinFisa } from '../shared/calculations'
+import { calcTotaluri, calcLinieTotal, reduceriDinFisa, parseDecimal } from '../shared/calculations'
 
 // Constructia docDefinition-ului pdfmake - functii pure, fara electron/pdfmake,
 // folosite de worker-ul de generare (vezi pdfRender.js) si de teste.
@@ -49,7 +49,7 @@ function tabelPiese(piese) {
     body.push([
       p.denumire || '-',
       { text: String(p.cantitate ?? '-'), alignment: 'right' },
-      { text: formatBani(Number(p.pretUnitar) || 0), alignment: 'right' },
+      { text: formatBani(parseDecimal(p.pretUnitar) ?? 0), alignment: 'right' },
       { text: formatBani(calcLinieTotal(p.cantitate, p.pretUnitar)), alignment: 'right' }
     ])
   }
@@ -62,7 +62,7 @@ function tabelLucrari(lucrari) {
     body.push([
       l.denumire || '-',
       { text: String(l.cantitate ?? '-'), alignment: 'right' },
-      { text: formatBani(Number(l.pret) || 0), alignment: 'right' },
+      { text: formatBani(parseDecimal(l.pret) ?? 0), alignment: 'right' },
       { text: formatBani(calcLinieTotal(l.cantitate, l.pret)), alignment: 'right' }
     ])
   }

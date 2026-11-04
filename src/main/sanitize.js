@@ -8,7 +8,7 @@
 // Truncarea de aici e doar plasa de siguranta: la finalizare, validateFisa()
 // (shared/calculations.js) ruleaza pe fisa BRUTA si respinge textele/listele
 // prea lungi cu un mesaj clar, ca nimic sa nu fie taiat in tacere.
-import { LIMITS, PLATA_STATUS, PLATA_METODE, COMBUSTIBILI } from '../shared/calculations'
+import { LIMITS, parseDecimal, PLATA_STATUS, PLATA_METODE, COMBUSTIBILI } from '../shared/calculations'
 import { SCHEMA_VERSION } from '../shared/schema'
 
 const str = (v, max = LIMITS.text) =>
@@ -18,14 +18,27 @@ const str = (v, max = LIMITS.text) =>
 // scurt, nimic altceva (obiecte, array-uri, functii).
 const scalar = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : str(v, 32))
 
+// Camp numeric tastat: "48,5" / "1 234,5" -> "48.5" / "1234.5" (forma cu punct din
+// stocare). Doar separatorii se convertesc, FARA rotunjire ("48.555" ramane asa);
+// valorile fara virgula/spatiu (deja canonice) si textul ne-numeric raman
+// neschimbate, ca validarea sa il poata semnala. Fisierul ramane cu un format.
+function num(v) {
+  const x = scalar(v)
+  if (typeof x !== 'string' || !/[,\s]/.test(x)) return x
+  const n = parseDecimal(x)
+  if (n === null) return x
+  const t = String(n)
+  return t.includes('e') ? x : t
+}
+
 function lines(list, priceKey, withCod = false) {
   if (!Array.isArray(list)) return []
   return list.slice(0, LIMITS.linii).map((it) => ({
     id: str(it?.id, 64),
     denumire: str(it?.denumire),
-    cantitate: scalar(it?.cantitate),
+    cantitate: num(it?.cantitate),
     ...(withCod ? { cod: str(it?.cod, LIMITS.cod) } : {}),
-    [priceKey]: scalar(it?.[priceKey])
+    [priceKey]: num(it?.[priceKey])
   }))
 }
 
@@ -50,7 +63,7 @@ export function sanitizeFisa(fisa) {
       capacitate: scalar(f.auto?.capacitate),
       combustibil: oneOf(f.auto?.combustibil, COMBUSTIBILI)
     },
-    km: scalar(f.km),
+    km: num(f.km),
     observatii: str(f.observatii, LIMITS.observatii),
     observatiiPrint: Boolean(f.observatiiPrint),
     plata: { status: oneOf(f.plata?.status, PLATA_STATUS), metoda: oneOf(f.plata?.metoda, PLATA_METODE) },
@@ -59,9 +72,9 @@ export function sanitizeFisa(fisa) {
     piese: lines(f.piese, 'pretUnitar', true),
     lucrari: lines(f.lucrari, 'pret')
   }
-  if (f.reducerePiesePercent !== undefined) out.reducerePiesePercent = scalar(f.reducerePiesePercent)
-  if (f.reducereLucrariPercent !== undefined) out.reducereLucrariPercent = scalar(f.reducereLucrariPercent)
-  if (f.reducerePercent !== undefined) out.reducerePercent = scalar(f.reducerePercent)
+  if (f.reducerePiesePercent !== undefined) out.reducerePiesePercent = num(f.reducerePiesePercent)
+  if (f.reducereLucrariPercent !== undefined) out.reducereLucrariPercent = num(f.reducereLucrariPercent)
+  if (f.reducerePercent !== undefined) out.reducerePercent = num(f.reducerePercent)
   if (f._replaceBaseName) out._replaceBaseName = str(f._replaceBaseName, 128)
   if (f.nr) out.nr = str(f.nr, 20)
   if (f.finalizedAt) out.finalizedAt = str(f.finalizedAt, 40)
