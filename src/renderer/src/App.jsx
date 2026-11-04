@@ -1,1141 +1,181 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import FisaForm from './components/FisaForm'
 import ListaItems from './components/ListaItems'
 import Totaluri from './components/Totaluri'
 import Toast from './components/Toast'
 import ConfirmDialog from './components/ConfirmDialog'
 import DraftsSidebar from './components/DraftsSidebar'
-import SearchModal from './components/SearchModal'
-import SettingsModal from './components/SettingsModal'
-import UpdateBanner from './components/UpdateBanner'
-import ThemeToggle from './components/ThemeToggle'
-import OverflowMenu from './components/OverflowMenu'
-import Icon from './components/Icon'
-import { formatLei } from './format'
-import { validateFisa, reduceriDinFisa, isFisaEmpty, calcTotaluri } from '../../shared/calculations'
-import { draftBackupRef, autosaverRef } from './draftBackup'
-import { createAutosaver } from './autosave'
-import { applyDraftPatch } from './draftPatch'
-import { LAST_DRAFT_KEY, FIRST_RUN_KEY, fise, lsGet, lsSet, emptyFisa, normalizeFisa, getBackupChip } from './fisaModel'
-import LazyBoundary, { lazyRetry } from './components/LazyBoundary'
+import { isFisaEmpty } from '../../shared/calculations'
+import useToasts from './hooks/useToasts'
+import useConfirm from './hooks/useConfirm'
+import useUpdater from './hooks/useUpdater'
+import useBackupStatus from './hooks/useBackupStatus'
+import useFisaEditor from './hooks/useFisaEditor'
+import useDrafts from './hooks/useDrafts'
+import useFiseLists from './hooks/useFiseLists'
+import useLocationInfo from './hooks/useLocationInfo'
+import useFirstRun from './hooks/useFirstRun'
+import useRelease from './hooks/useRelease'
+import useShortcuts from './hooks/useShortcuts'
+import Banners from './views/Banners'
+import Topbar from './views/Topbar'
+import ReleaseBar from './views/ReleaseBar'
+import ModalHost from './views/ModalHost'
 
-// Modalele rare se incarca la cerere (chunk separat) - nu cresc bundle-ul de
-// pornire. SettingsModal e eager (~21 KB): modalul de prima rulare trebuie sa apara
-// imediat, nu dupa ce formularul e deja interactiv. SearchModal ramane eager (Ctrl+K trebuie sa fie instant). Chunk-urile
-// se preincarca in idle dupa prima randare, deci prima deschidere nu asteapta.
-const loadReportsModal = () => import('./components/ReportsModal')
-const loadVehicleHistoryModal = () => import('./components/VehicleHistoryModal')
-const loadWhatsNewModal = () => import('./components/WhatsNewModal')
-const ReportsModal = lazyRetry(loadReportsModal)
-const VehicleHistoryModal = lazyRetry(loadVehicleHistoryModal)
-const WhatsNewModal = lazyRetry(loadWhatsNewModal)
-
-// Drafturile se reciteasca integral cel mult o data la atatea ms in timpul
-// salvarilor automate (plasa de siguranta); intre timp se aplica un patch local.
-const DRAFTS_SAFETY_REFRESH_MS = 10 * 1000
-
-// Ce vede sidebar-ul pentru un draft (plita, client, total, daca e goala).
-// Memoizat pe referinta obiectului, ca sa nu recalculam totalurile degeaba.
-const draftViewCache = new WeakMap()
-function draftView(d) {
-  let v = draftViewCache.get(d)
-  if (v === undefined) {
-    let total = 0
-    try {
-      const r = reduceriDinFisa(d)
-      total = calcTotaluri(d.piese, d.lucrari, r.piese, r.lucrari).totalFinal
-    } catch {
-      // ca in DraftsSidebar: total necalculabil = 0
-    }
-    v = `${d.id}${d.auto?.nrInmatriculare ?? ''}${d.client?.nume ?? ''}${total}${isFisaEmpty(d)}`
-    draftViewCache.set(d, v)
-  }
-  return v
-}
-// true daca sidebar-ul ar arata exact la fel (aceeasi ordine, aceleasi campuri vizibile).
-function sameDraftsView(a, b) {
-  if (a === b) return true
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && draftView(a[i]) !== draftView(b[i])) return false
-  return true
-}
-
-const BACKUP_POLL_MS = 2 * 60 * 1000
-
+// Radacina de compozitie: leaga hook-urile (starea si fluxurile) de view-uri.
+// Ordinea hook-urilor conteaza (fiecare primeste ce a returnat unul anterior).
 export default function App({ readOnly = false, onRequestActivation } = {}) {
-  const [fisa, setFisa] = useState(emptyFisa)
-  const [drafts, setDrafts] = useState([])
-  const [errors, setErrors] = useState({})
-  const [toasts, setToasts] = useState([])
-  const toastIdRef = useRef(0)
-  const [releasing, setReleasing] = useState(false)
-  const [previewingPdf, setPreviewingPdf] = useState(false)
-  const [pdfRetry, setPdfRetry] = useState(null) // { fisa, baseName }
-  const [locationBanner, setLocationBanner] = useState(null) // { override, dir }
-  const [firstRunOpen, setFirstRunOpen] = useState(false)
-  const [whatsNew, setWhatsNew] = useState(null) // { entries, markSeen }
-  const whatsNewCheckedRef = useRef(false)
-  const [backupStatus, setBackupStatus] = useState(null)
-  const [saveError, setSaveError] = useState(null) // mesajul erorii curente de salvare
-  // Refuri ca handlerele stabile (autosaver, evenimente) sa vada mereu valorile curente.
-  const fisaRef = useRef(null)
-  const readOnlyRef = useRef(readOnly)
-  const patchDraftRef = useRef(null)
-  // Id-uri de drafturi finalizate/sterse: un callback 'saved' intarziat al
-  // autosave-ului nu are voie sa le readuca in sidebar.
-  const removedDraftIdsRef = useRef(new Set())
-  const lastDraftsRefreshRef = useRef(0)
-  const errorToastedRef = useRef(false)
-  // true cat timp finalizam: nu trimitem update-uri catre autosaver, altfel
-  // dupa reset(null) fisa finalizata ar fi re-salvata ca draft "fantoma".
-  const suspendAutosaveRef = useRef(false)
-  // true cat timp ruleaza o finalizare: comutarile de fisa/scurtaturile sunt ignorate.
-  const releasingRef = useRef(false)
-  const modalOpenRef = useRef(false)
-  const isCurrentEmpty = useCallback(() => isFisaEmpty(fisaRef.current), [])
+  const { toasts, showToast, closeToast } = useToasts()
+  const { confirmState, confirmAction, handleConfirmResult } = useConfirm()
+  const updater = useUpdater({ showToast })
+  const { backupStatus, refreshBackupStatus } = useBackupStatus()
 
-  // Salvarea propriu-zisa (serializare, flush, retry, garda de generatie) e in
-  // autosave.js; aici doar o legam de UI. Callback-urile citesc din refuri.
-  const [autosaver] = useState(() =>
-    createAutosaver({
-      save: (f) => window.serviceAuto.fisa.saveDraft(f),
-      onState: ({ state, error, savedAt, doc, id }) => {
-        setSaveState(state)
-        if (savedAt) setSavedAt(savedAt)
-        if (state === 'error') {
-          const msg = error?.message || 'Eroare necunoscută'
-          setSaveError(msg)
-          if (!errorToastedRef.current) {
-            errorToastedRef.current = true
-            showToastRef.current?.('error', `Salvare automată eșuată: ${msg}`, null, { sticky: true })
-          }
-        } else {
-          setSaveError(null)
-          errorToastedRef.current = false
-          // Patch local din datele deja salvate (fara IPC + re-randare a listei
-          // la fiecare ~1s de tastat). 'saved' fara `doc` = fisa deschisa de pe
-          // disc: lista nu s-a schimbat, nu e nimic de facut.
-          if (state === 'saved' && doc) patchDraftRef.current?.(doc, id)
-        }
-      },
-      onId: (id) => setFisa((f) => (f.id ? f : { ...f, id }))
-    })
-  )
-  const showToastRef = useRef(null)
-  const [checkingUpdates, setCheckingUpdates] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchRange, setSearchRange] = useState({ from: '', to: '' })
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const searchActive = Boolean(searchQuery.trim() || searchRange.from || searchRange.to || filtersOpen)
-  const closeSearch = useCallback(() => {
-    setSearchQuery('')
-    setSearchRange({ from: '', to: '' })
-    setFiltersOpen(false)
-  }, [])
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [reportsOpen, setReportsOpen] = useState(false)
-  const [vehicleHistoryQuery, setVehicleHistoryQuery] = useState(null) // { vin, nrInmatriculare }
-  const [recentFise, setRecentFise] = useState([])
-  const [updateInfo, setUpdateInfo] = useState({ status: 'idle' })
-  const [updateFlash, setUpdateFlash] = useState(null) // 'no-update' | 'error' - dispare singur dupa cateva secunde
-  const [autocomplete, setAutocomplete] = useState({ marci: [], modelePerMarca: {}, piese: [], lucrari: [] })
-  const [saveState, setSaveState] = useState('idle') // idle | saving | saved | error
-  const [savedAt, setSavedAt] = useState(null)
-  const [exportingLogs, setExportingLogs] = useState(false)
   // Blocheaza autosave-ul "instant" de la pornire pana stim daca exista deja
   // un draft gol de refolosit - altfel castiga cursa cu IPC-ul de listDrafts
   // si salveaza un draft nou inainte sa apucam sa-l refolosim pe cel vechi.
   const [initialCheckDone, setInitialCheckDone] = useState(false)
-  // Decizia "prima rulare" (modalul Datele service-ului) se ia INAINTE ca formularul
-  // sa fie afisat/interactiv - altfel modalul apare peste ce a inceput utilizatorul sa tasteze.
-  const [firstRunChecked, setFirstRunChecked] = useState(false)
-  const firstRunShownRef = useRef(false)
 
-  const draftsRef = useRef([])
-  const searchBoxRef = useRef(null)
+  const editor = useFisaEditor({ readOnly, showToast, initialCheckDone })
+  const { fisa, setFisa, errors, setErrors, setPdfRetry } = editor
+  const lists = useFiseLists({ showToast, confirmAction })
+  const draftsApi = useDrafts({
+    autosaver: editor.autosaver,
+    fisaRef: editor.fisaRef,
+    readOnlyRef: editor.readOnlyRef,
+    patchDraftRef: editor.patchDraftRef,
+    releasingRef: editor.releasingRef,
+    showToast,
+    setFisa,
+    setErrors,
+    setPdfRetry,
+    resetToNewFisa: editor.resetToNewFisa,
+    flushOrAbort: editor.flushOrAbort,
+    refreshRecentFise: lists.refreshRecentFise,
+    refreshAutocomplete: lists.refreshAutocomplete
+  })
+  const { locationBanner, checkLocation } = useLocationInfo({ showToast })
+  const firstRun = useFirstRun({ initialCheckDone })
+  const release = useRelease({
+    fisa,
+    readOnly,
+    showToast,
+    autosaver: editor.autosaver,
+    fisaRef: editor.fisaRef,
+    readOnlyRef: editor.readOnlyRef,
+    releasingRef: editor.releasingRef,
+    suspendAutosaveRef: editor.suspendAutosaveRef,
+    removedDraftIdsRef: draftsApi.removedDraftIdsRef,
+    setErrors,
+    setPdfRetry,
+    resetToNewFisa: editor.resetToNewFisa,
+    goToNextDraftOrNew: draftsApi.goToNextDraftOrNew,
+    refreshBackupStatus
+  })
+
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [reportsOpen, setReportsOpen] = useState(false)
+  const [vehicleHistoryQuery, setVehicleHistoryQuery] = useState(null) // { vin, nrInmatriculare }
   const searchInputRef = useRef(null)
 
-  const showToast = useCallback((type, message, action, opts) => {
-    const id = ++toastIdRef.current
-    setToasts((ts) => [...ts, { id, type, message, action, sticky: opts?.sticky }])
-    return id
-  }, [])
-  showToastRef.current = showToast
-  fisaRef.current = fisa
-  readOnlyRef.current = readOnly
-
-  // Totalurile se recalculeaza doar cand se schimba piesele/lucrarile/reducerile,
-  // nu la fiecare re-randare (ex: schimbari de stare ale salvarii).
-  const totals = useMemo(
-    () => calcTotaluri(fisa.piese, fisa.lucrari, fisa.reducerePiesePercent, fisa.reducereLucrariPercent),
-    [fisa.piese, fisa.lucrari, fisa.reducerePiesePercent, fisa.reducereLucrariPercent]
+  const modalOpen = Boolean(
+    confirmState || settingsOpen || firstRun.firstRunOpen || reportsOpen || vehicleHistoryQuery || firstRun.whatsNew
   )
+  useShortcuts({
+    modalOpen,
+    releasingRef: editor.releasingRef,
+    searchInputRef,
+    onNewFisa: draftsApi.handleNewFisa
+  })
 
-  // Preincarcam chunk-urile modalelor rare in idle, dupa prima randare.
+  // Pornirea: ordinea apelurilor = ordinea in care pornesc cererile IPC.
+  // Decizia "prima rulare" se ia INAINTE ca formularul sa fie afisat/interactiv
+  // (vezi useFirstRun), iar initialCheckDone se seteaza dupa incarcarea drafturilor.
   useEffect(() => {
-    const preload = () => {
-      loadReportsModal()
-      loadVehicleHistoryModal()
-      loadWhatsNewModal()
-    }
-    if (typeof window.requestIdleCallback === 'function') {
-      const h = window.requestIdleCallback(preload, { timeout: 5000 })
-      return () => window.cancelIdleCallback?.(h)
-    }
-    const t = setTimeout(preload, 2000)
-    return () => clearTimeout(t)
-  }, [])
-
-  const closeToast = useCallback((id) => setToasts((ts) => ts.filter((t) => t.id !== id)), [])
-
-  // Inlocuieste window.confirm() nativ (arata cu titlul procesului si stilul
-  // brut al SO, in afara temei aplicatiei) cu un dialog propriu. confirmAction
-  // pastreaza acelasi API simplu (Promise<boolean>, await-uibil de la locul
-  // de apel), doar ca randarea reala e delegata catre ConfirmDialog de mai
-  // jos, controlat prin confirmState.
-  const [confirmState, setConfirmState] = useState(null)
-  const confirmAction = useCallback((message, opts) => {
-    return new Promise((resolve) => {
-      // Un al doilea dialog nu are voie sa lase primul promise nerezolvat.
-      setConfirmState((prev) => {
-        prev?.resolve(false)
-        return { message, resolve, ...opts }
-      })
-    })
-  }, [])
-  const handleConfirmResult = useCallback(
-    (result) => {
-      confirmState?.resolve(result)
-      setConfirmState(null)
-    },
-    [confirmState]
-  )
-
-  // Daca exista mai multe drafturi goale simultan (acumulate din pornirile
-  // anterioare, inainte de acest fix), pastram doar cel mai recent si stergem
-  // restul - nu are rost sa tinem 5 "Fisa noua" identice si goale.
-  async function dedupeEmptyDrafts(allDrafts, keepId) {
-    const goale = allDrafts.filter((d) => isFisaEmpty(d) && d.id !== keepId)
-    if (goale.length <= 1) return allDrafts
-    const sorted = [...goale].sort((a, b) => (b.id || '').localeCompare(a.id || ''))
-    const deStars = sorted.slice(1)
-    for (const d of deStars) {
-      await window.serviceAuto.fisa.deleteDraft(d.id)
-    }
-    const idsSterse = new Set(deStars.map((d) => d.id))
-    return allDrafts.filter((d) => !idsSterse.has(d.id))
-  }
-
-  const refreshDrafts = useCallback(async () => {
-    let res
-    try {
-      res = await window.serviceAuto.fisa.listDrafts()
-    } catch (err) {
-      res = { ok: false, error: { message: err?.message || 'Lista de fișe nu a putut fi citită.' } }
-    }
-    if (!res.ok) {
-      showToast('error', res.error.message)
-      return []
-    }
-    let deduped = res.data
-    if (!readOnlyRef.current) {
-      try {
-        deduped = await dedupeEmptyDrafts(res.data, fisaRef.current?.id || autosaver.getId())
-      } catch {
-        // curatarea drafturilor goale e un confort - lista ramane cea citita
-      }
-    }
-    lastDraftsRefreshRef.current = Date.now()
-    // Daca sidebar-ul ar arata identic, nu mai setam state-ul (sidebar-ul e memo).
-    // Ref-ul pastreaza mereu datele complete (handleNewFisa le citeste de acolo).
-    const changed = !sameDraftsView(draftsRef.current, deduped)
-    draftsRef.current = deduped
-    if (changed) setDrafts(deduped)
-    return deduped
-  }, [showToast, autosaver])
-
-  // Dupa o salvare reusita: actualizam local intrarea draftului din datele
-  // salvate. Refresh complet doar pentru draft nou (nu e inca in lista - acopera
-  // si dedupe-ul) sau ca plasa de siguranta, cel mult o data la 10s.
-  patchDraftRef.current = (doc, id) => {
-    const prev = draftsRef.current
-    const { action, next } = applyDraftPatch(prev, doc, id, removedDraftIdsRef.current)
-    if (action === 'ignore') return
-    if (action === 'refresh') {
-      refreshDrafts()
-      return
-    }
-    draftsRef.current = next
-    if (!sameDraftsView(prev, next)) setDrafts(next)
-    if (Date.now() - lastDraftsRefreshRef.current >= DRAFTS_SAFETY_REFRESH_MS) refreshDrafts()
-  }
-
-  const refreshRecentFise = useCallback(async () => {
-    const res = await window.serviceAuto.fisa.listRecent(8)
-    if (res.ok) setRecentFise(res.data)
-    else showToast('error', res.error.message)
-  }, [showToast])
-
-  // Nu esueaza vizibil daca nu merge - auto-completarea e un confort, nu o
-  // functionalitate critica; daca lipseste, formularul functioneaza normal.
-  const refreshAutocomplete = useCallback(async () => {
-    const res = await window.serviceAuto.fisa.getAutocompleteData()
-    if (res.ok) setAutocomplete(res.data)
-  }, [])
-
-  useEffect(() => {
-    // Refolosim un draft gol existent in loc sa cream automat unul nou la
-    // fiecare pornire a aplicatiei - altfel se acumuleaza cate o "Fisa noua"
-    // goala de fiecare data cand deschizi/repornesti aplicatia.
-    const draftsReady = refreshDrafts().then((deduped) => {
-      // Mai intai revenim la ultimul draft deschis (daca exista si are continut),
-      // altfel refolosim un draft gol existent.
-      const lastId = lsGet(LAST_DRAFT_KEY)
-      const last = lastId ? deduped.find((d) => d.id === lastId && !isFisaEmpty(d)) : null
-      // Fara un "ultim draft" valid (ex: localStorage nescris dupa o inchidere fortata),
-      // deschidem cel mai recent draft cu continut, apoi unul gol.
-      const target = last || deduped.find((d) => !isFisaEmpty(d)) || deduped.find((d) => isFisaEmpty(d))
-      if (target) {
-        const loaded = normalizeFisa(target)
-        autosaver.reset(loaded, { clean: true })
-        setFisa(loaded)
-      }
-    }).finally(() => setInitialCheckDone(true))
-    const recentReady = refreshRecentFise()
-    refreshAutocomplete()
-    // Informatiile despre refaceri/carantina se citesc DUPA prima incarcare a
-    // fiselor si drafturilor: refacerea unui fisier corupt are loc chiar la citire.
-    Promise.all([draftsReady, recentReady]).catch(() => {}).then(() => window.serviceAuto.fise.getLocationInfo()).then((res) => {
-      if (!res.ok) return
-      const d = res.data
-      if (d.overrideUnavailable) {
-        setLocationBanner({ override: d.overrideUnavailable, dir: d.dir })
-      } else if (d.usingFallback) {
-        showToast(
-          'error',
-          `Folderul de date nu e scriptibil - fișele se salvează temporar în ${d.dir}`,
-          null,
-          { sticky: true }
-        )
-      }
-      if (d.recoveredFromSafetyBackup) {
-        showToast(
-          'error',
-          'Folderul principal de date a fost găsit gol la pornire - fișele au fost restaurate automat din backup-ul de siguranță.'
-        )
-      } else if (d.migratedFromLegacy) {
-        showToast(
-          'success',
-          'Datele au fost mutate automat într-o locație mai sigură (nu mai dispar la actualizări).'
-        )
-      }
-      if (d.healedFise > 0) {
-        showToast('warning', `${fise(d.healedFise)} ${d.healedFise === 1 ? 'lipsea' : 'lipseau'} din folderul principal și ${d.healedFise === 1 ? 'a fost restaurată' : 'au fost restaurate'} din backup.`)
-      }
-      if (d.mergedBackFromTemp > 0) {
-        showToast('success', `${d.mergedBackFromTemp} ${d.mergedBackFromTemp === 1 ? 'fișier creat' : 'fișiere create'} temporar ${d.mergedBackFromTemp === 1 ? 'a fost adus' : 'au fost aduse'} înapoi în folderul principal.`)
-      }
-      if (d.quarantinedLost > 0) {
-        showToast(
-          'error',
-          `${fise(d.quarantinedLost)} ${d.quarantinedLost === 1 ? 'este coruptă' : 'sunt corupte'} și nu ${d.quarantinedLost === 1 ? 'a putut' : 'au putut'} fi refăcut${d.quarantinedLost === 1 ? 'ă' : 'e'} — ${d.quarantinedLost === 1 ? 'este păstrată' : 'sunt păstrate'} în folderul «corupte».`,
-          null,
-          { sticky: true }
-        )
-      }
-      if (d.quarantinedRestored > 0) {
-        showToast('info', `${fise(d.quarantinedRestored)} ${d.quarantinedRestored === 1 ? 'coruptă a fost refăcută' : 'corupte au fost refăcute'} automat din backup.`)
-      }
-    })
-    // Prima pornire: cerem numele service-ului daca nu e completat.
-    window.serviceAuto.settings
-      .get()
-      .then((res) => {
-        if (!res.ok) return
-        if (!res.data?.numeService && lsGet(FIRST_RUN_KEY) !== '1') {
-          firstRunShownRef.current = true
-          setFirstRunOpen(true)
-        }
-      })
-      .catch(() => {})
-      .finally(() => setFirstRunChecked(true))
+    const draftsReady = draftsApi.loadInitialDrafts().finally(() => setInitialCheckDone(true))
+    const recentReady = lists.refreshRecentFise()
+    lists.refreshAutocomplete()
+    checkLocation(Promise.all([draftsReady, recentReady]))
+    firstRun.checkFirstRun()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    draftBackupRef.current = readOnly ? null : fisa
-    autosaverRef.current = readOnly ? null : autosaver
-  }, [fisa, readOnly, autosaver])
-
-  // Retinem ultimul draft deschis, ca la pornire sa revenim la el.
-  useEffect(() => {
-    if (fisa.id && !readOnly) lsSet(LAST_DRAFT_KEY, fisa.id)
-  }, [fisa.id, readOnly])
-
-  // Autosave: toata logica (prima salvare instanta, debounce, serializare,
-  // retry la eroare) e in autosave.js. Aici doar ii spunem la fiecare schimbare.
-  useEffect(() => {
-    if (!initialCheckDone || readOnly || suspendAutosaveRef.current) return
-    autosaver.update(fisa)
-  }, [fisa, initialCheckDone, readOnly, autosaver])
-
-  // Licenta revocata in timpul sesiunii: oprim autosave-ul (main refuza oricum
-  // scrierile) ca sa nu reincerce la nesfarsit.
-  useEffect(() => {
-    if (readOnly && fisaRef.current) autosaver.reset(fisaRef.current, { clean: true })
-  }, [readOnly, autosaver])
-
-  // Inchiderea ferestrei / instalarea unui update: main cere salvarea imediata.
-  useEffect(() => {
-    const unsubscribe = window.serviceAuto.app.onFlushRequest(async (id) => {
-      try {
-        if (!readOnlyRef.current) await autosaver.flush()
-      } finally {
-        window.serviceAuto.app.flushDone(id)
-      }
-    })
-    return unsubscribe
-  }, [autosaver])
-
-  // Ascundere fereastra (minimizare, schimbare tab) = moment bun de salvare.
-  useEffect(() => {
-    function onVisibility() {
-      if (document.visibilityState === 'hidden') autosaver.flush()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [autosaver])
-
-  // Reload / repornire dupa eroare cu modificari nesalvate: avertizam.
-  useEffect(() => {
-    function onBeforeUnload(e) {
-      if (autosaver.isDirty()) {
-        e.preventDefault()
-        e.returnValue = ''
-      }
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [autosaver])
-
-  // "Ce e nou": o singura data dupa o actualizare, dupa ce aplicatia s-a incarcat
-  // si nu e deschisa fereastra de prima configurare.
-  useEffect(() => {
-    if (!initialCheckDone || !firstRunChecked || firstRunOpen || whatsNewCheckedRef.current) return
-    whatsNewCheckedRef.current = true
-    // Instalare noua (tocmai a trecut prin prima configurare): nu are ce sa afle
-    // "nou" - altfel, dupa inchiderea setarilor, ar aparea imediat inca un modal
-    // (draftul gol e deja salvat, deci main nu o mai vede ca "fresh").
-    if (firstRunShownRef.current) {
-      window.serviceAuto.app.markWhatsNewSeen().catch(() => {})
-      return
-    }
-    window.serviceAuto.app
-      .getWhatsNew('unseen')
-      .then((res) => {
-        if (res?.ok && res.data.entries.length) setWhatsNew({ entries: res.data.entries, markSeen: true })
-      })
-      .catch(() => {})
-  }, [initialCheckDone, firstRunChecked, firstRunOpen])
-
-  const openWhatsNew = useCallback(async () => {
-    try {
-      const res = await window.serviceAuto.app.getWhatsNew('recent')
-      if (res?.ok && res.data.entries.length) setWhatsNew({ entries: res.data.entries, markSeen: false })
-    } catch {
-      // nu e critic
-    }
-  }, [])
-
-  const closeWhatsNew = useCallback(() => {
-    setWhatsNew((w) => {
-      if (w?.markSeen) window.serviceAuto.app.markWhatsNewSeen().catch(() => {})
-      return null
-    })
-  }, [])
-
   const closeSettings = () => {
-    if (firstRunOpen) lsSet(FIRST_RUN_KEY, '1')
-    setFirstRunOpen(false)
+    firstRun.closeFirstRun()
     setSettingsOpen(false)
   }
   const closeReports = () => setReportsOpen(false)
   const closeVehicleHistory = () => setVehicleHistoryQuery(null)
 
-  // Starea backup-ului automat: la pornire, la 2 minute si dupa finalizare.
-  const refreshBackupStatus = useCallback(async () => {
-    try {
-      const res = await window.serviceAuto.backup.status()
-      if (res?.ok) setBackupStatus(res.data)
-    } catch {
-      // nu e critic
-    }
-  }, [])
-  useEffect(() => {
-    refreshBackupStatus()
-    const t = setInterval(refreshBackupStatus, BACKUP_POLL_MS)
-    return () => clearInterval(t)
-  }, [refreshBackupStatus])
-
-  // Panoul de rezultate e un dropdown ancorat (nu mai are propriul backdrop
-  // intunecat peste tot ecranul) - fara asta, click-ul in afara lui n-ar mai
-  // avea cum sa-l inchida. Aceeasi conventie ca la Autocomplete/OverflowMenu.
-  useEffect(() => {
-    if (!searchActive) return undefined
-    function handleClickOutside(e) {
-      // Nu inchidem panoul de cautare la click-uri in alte overlay-uri proprii
-      // (ex: ConfirmDialog deschis din interiorul SearchModal, la stergerea
-      // unui rezultat) - acelea sunt randate la nivel de App, in afara
-      // .search-box, dar fac parte din acelasi flux, nu sunt "in afara".
-      if (e.target.closest?.('.confirm-overlay')) return
-      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target)) closeSearch()
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [searchActive, closeSearch])
-
-  // Procesul principal e intr-o stare nedefinita dupa o exceptie neprinsa -
-  // fara acest anunt, aplicatia parea sa mearga normal in continuare pe
-  // ecran, desi ceva a mers prost undeva. Un toast sticky (nu dispare
-  // singur) cere explicit un restart, la prima ocazie convenabila - fisa
-  // curenta ramane oricum salvata ca draft prin autosave.
-  useEffect(() => {
-    const unsubscribe = window.serviceAuto.app.onFatalError(() => {
-      showToast(
-        'error',
-        'Aplicația a întâlnit o eroare neașteptată. Salvează-ți lucrul în curs și repornește-o când poți.',
-        null,
-        { sticky: true }
-      )
-    })
-    return unsubscribe
-  }, [showToast])
-
-  // Update-urile de versiune noua/gata de instalare sunt anuntate si printr-un
-  // dialog nativ (main process), dar tinem si o stare persistenta in UI
-  // (banner) - daca utilizatorul inchide dialogul fara sa raspunda, tot vede
-  // ca exista o actualizare disponibila, nu doar un toast care dispare.
-  useEffect(() => {
-    const unsubscribe = window.serviceAuto.app.onUpdateEvent((evt) => {
-      // Verificarile periodice (la ~10 min) sunt silentioase: "Se verifica..." apare doar
-      // pentru verificarea ceruta de utilizator (buton din Setari).
-      if (evt.type === 'checking') {
-        if (evt.manual) setCheckingUpdates(true)
-        return
-      }
-      setCheckingUpdates(false)
-
-      if (evt.type === 'available') {
-        setUpdateInfo({ status: 'available', version: evt.version, notes: evt.notes })
-      } else if (evt.type === 'downloading') {
-        setUpdateInfo((info) => ({ status: 'downloading', version: info.version, percent: 0 }))
-      } else if (evt.type === 'progress') {
-        setUpdateInfo((info) => ({ ...info, status: 'downloading', percent: evt.percent }))
-      } else if (evt.type === 'downloaded') {
-        setUpdateInfo({ status: 'downloaded', version: evt.version })
-      }
-
-      // O eroare in timpul DESCARCARII se arata mereu (utilizatorul a cerut descarcarea).
-      if (evt.type === 'error' && !evt.manual) {
-        setUpdateInfo((info) => (info.status === 'downloading' ? { ...info, status: 'available' } : info))
-        showToast('error', 'Descărcarea actualizării a eșuat. O poți reîncerca din banner sau din Setări.')
-        return
-      }
-
-      // Rezultatul verificarii cerute de utilizator (starea butonului din Setari).
-      if (!evt.manual) return
-      if (evt.type === 'not-available') {
-        setUpdateFlash('no-update')
-        setTimeout(() => setUpdateFlash(null), 4000)
-      } else if (evt.type === 'error') {
-        setUpdateFlash('error')
-        setTimeout(() => setUpdateFlash(null), 4000)
-      }
-    })
-    return unsubscribe
-  }, [showToast])
-
-  // Starea completa a butonului "Verifica actualizari" - utilizatorul trebuie
-  // sa vada in orice moment ce se intampla efectiv (verifica, nu a gasit
-  // nimic, descarca cu procent, gata de instalat), nu doar un text static.
-  function getUpdateButtonState() {
-    if (checkingUpdates) return { text: 'Se verifică...', variant: 'info' }
-    if (updateInfo.status === 'downloading') {
-      return { text: `Se descarcă... ${updateInfo.percent ?? 0}%`, variant: 'info' }
-    }
-    if (updateInfo.status === 'downloaded') return { text: 'Gata de instalat', variant: 'success' }
-    if (updateInfo.status === 'available') return { text: `Versiune nouă: v${updateInfo.version}`, variant: 'accent' }
-    if (updateFlash === 'no-update') return { text: 'Ești la zi', variant: 'success' }
-    if (updateFlash === 'error') return { text: 'Verificare eșuată', variant: 'error' }
-    return { text: 'Verifică actualizări', variant: null }
-  }
-
-  function handleCheckForUpdates() {
-    setCheckingUpdates(true)
-    window.serviceAuto.app.checkForUpdates()
-  }
-
-  function handleDownloadUpdate() {
-    window.serviceAuto.app.downloadUpdate()
-  }
-
-  function handleInstallUpdate() {
-    window.serviceAuto.app.installUpdate()
-  }
-
-  // Fisa noua, goala: nesalvata (prima modificare o salveaza; fisa goala
-  // primeste totusi un draft imediat prin update()).
-  const resetToNewFisa = useCallback(() => {
-    const e = emptyFisa()
-    autosaver.reset(e, { clean: readOnlyRef.current })
-    setFisa(e)
-  }, [autosaver])
-
-  // Orice comutare pe alta fisa salveaza MAI INTAI ce e nesalvat (inainte se
-  // pierdeau ultimele <1s de tastat). Daca salvarea esueaza (disc plin, folder
-  // blocat), NU comutam: fisa curenta ramane pe ecran, cu modificarile in ea.
-  const flushOrAbort = useCallback(async () => {
-    // Mod doar-citire: nu se salveaza nimic (main refuza), deci nu blocam comutarea.
-    if (readOnlyRef.current) return true
-    if (releasingRef.current) return false
-    const ok = await autosaver.flush()
-    if (!ok) {
-      showToast(
-        'error',
-        'Fișa curentă nu a putut fi salvată, așa că nu am schimbat fișa - ca să nu pierzi modificările. Verifică spațiul liber pe disc și folderul de date.'
-      )
-    }
-    return ok
-  }, [autosaver, showToast])
-
-  // Deschide un draft FARA flush prealabil (apelantul a tratat deja fisa curenta).
-  const openDraftNow = useCallback(
-    async (id) => {
-      const res = await window.serviceAuto.fisa.loadDraft(id)
-      if (!res.ok) {
-        showToast('error', res.error.message)
-        return false
-      }
-      const loaded = normalizeFisa(res.data)
-      autosaver.reset(loaded, { clean: true })
-      setFisa(loaded)
-      setErrors({})
-      setPdfRetry(null)
-      return true
-    },
-    [showToast, autosaver]
-  )
-
-  const handleOpenDraft = useCallback(
-    async (id) => {
-      if (!(await flushOrAbort())) return false
-      return openDraftNow(id)
-    },
-    [flushOrAbort, openDraftNow]
-  )
-
-  // Referinta stabila (deps: doar id-ul fisei curente) - altfel DraftsSidebar
-  // s-ar re-randa la fiecare litera tastata in formular, desi lista de
-  // drafturi/lucrari recente nu s-a schimbat deloc.
-  const handleDeleteDraft = useCallback(
-    async (id) => {
-      if (releasingRef.current) return
-      const isCurrent = fisaRef.current?.id === id || autosaver.getId() === id
-      // Draftul curent: comutam pe o fisa goala INAINTE de stergere (reset
-      // anuleaza orice salvare programata) - altfel un autosave care porneste
-      // intre timp ar recrea fisierul imediat dupa stergere. NU facem flush.
-      if (isCurrent) {
-        resetToNewFisa()
-        setErrors({})
-      }
-      removedDraftIdsRef.current.add(id)
-      const res = await window.serviceAuto.fisa.deleteDraft(id)
-      if (res.ok) {
-        if (lsGet(LAST_DRAFT_KEY) === id) lsSet(LAST_DRAFT_KEY, null)
-        refreshDrafts()
-      } else {
-        removedDraftIdsRef.current.delete(id) // stergerea a esuat: draftul exista in continuare
-        showToast('error', res.error.message)
-        refreshDrafts()
-      }
-    },
-    [autosaver, resetToNewFisa, refreshDrafts, showToast]
-  )
-
-  // Dupa finalizare, trecem la o alta fisa in lucru daca exista una (cazul
-  // uzual la un flux cu mai multe masini in paralel); daca nu mai e nimic
-  // in lucru, deschidem o fisa noua goala.
-  async function goToNextDraftOrNew() {
-    refreshRecentFise()
-    refreshAutocomplete()
-    const deduped = await refreshDrafts()
-    // Fisa curenta tocmai a fost finalizata (autosaver.reset(null) deja facut):
-    // nu mai e nimic de salvat, deci deschidem direct, fara flush. Daca nu se
-    // poate deschide, cadem pe o fisa noua - fisa finalizata NU ramane in formular.
-    if (deduped.length === 0 || !(await openDraftNow(deduped[0].id))) {
-      resetToNewFisa()
-      setErrors({})
-      setPdfRetry(null)
-    }
-  }
-
-  const handleNewFisa = useCallback(async () => {
-    // Daca fisa curenta e deja o fisa noua, goala, nu mai cream inca una -
-    // ar duplica "Fisa noua" in sidebar la fiecare click. Citim din ref (nu
-    // din state) ca handleNewFisa sa ramana stabil intre randari.
-    if (isFisaEmpty(fisaRef.current)) {
-      showToast('success', 'Ești deja pe o fișă nouă, goală.')
-      return
-    }
-    if (!(await flushOrAbort())) return
-    // Sau, daca exista deja un draft gol NEFOLOSIT in lista (creat mai
-    // devreme si abandonat), il redeschidem in loc sa cream un altul.
-    const golExistent = draftsRef.current.find((d) => isFisaEmpty(d) && d.id !== autosaver.getId())
-    if (golExistent) {
-      await openDraftNow(golExistent.id)
-      return
-    }
-    resetToNewFisa()
-    setErrors({})
-    setPdfRetry(null)
-  }, [resetToNewFisa, showToast, openDraftNow, flushOrAbort, autosaver])
-
-  // Scurtaturi: Ctrl+K muta focusul in cautare, Ctrl+N deschide o fisa noua.
-  useEffect(() => {
-    function onKey(e) {
-      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return
-      // Nu actionam scurtaturile in spatele unui dialog/modal deschis.
-      if (modalOpenRef.current || releasingRef.current) return
-      const k = e.key.toLowerCase()
-      if (k === 'k') {
-        e.preventDefault()
-        searchInputRef.current?.focus()
-        searchInputRef.current?.select()
-      } else if (k === 'n') {
-        e.preventDefault()
-        handleNewFisa()
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [handleNewFisa])
-
-  async function handleRelease() {
-    const { valid, errors: localErrors } = validateFisa(fisa)
-    setErrors(localErrors)
-    if (!valid) {
-      showToast('error', 'Fișa conține câmpuri incomplete sau invalide. Verifică câmpurile evidențiate cu roșu.')
-      return
-    }
-
-    if (readOnly || releasingRef.current) return
-    releasingRef.current = true
-    setReleasing(true)
-    // Oprim update-urile catre autosaver cat timp finalizam, ca fisa finalizata
-    // sa nu fie re-salvata ca draft "fantoma" dupa reset(null).
-    suspendAutosaveRef.current = true
-    // Salvam mai intai ce e nesalvat: astfel stim id-ul draftului (chiar daca
-    // prima salvare era inca in curs) si main il sterge la finalizare.
-    const ok = await autosaver.flush()
-    if (!ok) {
-      // Continuam oricum - finalize salveaza fisa singur; dar draftul poate ramane
-      // duplicat doar daca disc-ul a fost picat, caz in care finalize va esua oricum.
-    }
-    let finalizedOk = false
-    try {
-      const current = fisaRef.current || fisa
-      const finalId = current.id || autosaver.getId()
-      let res
-      try {
-        res = await window.serviceAuto.fisa.finalize({ ...current, id: finalId })
-      } catch (err) {
-        res = { ok: false, error: { code: 'IPC', message: err?.message || 'Finalizarea a eșuat.' } }
-      }
-
-      if (!res.ok) {
-        suspendAutosaveRef.current = false
-        autosaver.update(fisaRef.current)
-        if (res.error.code === 'VALIDATION' && res.error.fields) setErrors(res.error.fields)
-        showToast('error', res.error.message)
-        return
-      }
-
-      // Draftul a disparut (main l-a sters la finalizare) - nimic de mai salvat.
-      finalizedOk = true
-      if (finalId) removedDraftIdsRef.current.add(finalId)
-      autosaver.reset(null)
-      if (lsGet(LAST_DRAFT_KEY) === (current.id || null)) lsSet(LAST_DRAFT_KEY, null)
-      refreshBackupStatus()
-
-      if (res.data.pdfSaved) {
-        showToast(
-          'success',
-          res.data.replaced
-            ? `Fișă actualizată și PDF salvat: ${res.data.baseName}.pdf`
-            : `Fișă finalizată și PDF salvat: ${res.data.baseName}.pdf`,
-          { label: 'Printează', onClick: () => handlePrintPdf(res.data.baseName) }
-        )
-        await goToNextDraftOrNew()
-        suspendAutosaveRef.current = false
-      } else {
-        // Fisa finalizata NU ramane in formular (id-ul ei ar arata spre un draft
-        // sters si autosave ar recrea un draft fantoma). Trecem pe urmatoarea
-        // fisa si abia apoi setam pdfRetry (handleOpenDraft il goleste).
-        await goToNextDraftOrNew()
-        suspendAutosaveRef.current = false
-        const baseName = res.data.baseName
-        setPdfRetry({ baseName })
-        showToast(
-          'error',
-          `Fișa a fost salvată, dar PDF-ul a eșuat: ${res.data.pdfError}`,
-          { label: 'Reîncearcă PDF', onClick: () => handleRetryPdf(baseName) },
-          { sticky: true }
-        )
-      }
-    } catch (err) {
-      // Finalizarea a reusit dar trecerea pe alta fisa a esuat: fisa finalizata
-      // NU are voie sa ramana in formular (autosave ar recrea un draft fantoma).
-      if (!finalizedOk) throw err
-      resetToNewFisa()
-      setErrors({})
-    } finally {
-      releasingRef.current = false
-      suspendAutosaveRef.current = false
-      setReleasing(false)
-      if (!finalizedOk && !readOnlyRef.current && fisaRef.current) autosaver.update(fisaRef.current)
-    }
-  }
-
-  async function handlePrintPdf(baseName) {
-    const res = await window.serviceAuto.fise.printPdf(baseName)
-    if (!res.ok) showToast('error', res.error.message)
-  }
-
-  // Genereaza si deschide un PDF din fisa curenta a formularului, FARA sa o
-  // finalizeze/salveze - util pentru un calcul/oferta pe care clientul nu a
-  // acceptat-o inca. Nu trece prin validateFisa (o oferta poate fi incompleta
-  // intentionat), dar nu are rost pe o fisa complet goala.
-  async function handlePreviewPdf() {
-    if (isFisaEmpty(fisaRef.current)) {
-      showToast('error', 'Adaugă cel puțin o piesă/lucrare sau datele clientului înainte de previzualizare.')
-      return
-    }
-    setPreviewingPdf(true)
-    try {
-      const res = await window.serviceAuto.fisa.previewPdf(fisaRef.current || fisa)
-      if (!res.ok) showToast('error', res.error.message)
-    } finally {
-      setPreviewingPdf(false)
-    }
-  }
-
-  // Main regenereaza PDF-ul din fisa de pe disc - avem nevoie doar de baseName.
-  async function handleRetryPdf(baseName) {
-    const res = await window.serviceAuto.fisa.retryPdf({ baseName })
-    if (res.ok) {
-      showToast('success', `PDF salvat: ${baseName}.pdf`, {
-        label: 'Printează',
-        onClick: () => handlePrintPdf(baseName)
-      })
-      setPdfRetry((p) => (p && p.baseName === baseName ? null : p))
-    } else {
-      showToast('error', `PDF tot a eșuat: ${res.error.message}`, {
-        label: 'Reîncearcă',
-        onClick: () => handleRetryPdf(baseName)
-      })
-    }
-  }
-
-  async function handleOpenFolder() {
-    const res = await window.serviceAuto.fise.openFolder()
-    if (!res.ok) showToast('error', res.error.message)
-  }
-
-  async function handleExportLogs() {
-    setExportingLogs(true)
-    const res = await window.serviceAuto.app.exportLogs()
-    setExportingLogs(false)
-    if (res.ok) {
-      showToast('success', `Loguri exportate pe Desktop (${res.data.copied} fișiere) - trimite folderul pentru depanare.`)
-    } else {
-      showToast('error', res.error.message)
-    }
-  }
-
-  // "Editeaza" pe o lucrare recenta porneste un draft nou (fisa finalizata
-  // originala nu se modifica cat timp editarea e doar in lucru - daca
-  // utilizatorul abandoneaza editarea fara sa apese din nou Finalizare,
-  // originalul ramane intact). _replaceBaseName retine numele fisierului
-  // original: cand editarea e efectiv finalizata, finalizeFisa() il
-  // foloseste ca sa suprascrie acea fisa (JSON + PDF), nu sa creeze una noua
-  // separata pentru aceeasi lucrare.
-  const handleEditRecent = useCallback(
-    async (finalizedFisa) => {
-      if (!(await flushOrAbort())) return
-      const { _file, id: _id, status: _status, finalizedAt: _finalizedAt, ...rest } = finalizedFisa
-      const next = normalizeFisa({
-        ...rest,
-        id: null,
-        _replaceBaseName: _file ? _file.replace(/\.json$/, '') : null
-      })
-      autosaver.reset(next, { clean: readOnlyRef.current })
-      setFisa(next)
-      setErrors({})
-      setPdfRetry(null)
-    },
-    [autosaver, flushOrAbort]
-  )
-
-  // Din Cautare/Istoric masina: porneste o fisa noua, goala, cu profilul
-  // (client + auto) precompletat dintr-o fisa veche a aceluiasi client/masina -
-  // spre deosebire de handleEditRecent, NU copiaza piesele/lucrarile vechi si
-  // NU suprascrie fisa veche la finalizare (e o comanda noua, separata).
-  const handleNewFisaForProfile = useCallback(
-    async (sourceFisa) => {
-      if (!(await flushOrAbort())) return
-      const next = normalizeFisa({
-        ...emptyFisa(),
-        client: { ...(sourceFisa?.client || {}) },
-        auto: { ...(sourceFisa?.auto || {}) }
-      })
-      autosaver.reset(next, { clean: readOnlyRef.current })
-      setFisa(next)
-      setErrors({})
-      setPdfRetry(null)
-    },
-    [autosaver, flushOrAbort]
-  )
-
-  // Handlere stabile pentru ListaItems/Totaluri - memo() pe acele componente
-  // (vezi ListaItems.jsx/Totaluri.jsx) are efect real doar daca props-urile
-  // functie primite au aceeasi referinta intre randari; inline arrows aici
-  // ar recrea o functie noua la fiecare randare a App.jsx si ar anula memo().
-  const handlePieseChange = useCallback((piese) => setFisa((f) => ({ ...f, piese })), [])
-  const handleLucrariChange = useCallback((lucrari) => setFisa((f) => ({ ...f, lucrari })), [])
-  const handleReducerePieseChange = useCallback((v) => setFisa((f) => ({ ...f, reducerePiesePercent: v })), [])
-  const handleReducereLucrariChange = useCallback((v) => setFisa((f) => ({ ...f, reducereLucrariPercent: v })), [])
   const handleShowVehicleHistory = useCallback(
     (vin, nr) => setVehicleHistoryQuery({ vin, nrInmatriculare: nr }),
     []
   )
-
-  const handleOpenPdfFromSearch = useCallback(
-    async (fileName) => {
-      const res = await window.serviceAuto.fise.openPdf(fileName)
-      if (!res.ok) showToast('error', res.error.message)
-    },
-    [showToast]
-  )
-
-  const handlePrintPdfFromList = useCallback(
-    async (fileName) => {
-      const res = await window.serviceAuto.fise.printPdf(fileName)
-      if (!res.ok) showToast('error', res.error.message)
-    },
-    [showToast]
-  )
-
-  // Sterge o fisa deja finalizata (PDF-ul + inregistrarea), nu un draft in
-  // lucru - spre deosebire de handleDeleteDraft, e ireversibil (o factura
-  // deja emisa), de-aia trece prin confirmAction. Returneaza true doar daca
-  // s-a sters efectiv, ca listele care o afiseaza (Lucrari recente, Cautare,
-  // Istoric masina) sa-si poata actualiza propria stare locala pe loc, fara
-  // sa astepte un refresh complet.
-  const handleDeleteFinalized = useCallback(
-    async (fileName) => {
-      const ok = await confirmAction(
-        'Ștergi această fișă finalizată? Va fi mutată în coșul de gunoi și o poți recupera timp de 30 de zile.',
-        { confirmLabel: 'Șterge' }
-      )
-      if (!ok) return false
-      const res = await window.serviceAuto.fisa.deleteFinalizata(fileName)
-      if (!res.ok) {
-        showToast('error', res.error.message)
-        return false
-      }
-      const trashId = res.data?.trashId
-      if (trashId) {
-        const restore = async () => {
-          const r = await window.serviceAuto.trash.restore(trashId)
-          if (r.ok) {
-            refreshRecentFise()
-            refreshAutocomplete()
-            showToast('success', 'Fișa a fost restaurată.')
-          } else {
-            showToast('error', `Restaurarea a eșuat: ${r.error.message}`)
-          }
-        }
-        showToast('success', 'Fișa finalizată a fost ștearsă (în coș 30 de zile).', {
-          label: 'Anulează',
-          onClick: restore
-        })
-      } else {
-        showToast('success', 'Fișa finalizată a fost ștearsă.')
-      }
-      refreshRecentFise()
-      return true
-    },
-    [confirmAction, showToast, refreshRecentFise, refreshAutocomplete]
-  )
-
-  modalOpenRef.current = Boolean(confirmState || settingsOpen || firstRunOpen || reportsOpen || vehicleHistoryQuery || whatsNew)
+  const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
+  const handleOpenReports = () => setReportsOpen(true)
 
   // Dupa o restaurare din backup/trash (din Setari) listele din bara laterala trebuie reimprospatate.
+  const { refreshDrafts } = draftsApi
+  const { refreshRecentFise, refreshAutocomplete } = lists
   const onDataChanged = useCallback(() => {
     refreshDrafts()
     refreshRecentFise()
     refreshAutocomplete()
   }, [refreshDrafts, refreshRecentFise, refreshAutocomplete])
 
-  const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
-
-  const updateBtn = getUpdateButtonState()
-  const plate = fisa.auto.nrInmatriculare?.trim()
-  const vehicul = [fisa.auto.marca, fisa.auto.model].map((x) => x?.trim()).filter(Boolean).join(' ')
   const fisaGoala = isFisaEmpty(fisa)
-  const savedTime = savedAt ? savedAt.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }) : ''
-  const backupChip = getBackupChip(backupStatus)
-  // Butonul din bara de sus apare DOAR cand exista ceva de facut (versiune noua / descarcare /
-  // gata de instalat) si face exact actiunea potrivita; verificarea manuala e in Setari.
-  const updateActionable = ['available', 'downloading', 'downloaded'].includes(updateInfo.status)
-  const showUpdatePill = updateActionable
-  const onUpdatePillClick = updateInfo.status === 'downloaded' ? handleInstallUpdate : handleDownloadUpdate
 
   return (
-    <div className="app" style={firstRunChecked ? undefined : { visibility: 'hidden' }}>
+    <div className="app" style={firstRun.firstRunChecked ? undefined : { visibility: 'hidden' }}>
       <DraftsSidebar
-        drafts={drafts}
+        drafts={draftsApi.drafts}
         currentId={fisa.id}
-        onOpen={handleOpenDraft}
-        onDelete={handleDeleteDraft}
-        onNew={handleNewFisa}
-        recentFise={recentFise}
-        onEditRecent={handleEditRecent}
-        onOpenPdf={handleOpenPdfFromSearch}
-        onPrintPdf={handlePrintPdfFromList}
-        onDeleteFinalized={handleDeleteFinalized}
+        onOpen={draftsApi.handleOpenDraft}
+        onDelete={draftsApi.handleDeleteDraft}
+        onNew={draftsApi.handleNewFisa}
+        recentFise={lists.recentFise}
+        onEditRecent={editor.handleEditRecent}
+        onOpenPdf={lists.handleOpenPdfFromSearch}
+        onPrintPdf={lists.handlePrintPdfFromList}
+        onDeleteFinalized={lists.handleDeleteFinalized}
         onOpenSettings={handleOpenSettings}
         confirm={confirmAction}
-        isCurrentEmpty={isCurrentEmpty}
-        updateBadge={updateActionable}
+        isCurrentEmpty={editor.isCurrentEmpty}
+        updateBadge={updater.updateActionable}
       />
 
       <main className="main">
-        {readOnly && (
-          <div className="app-banner" role="alert">
-            <span>
-              Licență revocată — mod doar-citire. Poți deschide, căuta, tipări și exporta fișele existente.
-            </span>
-            <button type="button" onClick={onRequestActivation}>
-              Introdu cheie nouă
-            </button>
-          </div>
-        )}
-        {locationBanner && (
-          <div className="app-banner warn" role="alert">
-            <span>
-              Folderul de date «{locationBanner.override}» nu este disponibil (unitate scoasă/rețea căzută?). Lucrezi
-              temporar în «{locationBanner.dir}». Reconectează folderul și repornește aplicația — datele de acum vor
-              fi aduse înapoi automat.
-            </span>
-          </div>
-        )}
-        <UpdateBanner
-          status={updateInfo.status}
-          version={updateInfo.version}
-          notes={updateInfo.notes}
-          percent={updateInfo.percent}
-          onDownload={handleDownloadUpdate}
-          onInstall={handleInstallUpdate}
+        <Banners
+          readOnly={readOnly}
+          onRequestActivation={onRequestActivation}
+          locationBanner={locationBanner}
+          updateInfo={updater.updateInfo}
+          onDownload={updater.handleDownloadUpdate}
+          onInstall={updater.handleInstallUpdate}
         />
 
-        <header className="topbar">
-          <div className="topbar-title">
-            <h1>{fisa._replaceBaseName ? 'Editare fișă' : fisaGoala ? 'Fișă nouă' : 'Fișă de service'}</h1>
-            {!fisaGoala && (plate || vehicul || fisa.client.nume?.trim()) && (
-              <div className="crumbs">
-                {plate && <span className="plate">{plate}</span>}
-                {vehicul && <span>{vehicul}</span>}
-                {fisa.client.nume?.trim() && (
-                  <span className="crumb-client">
-                    <Icon name="user" size={13} /> {fisa.client.nume.trim()}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="topbar-actions">
-            <div className="search-box" ref={searchBoxRef}>
-              <Icon name="search" size={15} className="search-icon" />
-              <input
-                type="text"
-                ref={searchInputRef}
-                className="topbar-search"
-                placeholder="Caută"
-                aria-label="Caută fișe"
-                title="Caută (Ctrl+K)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') closeSearch()
-                }}
-              />
-              <button
-                type="button"
-                className={`btn-sm search-filter-btn${filtersOpen || searchRange.from || searchRange.to ? ' active' : ''}`}
-                title="Filtrează după dată"
-                aria-label="Filtrează după dată"
-                onClick={() => setFiltersOpen((v) => !v)}
-              >
-                <Icon name="calendar" size={14} />
-              </button>
-              {searchActive && (
-                <SearchModal
-                  query={searchQuery}
-                  range={searchRange}
-                  onRangeChange={setSearchRange}
-                  onClose={closeSearch}
-                  onOpenPdf={handleOpenPdfFromSearch}
-                  onPrintPdf={handlePrintPdfFromList}
-                  onDeleteFinalized={handleDeleteFinalized}
-                  onEditRecent={handleEditRecent}
-                  onNewForProfile={handleNewFisaForProfile}
-                  showToast={showToast}
-                />
-              )}
-            </div>
-            {showUpdatePill && (
-              <button
-                type="button"
-                className={`btn-sm btn-status-${updateBtn.variant}`}
-                disabled={updateInfo.status === 'downloading'}
-                onClick={onUpdatePillClick}
-              >
-                <Icon name={updateInfo.status === 'downloading' ? 'loader' : 'download'} />
-                {updateBtn.text}
-              </button>
-            )}
-            <OverflowMenu
-              items={[
-                { label: 'Rapoarte', icon: 'chart', onClick: () => setReportsOpen(true) },
-                { label: 'Ce e nou', icon: 'info', onClick: openWhatsNew },
-                { label: 'Deschide folderul cu fișe', icon: 'folder', onClick: handleOpenFolder },
-                {
-                  label: exportingLogs ? 'Se exportă...' : 'Exportă loguri',
-                  icon: 'download',
-                  onClick: handleExportLogs
-                }
-              ]}
-            />
-            <ThemeToggle />
-          </div>
-        </header>
+        <Topbar
+          fisa={fisa}
+          fisaGoala={fisaGoala}
+          showToast={showToast}
+          searchInputRef={searchInputRef}
+          updateInfo={updater.updateInfo}
+          updateBtn={updater.updateBtn}
+          showUpdatePill={updater.updateActionable}
+          onUpdatePillClick={updater.onUpdatePillClick}
+          onOpenReports={handleOpenReports}
+          onOpenWhatsNew={firstRun.openWhatsNew}
+          onOpenPdf={lists.handleOpenPdfFromSearch}
+          onPrintPdf={lists.handlePrintPdfFromList}
+          onDeleteFinalized={lists.handleDeleteFinalized}
+          onEditRecent={editor.handleEditRecent}
+          onNewForProfile={editor.handleNewFisaForProfile}
+        />
 
         <FisaForm
           fisa={fisa}
           onChange={setFisa}
           errors={errors}
-          autocomplete={autocomplete}
+          autocomplete={lists.autocomplete}
           onShowVehicleHistory={handleShowVehicleHistory}
         />
 
@@ -1143,13 +183,13 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           titlu="Piese"
           singular="piesă"
           items={fisa.piese}
-          onChange={handlePieseChange}
+          onChange={editor.handlePieseChange}
           priceKey="pretUnitar"
           codKey="cod"
           priceLabel="Preț unitar"
           errorPrefix="piese"
           errors={errors}
-          suggestions={autocomplete.piese}
+          suggestions={lists.autocomplete.piese}
           confirm={confirmAction}
         />
 
@@ -1157,12 +197,12 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           titlu="Lucrări"
           singular="lucrare"
           items={fisa.lucrari}
-          onChange={handleLucrariChange}
+          onChange={editor.handleLucrariChange}
           priceKey="pret"
           priceLabel="Preț"
           errorPrefix="lucrari"
           errors={errors}
-          suggestions={autocomplete.lucrari}
+          suggestions={lists.autocomplete.lucrari}
           confirm={confirmAction}
         />
 
@@ -1171,142 +211,53 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
           lucrari={fisa.lucrari}
           reducerePiesePercent={fisa.reducerePiesePercent}
           reducereLucrariPercent={fisa.reducereLucrariPercent}
-          onChangeReducerePiese={handleReducerePieseChange}
-          onChangeReducereLucrari={handleReducereLucrariChange}
+          onChangeReducerePiese={editor.handleReducerePieseChange}
+          onChangeReducereLucrari={editor.handleReducereLucrariChange}
           errors={errors}
         />
 
-        <div className="release-bar">
-          <div className="release-total">
-            <span className="release-total-label">Total final</span>
-            <span className="release-total-value">{formatLei(totals.totalFinal)}</span>
-          </div>
-          {saveState === 'error' ? (
-            <span className="chip chip-error" role="alert" title={saveError || ''}>
-              <Icon name="refresh" size={13} /> Nesalvat! Se reîncearcă…
-            </span>
-          ) : (
-            <span className={`chip autosave-status ${saveState === 'saved' ? 'saved' : ''}`}>
-              {saveState === 'saving' && (
-                <>
-                  <Icon name="loader" size={13} className="spin" /> Se salvează...
-                </>
-              )}
-              {saveState === 'saved' && (
-                <>
-                  <Icon name="check" size={13} /> Salvat{savedTime && ` ${savedTime}`}
-                </>
-              )}
-            </span>
-          )}
-          {backupChip && (
-            <span
-              className={`chip chip-backup ${backupChip.warn ? 'chip-warn' : 'saved'}`}
-              title={backupChip.title}
-            >
-              {backupChip.text}
-            </span>
-          )}
-          <div className="release-bar-actions">
-            {pdfRetry && (
-              <button type="button" onClick={() => handleRetryPdf(pdfRetry.baseName)}>
-                <Icon name="refresh" /> Reîncearcă generarea PDF
-              </button>
-            )}
-            <button
-              type="button"
-              disabled={previewingPdf || fisaGoala}
-              title="Generează și deschide un PDF cu fișa curentă, fără să o finalizezi (util pentru o ofertă)"
-              onClick={handlePreviewPdf}
-            >
-              {previewingPdf ? (
-                <>
-                  <Icon name="loader" className="spin" /> Se generează...
-                </>
-              ) : (
-                <>
-                  <Icon name="file" /> Previzualizează PDF
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-release"
-              disabled={releasing || readOnly}
-              title={readOnly ? 'Licență revocată — mod doar-citire' : undefined}
-              onClick={handleRelease}
-            >
-              {releasing ? (
-                <>
-                  <Icon name="loader" className="spin" /> Se finalizează...
-                </>
-              ) : (
-                <>
-                  <Icon name="check" /> Finalizează fișa
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+        <ReleaseBar
+          totalFinal={editor.totals.totalFinal}
+          saveState={editor.saveState}
+          saveError={editor.saveError}
+          savedAt={editor.savedAt}
+          backupStatus={backupStatus}
+          pdfRetry={editor.pdfRetry}
+          onRetryPdf={release.handleRetryPdf}
+          previewingPdf={release.previewingPdf}
+          fisaGoala={fisaGoala}
+          onPreview={release.handlePreviewPdf}
+          releasing={release.releasing}
+          readOnly={readOnly}
+          onRelease={release.handleRelease}
+        />
       </main>
 
       <Toast toasts={toasts} onClose={closeToast} />
 
       <ConfirmDialog state={confirmState} onResult={handleConfirmResult} />
 
-      {/* Fallback null: chunk-urile sunt preincarcate, deci modalul apare practic instant. */}
-      <Suspense fallback={null}>
-        {(settingsOpen || firstRunOpen) && (
-          <LazyBoundary showToast={showToast} onClose={closeSettings}>
-          <SettingsModal
-            onClose={closeSettings}
-            showToast={showToast}
-            confirm={confirmAction}
-            onDataChanged={onDataChanged}
-            update={{
-              status: updateInfo.status,
-              version: updateInfo.version,
-              text: updateBtn.text,
-              variant: updateBtn.variant,
-              checking: checkingUpdates,
-              onCheck: handleCheckForUpdates,
-              onDownload: handleDownloadUpdate,
-              onInstall: handleInstallUpdate
-            }}
-            firstRun={firstRunOpen}
-            readOnly={readOnly}
-          />
-          </LazyBoundary>
-        )}
-
-        {whatsNew && (
-          <LazyBoundary showToast={showToast} onClose={closeWhatsNew}>
-            <WhatsNewModal entries={whatsNew.entries} onClose={closeWhatsNew} />
-          </LazyBoundary>
-        )}
-
-        {reportsOpen && (
-          <LazyBoundary showToast={showToast} onClose={closeReports}>
-            <ReportsModal onClose={closeReports} showToast={showToast} />
-          </LazyBoundary>
-        )}
-
-        {vehicleHistoryQuery && (
-          <LazyBoundary showToast={showToast} onClose={closeVehicleHistory}>
-          <VehicleHistoryModal
-            vin={vehicleHistoryQuery.vin}
-            nrInmatriculare={vehicleHistoryQuery.nrInmatriculare}
-            onClose={closeVehicleHistory}
-            onOpenPdf={handleOpenPdfFromSearch}
-            onPrintPdf={handlePrintPdfFromList}
-            onDeleteFinalized={handleDeleteFinalized}
-            onEditRecent={handleEditRecent}
-            onNewForProfile={handleNewFisaForProfile}
-            showToast={showToast}
-          />
-          </LazyBoundary>
-        )}
-      </Suspense>
+      <ModalHost
+        showToast={showToast}
+        confirmAction={confirmAction}
+        settingsOpen={settingsOpen}
+        firstRunOpen={firstRun.firstRunOpen}
+        onCloseSettings={closeSettings}
+        onDataChanged={onDataChanged}
+        updater={updater}
+        readOnly={readOnly}
+        whatsNew={firstRun.whatsNew}
+        onCloseWhatsNew={firstRun.closeWhatsNew}
+        reportsOpen={reportsOpen}
+        onCloseReports={closeReports}
+        vehicleHistoryQuery={vehicleHistoryQuery}
+        onCloseVehicleHistory={closeVehicleHistory}
+        onOpenPdf={lists.handleOpenPdfFromSearch}
+        onPrintPdf={lists.handlePrintPdfFromList}
+        onDeleteFinalized={lists.handleDeleteFinalized}
+        onEditRecent={editor.handleEditRecent}
+        onNewForProfile={editor.handleNewFisaForProfile}
+      />
     </div>
   )
 }
