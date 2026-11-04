@@ -727,29 +727,29 @@ scenario(17, 'Search date filter, 200-char counter, auto-update setting', async 
     t.check(r.ok, `seed ${plate} finalized`)
   }
   // filtru pe interval, fara text
-  await p.locator('.search-filter-btn').click()
-  await p.locator('.search-panel').waitFor({ timeout: 5000 })
+  await p.keyboard.press('Control+K')
+  await p.locator('.palette').waitFor({ timeout: 5000 })
+  await p.getByLabel('Filtrează după dată').click()
   const dates = p.locator('.search-dates input[type="date"]')
   await dates.nth(0).fill('2026-09-01')
   await dates.nth(1).fill('2026-09-30')
-  await waitFor(async () => (await p.locator('.search-result').count()) === 2, { what: '2 rezultate in septembrie', timeout: 6000 })
+  await waitFor(async () => (await p.locator('.palette-row-fisa').count()) === 2, { what: '2 rezultate in septembrie', timeout: 6000 })
   t.check(true, 'interval 01-30 sept => 2 rezultate')
-  const plates = (await p.locator('.search-result-main strong').allInnerTexts()).sort()
+  const plates = (await p.locator('.palette-fisa-main strong').allInnerTexts()).sort()
   t.check(JSON.stringify(plates) === JSON.stringify(['FLT-2', 'FLT-3']), `rezultate corecte (${plates})`)
   // text + interval
-  await p.locator('.topbar-search').fill('flt-3')
-  await waitFor(async () => (await p.locator('.search-result').count()) === 1, { what: 'text + interval', timeout: 6000 })
+  await p.locator('.palette-input').fill('flt-3')
+  await waitFor(async () => (await p.locator('.palette-row-fisa').count()) === 1, { what: 'text + interval', timeout: 6000 })
   t.check(true, 'text + interval => 1 rezultat')
   // interval inversat (capete schimbate) nu da eroare
-  await p.locator('.topbar-search').fill('')
+  await p.locator('.palette-input').fill('')
   await dates.nth(0).fill('2026-09-30')
   await dates.nth(1).fill('2026-09-01')
   await sleep(800)
-  t.check(!(await p.locator('.search-panel [role="alert"]').count()), 'interval inversat: fara eroare')
+  t.check(!(await p.locator('.palette [role="alert"]').count()), 'interval inversat: fara eroare')
   // sterge filtrul + inchide
   await p.keyboard.press('Escape')
-  await p.locator('.topbar-search').focus()
-  await p.keyboard.press('Escape')
+  await p.locator('.palette').waitFor({ state: 'detached', timeout: 3000 })
 
   // contor caractere: apare aproape de limita, nu inainte
   const name = nameInput(p)
