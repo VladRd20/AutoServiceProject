@@ -108,7 +108,15 @@ function retryPendingFise() {
   const p = (async () => {
     const gen = fiseGen
     for (const f of [...fisePending]) {
-      const res = await readJsonHealing(path.join(getFiseDir(), f), 'fise')
+      let res
+      try {
+        res = await readJsonHealing(path.join(getFiseDir(), f), 'fise')
+      } catch (err) {
+        // O exceptie (nu un rezultat tranzitoriu) lasa fisierul in asteptare si
+        // nu are voie sa opreasca citirea listei.
+        log.warn(`[fise] reincercarea citirii ${f} a aruncat - ramane in asteptare`, err)
+        continue
+      }
       if (fiseGen !== gen && !fisePending.has(f)) continue // modificat intre timp
       if (res.ok) cacheUpsert(f, { ...migrateFisa(res.value), _file: f })
       else if (!res.transient) fisePending.delete(f) // lipsa/corupt: nu mai e "in asteptare"
@@ -150,6 +158,7 @@ export async function readAllFiseFinalizate() {
           if (fiseLoad === p && fiseGen === genAtStart) {
             fisePending = map.pending
             fiseMap = map
+            refreshStoreWarnings(map)
           }
         },
         () => {
@@ -165,6 +174,67 @@ export async function readAllFiseFinalizate() {
   }
   if (!fiseList) fiseList = [...fiseMap.values()]
   return fiseList
+}
+
+// ------------------------------------------------- avertismente date ------
+// Copii de conflict create de OneDrive/Dropbox/Google Drive (sincronizare) si
+// numere `nr` duplicate. Nimic nu se sterge si nu se ascunde: doar log.warn +
+// rezumat expus pentru o faza UI ulterioara.
+const CONFLICT_PATTERNS = [
+  /-(?:DESKTOP|LAPTOP|PC)-[A-Z0-9]{3,}$/, // OneDrive: nume-DESKTOP-ABC123
+  / \(\d+\)$/, // Windows/Google Drive: nume (1)
+  /-conflict(?:-|$)/i, // nume-conflict-2026...
+  /\(.*conflicted copy.*\)/i // Dropbox: nume (X's conflicted copy 2026-..)
+]
+export function isConflictCopyName(fileName) {
+  const base = String(fileName).replace(/\.json$/i, '')
+  return CONFLICT_PATTERNS.some((re) => re.test(base))
+}
+
+export function computeStoreWarnings(map) {
+  const conflictCopies = []
+  const byNr = new Map()
+  for (const [file, f] of map) {
+    if (isConflictCopyName(file)) conflictCopies.push(file)
+    const nr = f?.nr
+    if (nr) {
+      const list = byNr.get(nr)
+      if (list) list.push(file)
+      else byNr.set(nr, [file])
+    }
+  }
+  const duplicateNr = [...byNr]
+    .filter(([, files]) => files.length > 1)
+    .map(([nr, files]) => ({ nr, files: files.sort() }))
+    .sort((a, b) => a.nr.localeCompare(b.nr))
+  return { conflictCopies: conflictCopies.sort(), duplicateNr }
+}
+
+let warningsMemo = null // { version, value }
+let warningsLogged = ''
+function refreshStoreWarnings(map) {
+  const value = computeStoreWarnings(map)
+  warningsMemo = { version: fiseVersion, value }
+  const sig = JSON.stringify(value)
+  if (sig !== warningsLogged) {
+    warningsLogged = sig
+    if (value.conflictCopies.length) {
+      log.warn(`[fise] ${value.conflictCopies.length} posibile copii de conflict de sincronizare: ${value.conflictCopies.join(', ')}`)
+    }
+    if (value.duplicateNr.length) {
+      log.warn(`[fise] numere duplicate: ${value.duplicateNr.map((d) => `${d.nr} (${d.files.join(' + ')})`).join('; ')}`)
+    }
+  }
+  return value
+}
+
+// { conflictCopies: [fisier], duplicateNr: [{ nr, files: [fisier] }] }
+export async function getStoreWarnings() {
+  await ensureDirs()
+  await readAllFiseFinalizate()
+  if (!fiseMap) return { conflictCopies: [], duplicateNr: [] }
+  if (warningsMemo?.version === fiseVersion) return warningsMemo.value
+  return refreshStoreWarnings(fiseMap)
 }
 
 export function getFiseVersion() {
@@ -514,21 +584,29 @@ export async function getAutocompleteData() {
 }
 
 // ---------------------------------------------------------- search --------
+// Haystack-ul "pliat" (fara diacritice/majuscule) e memoizat pe obiectul fisa
+// din cache: cacheUpsert inlocuieste obiectul, deci memo-ul se invalideaza singur.
+const haystackMemo = new WeakMap()
 function fisaHaystack(fisa) {
-  return foldForMatch(
-    [
-      fisa.nr,
-      fisa.client?.nume,
-      fisa.client?.telefon,
-      fisa.client?.cui,
-      fisa.auto?.nrInmatriculare,
-      fisa.auto?.marca,
-      fisa.auto?.model,
-      fisa.auto?.vin
-    ]
-      .filter(Boolean)
-      .join(' ')
-  )
+  let h = haystackMemo.get(fisa)
+  if (h === undefined) {
+    h = foldForMatch(
+      [
+        fisa.nr,
+        fisa.client?.nume,
+        fisa.client?.telefon,
+        fisa.client?.cui,
+        fisa.auto?.nrInmatriculare,
+        fisa.auto?.marca,
+        fisa.auto?.model,
+        fisa.auto?.vin
+      ]
+        .filter(Boolean)
+        .join(' ')
+    )
+    haystackMemo.set(fisa, h)
+  }
+  return h
 }
 
 const SEARCH_MAX_RESULTS = 200
