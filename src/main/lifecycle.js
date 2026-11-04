@@ -8,6 +8,9 @@ import log from './logger'
 // renderer blocat sa nu tina aplicatia deschisa la nesfarsit), apoi rulam un
 // ultim backup.
 const FLUSH_TIMEOUT_MS = 4000
+// Plafon total pentru flush-ul la inchidere: cu withRetry (~4s/fisier) pe un
+// folder OneDrive blocat, inchiderea ar putea atarna zeci de secunde.
+export const CLOSE_FLUSH_CAP_MS = 15000
 
 let win = null
 let seq = 0
@@ -55,6 +58,23 @@ export async function flushEverything() {
   await flushBackup()
 }
 
+// Flush-ul nu poate tine inchiderea peste CLOSE_FLUSH_CAP_MS. Ce s-a scris deja
+// ramane scris; draftul nesalvat se bazeaza pe backup-ul din renderer (draftBackup.js).
+export async function flushWithCap(capMs = CLOSE_FLUSH_CAP_MS) {
+  let timer
+  const cap = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      log.warn(`[lifecycle] flush la inchidere depasit (${capMs}ms), inchid oricum`)
+      resolve()
+    }, capMs)
+  })
+  try {
+    await Promise.race([flushEverything(), cap])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // Amana inchiderea ferestrei pana dupa flush. Idempotent: inchideri repetate
 // (dublu-click pe X, Alt+F4 + quit) nu declanseaza flush-uri suprapuse.
 export function guardWindowClose(w) {
@@ -75,7 +95,7 @@ export function guardWindowClose(w) {
     event.preventDefault()
     if (closing) return
     closing = true
-    flushEverything()
+    flushWithCap()
       .catch((err) => log.error('[lifecycle] flush la inchidere esuat', err))
       .finally(() => {
         closing = false

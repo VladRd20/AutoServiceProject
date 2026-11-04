@@ -21,7 +21,7 @@ function fontsDir() {
 
 let child = null
 let nextId = 1
-const pending = new Map() // id -> { resolve, reject, timer }
+const pending = new Map() // id -> { resolve, reject, timer, proc }
 // Injectabil pentru teste (utilityProcess nu exista in vitest).
 let forkWorker = () => utilityProcess.fork(path.join(__dirname, 'pdfWorker.js'), [], { serviceName: 'pdf-worker' })
 
@@ -29,8 +29,11 @@ export function _setWorkerFactory(fn) {
   forkWorker = fn
 }
 
-function failAll(err) {
+// Esueaza DOAR cererile apartinand worker-ului `proc` (un exit intarziat al unui
+// worker vechi nu are voie sa strice cererile worker-ului nou, sanatos).
+function failOwned(proc, err) {
   for (const [id, p] of pending) {
+    if (p.proc !== proc) continue
     clearTimeout(p.timer)
     pending.delete(id)
     p.reject(err)
@@ -55,9 +58,10 @@ function ensureWorker() {
   })
   proc.on('exit', (code) => {
     if (child === proc) child = null // urmatoarea cerere porneste unul nou
-    if (pending.size) {
+    const owned = [...pending.values()].some((p) => p.proc === proc)
+    if (owned) {
       log.error(`[pdfGenerator] worker oprit neasteptat (cod ${code})`)
-      failAll(new AppError('PDF_WORKER_CRASH', 'Generarea PDF-ului a eșuat (procesul de generare s-a oprit). Încearcă din nou.'))
+      failOwned(proc, new AppError('PDF_WORKER_CRASH', 'Generarea PDF-ului a eșuat (procesul de generare s-a oprit). Încearcă din nou.'))
     }
   })
   return proc
@@ -75,7 +79,7 @@ export function prewarmPdfWorker() {
 export function shutdownPdfWorker() {
   const proc = child
   child = null
-  failAll(new AppError('PDF_WORKER_CRASH', 'Generarea PDF-ului a fost oprită.'))
+  if (proc) failOwned(proc, new AppError('PDF_WORKER_CRASH', 'Generarea PDF-ului a fost oprită.'))
   try {
     proc?.kill()
   } catch {
@@ -108,17 +112,17 @@ export async function generatePdf(fisa, destPath) {
     const timer = setTimeout(() => {
       if (!pending.delete(id)) return
       log.error('[pdfGenerator] timeout la generare, repornesc worker-ul')
-      // Worker-ul poate fi blocat: il oprim, ramasele cereri esueaza si urmatoarea porneste altul.
+      // Worker-ul poate fi blocat: il oprim; cererile LUI esueaza, urmatoarea porneste alt worker.
       if (child === proc) child = null
       try {
         proc.kill()
       } catch {
         /* deja oprit */
       }
-      failAll(new AppError('PDF_WORKER_CRASH', 'Generarea PDF-ului a eșuat (procesul de generare s-a oprit). Încearcă din nou.'))
+      failOwned(proc, new AppError('PDF_WORKER_CRASH', 'Generarea PDF-ului a eșuat (procesul de generare s-a oprit). Încearcă din nou.'))
       reject(new AppError('PDF_TIMEOUT', 'Generarea PDF-ului a durat prea mult. Încearcă din nou.'))
     }, REQUEST_TIMEOUT_MS)
-    pending.set(id, { resolve, reject, timer })
+    pending.set(id, { resolve, reject, timer, proc })
     try {
       proc.postMessage({ id, fisa, settings, destPath, fontsDir: fontsDir() })
     } catch (err) {

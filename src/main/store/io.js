@@ -95,13 +95,18 @@ export async function writeStreamAtomic(filePath, producer, failMessage = 'Nu s-
     await withRetry(() => renameFile(tmpPath, filePath))
   } catch (err) {
     await fs.unlink(tmpPath).catch(() => {})
+    notify('onWriteFail', filePath, err)
     throw toAppError(err, failMessage)
   }
+  notify('onWriteOk', filePath)
 }
 
 // Scriere atomica + durabila: tmp -> fsync -> rename. Fara fsync, o cadere de
 // curent imediat dupa rename poate lasa un fisier gol/trunchiat pe disc.
-export async function writeJsonAtomic(filePath, data, failMessage = 'Nu s-a putut salva fișa pe disc.') {
+// `retry` = { attempts, baseMs, maxMs } pentru rename (implicit bugetul complet).
+// Autosave-ul de draft foloseste un buget mic (vezi DRAFT_RETRY in drafts.js), ca
+// o blocare lunga sa nu tina ocupata coada 'draft:<id>'.
+export async function writeJsonAtomic(filePath, data, failMessage = 'Nu s-a putut salva fișa pe disc.', retry = {}) {
   const tmpPath = `${filePath}${tmpSuffix()}`
   try {
     const handle = await fs.open(tmpPath, 'w')
@@ -111,7 +116,7 @@ export async function writeJsonAtomic(filePath, data, failMessage = 'Nu s-a putu
     } finally {
       await handle.close()
     }
-    await withRetry(() => renameFile(tmpPath, filePath))
+    await withRetry(() => renameFile(tmpPath, filePath), retry.attempts, retry)
   } catch (err) {
     await fs.unlink(tmpPath).catch(() => {})
     notify('onWriteFail', filePath, err)

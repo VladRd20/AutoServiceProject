@@ -68,6 +68,7 @@ describe('pdfGenerator (client worker)', () => {
     return p
   }
   beforeEach(() => {
+    process.env.SA_APPPATH ||= process.cwd() // fontsDir() are nevoie de app.getAppPath()
     procs = []
     _setWorkerFactory(fakeProc)
   })
@@ -131,5 +132,25 @@ describe('pdfGenerator (client worker)', () => {
     await vi.advanceTimersByTimeAsync(30001)
     await assertion
     expect(procs[0].kill).toHaveBeenCalled()
+  })
+
+  it('exit tardiv al worker-ului vechi NU esueaza cererea worker-ului nou', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    procs.length = 0
+    const pa = generatePdf(fisa, 'a.pdf')
+    const assertA = expect(pa).rejects.toMatchObject({ code: 'PDF_TIMEOUT' })
+    await vi.waitFor(() => expect(procs[0]?.sent).toHaveLength(1), { interval: 0 })
+    // kill() nu emite exit imediat: exit-ul vine tarziu, dupa ce B e deja pe worker #2
+    procs[0].kill = vi.fn()
+    await vi.advanceTimersByTimeAsync(30001)
+    await assertA
+    expect(procs[0].kill).toHaveBeenCalled()
+
+    const pb = generatePdf(fisa, 'b.pdf')
+    await vi.waitFor(() => expect(procs[1]?.sent).toHaveLength(1), { interval: 0 })
+    procs[0].emit('exit', 1) // exit tardiv al worker-ului #1
+    procs[1].emit('message', { id: procs[1].sent[0].id, ok: true, path: 'b.pdf' })
+    await expect(pb).resolves.toBe('b.pdf')
+    procs[1].emit('exit', 0)
   })
 })
