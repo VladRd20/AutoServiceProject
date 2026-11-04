@@ -58,4 +58,4 @@ Manual tools (Settings → Backup): backup now, export a backup file (e.g. to US
 
 ## Tests
 
-`npm test` runs the data-safety suite (fault injection, corruption, recovery, concurrency, lifecycle). It runs in CI on every push and gates the release workflow. `node tests/e2e/run.mjs` drives the real built app (Playwright + Electron) — see the header of that file.
+`npm test` runs the data-safety suite (fault injection, corruption, recovery, concurrency, lifecycle). It runs in CI on every push and gates the release workflow. `npm run e2e` (full, parallel) and `npm run e2e:smoke` (about 1 minute) drive the real built app (Playwright + Electron) — see the header of `tests/e2e/run.mjs` (`--jobs N`, scenario ids, `KEEP=1`).

@@ -15,6 +15,14 @@ export const ELECTRON_EXE = path.join(ROOT, 'node_modules', 'electron', 'dist', 
 export const YEAR = new Date().getFullYear()
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+/** Ca Promise.race([p, sleep(ms)]) dar fara timer ramas pornit; la expirare rezolva cu `onTimeout` (sau arunca daca lipseste). */
+export function withTimeout(p, ms, onTimeout) {
+  let timer
+  const t = new Promise((res, rej) => {
+    timer = setTimeout(() => (onTimeout === undefined ? rej(new Error(`timeout ${ms}ms`)) : res(onTimeout)), ms)
+  })
+  return Promise.race([p, t]).finally(() => clearTimeout(timer))
+}
 export const rnd = () => Math.random().toString(36).slice(2, 8)
 
 // ------------------------------------------------------------- sandbox ----
@@ -23,7 +31,8 @@ let sandboxRoot = null
 const allSandboxes = []
 
 export function prepareTemplate() {
-  sweepOrphans()
+  // Fara sweepOrphans() aici: ar omori aplicatiile altei rulari paralele. Curatam doar ce a lansat
+  // aceasta rulare (vezi sweepOrphans, care potriveste dupa radacina unica de sandbox-uri).
   sandboxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sa-e2e-'))
   templateDir = path.join(sandboxRoot, '_template')
   fs.mkdirSync(templateDir)
@@ -60,6 +69,7 @@ export function makeSandbox(name, opts = {}) {
   const appDir = path.join(dir, 'app')
   const userData = path.join(dir, 'userData')
   fs.mkdirSync(dir)
+  fs.mkdirSync(path.join(dir, 'tmp'))
   fs.cpSync(templateDir, appDir, { recursive: true })
   fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(appDir, 'node_modules'), 'junction')
   writeLicense(userData)
@@ -85,6 +95,8 @@ export function makeSandbox(name, opts = {}) {
     histSafety: path.join(userData, 'safety-backup', 'history'),
     safetyDir: path.join(userData, 'safety-backup'),
     tempFallback: path.join(userData, 'date-temporar'),
+    // TEMP/TMP al aplicatiei lansate: os.tmpdir() => ServiceAuto-preview nu mai e partajat intre scenarii/rulari
+    tmpDir: path.join(dir, 'tmp'),
     live: []
   }
   allSandboxes.push(sb)
@@ -93,27 +105,32 @@ export function makeSandbox(name, opts = {}) {
 
 export async function destroySandbox(sb) {
   for (const h of sb.live) await hardKill(h).catch(() => {})
-  await sleep(300)
   try {
     // rmdir removes only the junction, never the target's contents.
     fs.rmdirSync(path.join(sb.appDir, 'node_modules'))
   } catch {}
   if (process.env.KEEP) return
-  for (let i = 0; i < 5; i++) {
+  // Windows tine cateva zeci de ms handle-urile deschise dupa iesirea procesului: reincercam des si scurt.
+  for (let i = 0; i < 40; i++) {
     try {
       fs.rmSync(sb.dir, { recursive: true, force: true })
       return
     } catch {
-      await sleep(300)
+      await sleep(100)
     }
   }
 }
 
-/** Kill any electron.exe whose command line references a sa-e2e sandbox (orphans of a hung scenario). */
+/**
+ * Omoara DOAR procesele electron.exe lansate de aceasta rulare: cele a caror linie de comanda contine radacina
+ * unica de sandbox-uri (mkdtemp) a rularii curente. Alte rulari paralele au alta radacina si nu sunt atinse.
+ */
 export function sweepOrphans() {
+  if (!sandboxRoot) return
   try {
     execFileSync('powershell', ['-NoProfile', '-Command',
-      "Get-CimInstance Win32_Process -Filter \"Name='electron.exe'\" | Where-Object { $_.CommandLine -match 'sa-e2e' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"], { stdio: 'ignore' })
+      "Get-CimInstance Win32_Process -Filter \"Name='electron.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:SA_E2E_ROOT) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"],
+    { stdio: 'ignore', env: { ...process.env, SA_E2E_ROOT: sandboxRoot } })
   } catch {}
 }
 
@@ -125,9 +142,15 @@ export function cleanupAll() {
     } catch {}
   }
   if (!process.env.KEEP && sandboxRoot) {
-    try {
-      fs.rmSync(sandboxRoot, { recursive: true, force: true })
-    } catch {}
+    // handle-urile procesului omorat se elibereaza cu mici intarzieri pe Windows: reincercam scurt (sincron)
+    for (let i = 0; i < 20; i++) {
+      try {
+        fs.rmSync(sandboxRoot, { recursive: true, force: true })
+        break
+      } catch {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100)
+      }
+    }
   }
   if (!fs.existsSync(path.join(ROOT, 'node_modules', 'electron'))) {
     console.error('!!! REAL node_modules/electron is missing - junction cleanup went wrong')
@@ -139,7 +162,7 @@ const NOISE = [/Autofill\./, /DevTools/i, /Request Autofill/]
 
 /** Launch the app. Returns handle { app, page, logs, exited }. */
 export async function launch(sb, { env = {}, waitReady = true } = {}) {
-  const e = { ...process.env, ...env, ELECTRON_ENABLE_LOGGING: '1' }
+  const e = { ...process.env, ...env, ELECTRON_ENABLE_LOGGING: '1', TEMP: sb.tmpDir, TMP: sb.tmpDir }
   delete e.ELECTRON_RUN_AS_NODE
   delete e.ELECTRON_RENDERER_URL
   const app = await _electron.launch({
@@ -168,9 +191,23 @@ export async function launch(sb, { env = {}, waitReady = true } = {}) {
 export async function ready(h) {
   const p = h.page
   await p.getByLabel('Nume client').waitFor({ state: 'visible', timeout: 20000 })
+  // Formularul e vizibil abia dupa poarta de pornire (drafturi + prima rulare). "Ce e nou" cere IPC-ul imediat dupa
+  // aceea: settle() trece prin acelasi canal IPC (raspunsurile vin in ordine) + doua cadre de randare, deci modalul
+  // (daca exista) e deja in DOM cand il inchidem. Fara asta un modal tardiv acoperea butoanele si click-urile expirau.
+  await settle(p)
   await dismissModal(p)
-  // let initial refreshDrafts/getLocationInfo settle
-  await sleep(400)
+  await settle(p)
+}
+
+/**
+ * Inlocuieste sleep-urile "sa se aseze UI-ul": un drum complet prin IPC (ordonat in main) + doua cadre de randare,
+ * adica React a aplicat deja starile declansate de cererile anterioare.
+ */
+export async function settle(page) {
+  await page.evaluate(async () => {
+    await window.serviceAuto.fisa.listDrafts()
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+  })
 }
 
 export async function dismissModal(page) {
@@ -190,7 +227,7 @@ export async function hardKill(h) {
   try {
     h.app.process().kill()
   } catch {}
-  await Promise.race([h.exited, sleep(5000)])
+  await withTimeout(h.exited, 5000, null)
 }
 
 /** Graceful close through electronApp.close(); falls back to kill. Resolves with { graceful, ms }. */
@@ -198,22 +235,22 @@ export async function closeApp(h, how = 'app') {
   const t0 = Date.now()
   let graceful = true
   try {
-    if (how === 'app') await Promise.race([h.app.close(), sleep(15000).then(() => { throw new Error('close timeout') })])
+    if (how === 'app') await withTimeout(h.app.close(), 15000)
     else if (how === 'BrowserWindow.close2') {
       // double-click on the X: two close requests back to back
       h.app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows()[0]; w.close(); w.close() }).catch(() => {})
-      await Promise.race([h.exited, sleep(15000).then(() => { throw new Error('exit timeout') })])
+      await withTimeout(h.exited, 15000)
     } else if (how === 'BrowserWindow.close') {
       h.app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].close() }).catch(() => {})
-      await Promise.race([h.exited, sleep(15000).then(() => { throw new Error('exit timeout') })])
+      await withTimeout(h.exited, 15000)
     }
   } catch (err) {
     graceful = false
     h.closeError = String(err.message || err)
     await hardKill(h)
   }
-  await Promise.race([h.exited, sleep(5000)])
-  await sleep(300)
+  // Procesul principal a iesit => blocarea de instanta unica si handle-urile pe userData sunt eliberate; nu mai asteptam "din pura prudenta".
+  await withTimeout(h.exited, 5000, null)
   return { graceful, ms: Date.now() - t0 }
 }
 
@@ -261,7 +298,7 @@ export function integrityProblems(sb) {
   return problems
 }
 
-export async function waitFor(fn, { timeout = 8000, interval = 100, what = 'condition' } = {}) {
+export async function waitFor(fn, { timeout = 8000, interval = 50, what = 'condition' } = {}) {
   const t0 = Date.now()
   let last
   while (Date.now() - t0 < timeout) {
@@ -274,6 +311,66 @@ export async function waitFor(fn, { timeout = 8000, interval = 100, what = 'cond
     await sleep(interval)
   }
   throw new Error(`timeout waiting for ${what}${last ? ` (last error: ${last.message})` : ''}`)
+}
+
+/** Asteapta un fisier (optional cu predicat pe cale). Returneaza calea. */
+export async function waitForFile(p, { timeout = 15000, pred = null, what } = {}) {
+  await waitFor(() => fs.existsSync(p) && (!pred || pred(p)), { timeout, what: what || `file ${p}` })
+  return p
+}
+
+/** Asteapta o linie din logul procesului principal (stdout/stderr) potrivita cu `re`. */
+export const waitForLog = (h, re, { timeout = 15000 } = {}) =>
+  waitFor(() => h.logs.main.find((l) => re.test(l)), { timeout, what: `main log ${re}` })
+
+/** Asteapta un selector in pagina (implicit vizibil). */
+export const waitForSelector = (page, sel, { state = 'visible', timeout = 15000 } = {}) =>
+  page.locator(sel).first().waitFor({ state, timeout })
+
+/**
+ * Asteapta ca arborele de fisiere de sub `dirs` sa nu se mai schimbe `quietMs` (nume + marime + mtime).
+ * Pentru cazurile in care testul afirma "nu mai apare nimic in plus" dupa o actiune: fereastra de liniste
+ * inlocuieste un sleep fix mare. Pentru afirmatii de absenta peste autosave foloseste quietMs > debounce (1s).
+ * Returneaza false daca nu s-a linistit in `timeout`.
+ */
+export async function waitQuiet(dirs, { quietMs = 300, timeout = 15000 } = {}) {
+  const snap = () => {
+    const out = []
+    const walk = (d) => {
+      let ents
+      try {
+        ents = fs.readdirSync(d, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const e of ents) {
+        const p = path.join(d, e.name)
+        if (e.isDirectory()) {
+          if (e.name !== 'node_modules') walk(p)
+        } else {
+          try {
+            const st = fs.statSync(p)
+            out.push(`${p}|${st.size}|${st.mtimeMs}`)
+          } catch {}
+        }
+      }
+    }
+    for (const d of [].concat(dirs)) walk(d)
+    return out.sort().join('\n')
+  }
+  let last = snap()
+  let since = Date.now()
+  const t0 = Date.now()
+  while (Date.now() - since < quietMs) {
+    if (Date.now() - t0 > timeout) return false
+    await sleep(50)
+    const cur = snap()
+    if (cur !== last) {
+      last = cur
+      since = Date.now()
+    }
+  }
+  return true
 }
 
 export function isPdf(p) {
@@ -334,16 +431,31 @@ export async function fillFisa(page, d = {}) {
 }
 
 export async function waitSaved(page) {
-  await page.locator('.autosave-status.saved').waitFor({ state: 'visible', timeout: 8000 })
+  await page.locator('.autosave-status.saved').waitFor({ state: 'visible', timeout: 15000 })
 }
 
-/** Wait until a draft on disk satisfies pred. */
+/** Wait until a draft on disk satisfies pred. (Chip-ul "Salvat" nu garanteaza fisierul: debounce 1s - de aceea se asteapta si pe disc.) */
 export const waitDraft = (sb, pred, what = 'draft on disk') =>
-  waitFor(() => readDrafts(sb).find(pred), { timeout: 8000, what })
+  waitFor(() => readDrafts(sb).find(pred), { timeout: 15000, what })
 
 const prevNames = new WeakMap()
-export async function clickFinalize(page) {
+/** Memoreaza numele curent, ca waitFinalizeDone sa stie cand s-a golit formularul (si pentru finalizari fara clickFinalize). */
+export async function markFinalize(page) {
   prevNames.set(page, await nameInput(page).inputValue().catch(() => ''))
+  await dismissToasts(page)
+}
+
+/**
+ * Toast-ul de dupa o finalizare sta ~10s peste butonul "Finalizeaza" si Playwright asteapta sa dispara inainte
+ * de click (asta era cea mai mare pierdere de timp din suita). Il inchidem inainte, ca un utilizator grabit;
+ * astfel waitFinalizeDone vede si toast-ul NOU, nu pe cel vechi.
+ */
+export async function dismissToasts(page) {
+  await page.locator('.toast-close').evaluateAll((els) => els.forEach((e) => e.click())).catch(() => {})
+  await page.locator('.toast').first().waitFor({ state: 'detached', timeout: 2000 }).catch(() => {})
+}
+export async function clickFinalize(page) {
+  await markFinalize(page)
   await releaseBtn(page).click()
 }
 
@@ -355,7 +467,7 @@ export async function waitFinalizeDone(page, { toast = /Fișă (finalizată|actu
     what: 'form reset after finalize'
   })
   await waitFor(async () => !(await releaseBtn(page).innerText()).includes('Se finalizează'), { what: 'release done' })
-  await sleep(500)
+  await settle(page)
 }
 
 /** Finalize through IPC (fast seeding). Returns the IPC result. */
@@ -389,8 +501,9 @@ export async function reload(page) {
   // a clean autosaver never triggers beforeunload; wait for saved state first
   await page.reload()
   await page.getByLabel('Nume client').waitFor({ state: 'visible', timeout: 15000 })
+  await settle(page)
   await dismissModal(page)
-  await sleep(500)
+  await settle(page)
 }
 
 /** Second raw electron process on the same userData (single-instance test). */

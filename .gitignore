@@ -17,3 +17,4 @@ dist/
 
 # raport local al suitei e2e
 tests/e2e/last-report.json
+tests/e2e/logs/
