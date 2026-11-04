@@ -54,3 +54,8 @@
   --btn-min-h: 0;
   padding: var(--space-1) 6px;
 }
+
+.toast button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}

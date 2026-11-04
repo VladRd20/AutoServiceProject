@@ -6,9 +6,17 @@ export default function useToasts() {
   const [toasts, setToasts] = useState([])
   const toastIdRef = useRef(0)
 
+  // showToast(type, message, action?, opts?) - semnatura neschimbata.
+  // opts: { sticky?: bool (nu dispare singur), duration?: ms (suprascrie regulile
+  // implicite din Toast.jsx: erorile raman pana sunt inchise, cele cu actiune 10s) }.
   const showToast = useCallback((type, message, action, opts) => {
     const id = ++toastIdRef.current
-    setToasts((ts) => [...ts, { id, type, message, action, sticky: opts?.sticky }])
+    setToasts((ts) => {
+      // Aceeasi eroare repetata (ex: autosave care esueaza la fiecare retry) nu
+      // se stivuieste: erorile raman pana la inchidere, deci ar umple ecranul.
+      if (type === 'error' && ts.some((t) => t.type === 'error' && t.message === message)) return ts
+      return [...ts, { id, type, message, action, sticky: opts?.sticky, duration: opts?.duration }]
+    })
     return id
   }, [])
 
