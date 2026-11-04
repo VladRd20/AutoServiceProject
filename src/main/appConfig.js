@@ -2,6 +2,7 @@ import { app } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import log from './logger'
+import { AppError } from './errors'
 
 // Config minim, separat de "date/setari.json" (acolo sunt datele firmei,
 // portabile odata cu fisele). Asta trebuie sa fie gasibil INAINTE sa stim
@@ -51,18 +52,47 @@ function parseConfig(raw) {
 }
 
 // Fisierele corupte deja salvate (ca sa nu copiem aceeasi stricaciune la fiecare citire).
-const reportedCorrupt = new Set()
+// Valoarea: true daca copia .corrupt-* exista (deci rescrierea fisierului nu pierde nimic).
+const reportedCorrupt = new Map()
+
+// Citeste si parseaza .bak; null daca lipseste sau e invalid.
+function readBak(file) {
+  try {
+    const bakRaw = fs.readFileSync(`${file}.bak`, 'utf-8')
+    return { cfg: parseConfig(bakRaw), raw: bakRaw }
+  } catch {
+    return null
+  }
+}
+
+// Reface fisierul principal din .bak (vindecare); .bak ramane neatins.
+function restoreFromBak(file, bak) {
+  log.error('[appConfig] configurare refacuta din app-config.json.bak')
+  try {
+    writeFileAtomicSync(file, bak.raw)
+  } catch (err) {
+    log.warn('[appConfig] nu s-a putut rescrie app-config.json din .bak', err)
+  }
+  return { cfg: bak.cfg, raw: bak.raw, unreadable: false }
+}
 
 // Intoarce { cfg, raw, unreadable }. `unreadable` = fisierul EXISTA dar nu s-a
-// putut citi/parsa si nici .bak nu l-a salvat: cfg e gol doar ca valoare de
-// citire, iar writeConfig NU are voie sa scrie peste (altfel dataPath s-ar pierde).
+// putut citi/parsa, nici .bak nu l-a salvat si continutul stricat NU a putut fi
+// pastrat intr-o copie .corrupt-*: cfg e gol doar ca valoare de citire, iar
+// writeConfig NU are voie sa scrie peste (altfel dataPath s-ar pierde).
+// Daca copia .corrupt-* exista, scrierea e permisa: rescrierea vindeca fisierul.
 function loadConfig() {
   const file = configFilePath()
   let raw
   try {
     raw = fs.readFileSync(file, 'utf-8')
   } catch (err) {
-    if (err.code === 'ENOENT') return { cfg: {}, raw: null, unreadable: false }
+    if (err.code === 'ENOENT') {
+      // Lipseste (sters de antivirus / manual) dar .bak e bun -> il refacem.
+      const bak = readBak(file)
+      if (bak) return restoreFromBak(file, bak)
+      return { cfg: {}, raw: null, unreadable: false }
+    }
     log.error('[appConfig] app-config.json nu a putut fi citit', err)
     return { cfg: {}, raw: null, unreadable: true }
   }
@@ -72,28 +102,24 @@ function loadConfig() {
     log.error(`[appConfig] app-config.json este corupt (${err.message}) - incerc ${path.basename(file)}.bak`)
     const key = `${raw.length}:${raw.slice(0, 64)}`
     if (!reportedCorrupt.has(key)) {
-      reportedCorrupt.add(key)
+      let saved = false
       try {
         fs.copyFileSync(file, `${file}.corrupt-${Date.now()}`)
+        saved = true
       } catch (copyErr) {
         log.error('[appConfig] nu s-a putut pastra copia fisierului corupt', copyErr)
       }
+      reportedCorrupt.set(key, saved)
     }
   }
-  try {
-    const bakRaw = fs.readFileSync(`${file}.bak`, 'utf-8')
-    const cfg = parseConfig(bakRaw)
-    log.error('[appConfig] configurare refacuta din app-config.json.bak')
-    try {
-      writeFileAtomicSync(file, bakRaw) // vindecam fisierul principal; .bak ramane neatins
-    } catch (err) {
-      log.warn('[appConfig] nu s-a putut rescrie app-config.json din .bak', err)
-    }
-    return { cfg, raw: bakRaw, unreadable: false }
-  } catch {
-    log.error('[appConfig] fara .bak valid - app-config.json corupt ramane neatins (copie in .corrupt-*)')
-    return { cfg: {}, raw: null, unreadable: true }
+  const bak = readBak(file)
+  if (bak) return restoreFromBak(file, bak)
+  if (reportedCorrupt.get(`${raw.length}:${raw.slice(0, 64)}`) === true) {
+    log.error('[appConfig] fara .bak valid - continutul corupt e salvat in .corrupt-*, fisierul poate fi rescris')
+    return { cfg: {}, raw: null, unreadable: false }
   }
+  log.error('[appConfig] fara .bak valid si fara copie .corrupt-* - app-config.json ramane neatins')
+  return { cfg: {}, raw: null, unreadable: true }
 }
 
 function readConfig() {
@@ -102,13 +128,17 @@ function readConfig() {
 
 // Scrierea INTEGREaza cheile existente: fiecare setare isi schimba doar cheia ei.
 // Atomic (+ .bak cu ultima versiune buna); refuza sa scrie peste un fisier
-// existent dar ilizibil, ca sa nu piarda dataPath.
+// existent dar ilizibil (fara copie de siguranta), ca sa nu piarda dataPath -
+// si ARUNCA, ca apelantul sa nu creada ca setarea s-a salvat.
 function writeConfig(patch) {
   const file = configFilePath()
   const { cfg: current, raw, unreadable } = loadConfig()
   if (unreadable) {
     log.error('[appConfig] scriere refuzata: app-config.json existent nu poate fi citit/refacut', Object.keys(patch))
-    return
+    throw new AppError(
+      'CONFIG_UNWRITABLE',
+      'Fișierul de configurare al aplicației este deteriorat și nu a putut fi salvat. Setarea nu a fost modificată.'
+    )
   }
   fs.mkdirSync(path.dirname(file), { recursive: true })
   try {
@@ -133,8 +163,16 @@ export function getLastSeenVersion() {
   return typeof v === 'string' ? v : null
 }
 
+// Nu critica: daca nu se poate salva, logam si mergem mai departe ("Ce e nou"
+// va aparea din nou), nu blocam pornirea/ecranul.
 export function setLastSeenVersion(version) {
-  writeConfig({ lastSeenVersion: String(version) })
+  try {
+    writeConfig({ lastSeenVersion: String(version) })
+    return true
+  } catch (err) {
+    log.warn('[appConfig] lastSeenVersion nesalvat', err)
+    return false
+  }
 }
 
 // "Descarca si instaleaza automat actualizarile la inchidere" (implicit oprit).

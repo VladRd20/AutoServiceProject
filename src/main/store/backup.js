@@ -238,6 +238,9 @@ function cleanRestored(value) {
       if (Array.isArray(value[k]) && value[k].length > LIMITS.linii) return null
     }
     const clean = sanitizeFisa(migrateFisa(value))
+    // sanitizeFisa e whitelist: `updatedAt` (scris de saveDraft, folosit la
+    // sortarea drafturilor) s-ar pierde - il pastram, doar ca text scurt.
+    if (typeof value.updatedAt === 'string') clean.updatedAt = value.updatedAt.slice(0, 40)
     return looksLikeFisa(clean) ? clean : null
   } catch {
     return null
@@ -303,7 +306,9 @@ export function importBackup(srcFile) {
           result[counters.ok]++
         } else if (counters.compare) {
           const cur = await readJson(target)
-          if (cur.ok && JSON.stringify(cur.value) === JSON.stringify(value)) result.fiseIdentice++
+          // Comparam forma CURATATA pe ambele parti: o fisa identica semantic nu e conflict.
+          const curClean = cur.ok ? cleanRestored(cur.value) : null
+          if (curClean && JSON.stringify(curClean) === JSON.stringify(clean)) result.fiseIdentice++
           else result.conflicte++
         }
       }

@@ -32,7 +32,7 @@ Data is never stored next to the `.exe` (an NSIS update wipes the install folder
 | Whole data folder gone | Restored from the safety-backup at next start |
 | Custom data folder unplugged (USB/network) | Works in `date-temporar`, persistent banner; work is merged back when the folder returns |
 | Bad backup / bad edit propagating | Daily snapshot bundles (`safety-backup\snapshots`, 30 kept) |
-| Corrupt `app-config.json` (holds the custom data folder) | Bad file copied to `app-config.json.corrupt-<time>`, config restored from `app-config.json.bak` (last good version, kept on every write); writes are atomic. If no good `.bak` exists the file is left untouched and no setting is written over it |
+| Corrupt `app-config.json` (holds the custom data folder) | Bad file copied to `app-config.json.corrupt-<time>`, config restored from `app-config.json.bak` (last good version, kept on every write); writes are atomic. A missing `app-config.json` is restored from `.bak`. If no good `.bak` exists, the next write is allowed only once the `.corrupt-<time>` copy is saved (so the bad content is never lost); otherwise the write is refused with an error and a data-folder change is aborted before switching folders |
 | Fișă briefly unreadable at start (antivirus lock) | Skipped, not quarantined; re-read on the next list/search until it loads (no restart needed) |
 | Hand-edited / oversize entry in an imported backup | Each entry is migrated + sanitized before writing; unusable ones (e.g. > 300 lines) are skipped and counted as `invalide`, the rest is imported |
 | File locked by antivirus / OneDrive placeholder | rename/unlink are retried with exponential backoff + jitter (EBUSY/EPERM/EACCES/EMFILE/ENFILE), ~3-5 s total budget; the happy path never waits |

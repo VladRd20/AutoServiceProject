@@ -90,13 +90,44 @@ describe('app-config.json', () => {
     expect(read(cfgPath())).toMatchObject({ dataPath: 'D:\\date', lastSeenVersion: '1.0.0' })
   })
 
-  it('corupt fara .bak -> nu se scrie nimic peste (dataPath nu se pierde)', async () => {
+  it('(a) ilizibil, fara .bak si fara copie .corrupt-* -> scrierea arunca si nu atinge fisierul', async () => {
     const cfg = await import('../src/main/appConfig.js')
     const bad = '{"dataPath":"D:\\\\date"' // trunchiat
     fs.writeFileSync(cfgPath(), bad)
-    cfg.setAutoUpdate(true)
+    const real = fs.copyFileSync
+    vi.spyOn(fs, 'copyFileSync').mockImplementation((from, to, ...r) => {
+      if (String(to).includes('.corrupt-')) throw Object.assign(new Error('full'), { code: 'ENOSPC' })
+      return real(from, to, ...r)
+    })
+    expect(() => cfg.setAutoUpdate(true)).toThrow(expect.objectContaining({ code: 'CONFIG_UNWRITABLE' }))
     expect(fs.readFileSync(cfgPath(), 'utf-8')).toBe(bad)
     expect(cfg.getAutoUpdate()).toBe(false)
+    expect(cfg.setLastSeenVersion('1.0.0')).toBe(false) // necritic: nu arunca
+  })
+
+  it('(b) corupt/zero-byte fara .bak, dar cu copia .corrupt-* -> scrierea e permisa (se vindeca)', async () => {
+    const cfg = await import('../src/main/appConfig.js')
+    const bad = '{"dataPath":"D:\\\\date"'
+    fs.writeFileSync(cfgPath(), bad)
+    cfg.setAutoUpdate(true)
+    expect(read(cfgPath())).toEqual({ autoUpdate: true })
+    const copies = ls(env.userData).filter((n) => n.startsWith('app-config.json.corrupt-'))
+    expect(copies.length).toBeGreaterThan(0)
+    expect(fs.readFileSync(path.join(env.userData, copies[0]), 'utf-8')).toBe(bad)
+    fs.writeFileSync(cfgPath(), '') // zero-byte
+    cfg.setLastSeenVersion('2.0.0')
+    expect(read(cfgPath())).toEqual({ lastSeenVersion: '2.0.0' })
+  })
+
+  it('(c) app-config.json lipseste dar .bak e valid -> se reface din .bak', async () => {
+    const cfg = await import('../src/main/appConfig.js')
+    cfg.setDataPathOverride('D:\\date')
+    cfg.setAutoUpdate(true) // .bak = versiunea cu dataPath
+    fs.rmSync(cfgPath())
+    expect(cfg.getDataPathOverride()).toBe('D:\\date')
+    expect(read(cfgPath()).dataPath).toBe('D:\\date')
+    cfg.setLastSeenVersion('1.0.0')
+    expect(read(cfgPath())).toMatchObject({ dataPath: 'D:\\date', lastSeenVersion: '1.0.0' })
   })
 
   it('scriere normala: atomica si pastreaza .bak cu versiunea anterioara', async () => {
@@ -140,5 +171,27 @@ describe('import backup - sanitize + migrate', () => {
     expect(saved.extra).toBeUndefined()
     expect(saved.observatii.length).toBeLessThan(50000)
     expect(ls(fiseDir())).not.toContain('B-2_01-01-2020.json')
+  })
+})
+
+describe('import backup - format vechi', () => {
+  it('schema v1 (reducerePercent) + draft cu updatedAt: updatedAt pastrat, identicele nu sunt conflict', async () => {
+    const { backup } = env.s
+    const file = path.join(mkTmp(), 'old.json')
+    const old = { ...fisa({ nr: '2020-0001' }), schemaVersion: 1, reducerePercent: '10', finalizedAt: '2020-01-01T10:00:00.000Z', status: 'finalizata' }
+    delete old.reducerePiesePercent
+    delete old.reducereLucrariPercent
+    const draft = { ...fisa({ id: 'draft-1' }), status: 'draft', updatedAt: '2020-02-02T10:00:00.000Z' }
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ format: 'service-auto-backup', version: 1, fise: { 'A-1_01-01-2020': old }, drafturi: { 'draft-1': draft } })
+    )
+    let r = await backup.importBackup(file)
+    expect(r).toMatchObject({ fiseRestaurate: 1, drafturiRestaurate: 1, conflicte: 0 })
+    const d = read(path.join(env.dataDir, 'drafturi', 'draft-1.json'))
+    expect(d.updatedAt).toBe('2020-02-02T10:00:00.000Z')
+    r = await backup.importBackup(file) // a doua oara: pe disc e forma curatata
+    expect(r.fiseIdentice).toBe(1)
+    expect(r.conflicte).toBe(0)
   })
 })
