@@ -24,11 +24,9 @@ function getFocusable(container) {
  * @param ref           ref catre containerul dialogului
  * @param onClose       apelat la Escape
  * @param initialFocus  'container' (implicit) | selector CSS | () => Element | false
- * @param trap          false = fara capcana de focus si fara mutarea/restaurarea focusului
- *                      (cazul Modal autoFocus=false: SearchModal pastreaza focusul in input)
  * @param role          'dialog' (implicit) sau 'alertdialog'
  */
-export default function useDialog(ref, { onClose, initialFocus = 'container', trap = true, role = 'dialog' } = {}) {
+export default function useDialog(ref, { onClose, initialFocus = 'container', role = 'dialog' } = {}) {
   const titleId = useId()
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -39,9 +37,9 @@ export default function useDialog(ref, { onClose, initialFocus = 'container', tr
     const container = ref.current
     const token = {}
     stack.push(token)
-    const opener = trap ? document.activeElement : null
+    const opener = document.activeElement
 
-    if (container && trap && initialFocusRef.current !== false) {
+    if (container && initialFocusRef.current !== false) {
       const f = initialFocusRef.current
       let target = null
       if (typeof f === 'function') target = f()
@@ -58,7 +56,7 @@ export default function useDialog(ref, { onClose, initialFocus = 'container', tr
         onCloseRef.current?.()
         return
       }
-      if (e.key !== 'Tab' || !trap || !container) return
+      if (e.key !== 'Tab' || !container) return
       const items = getFocusable(container)
       if (items.length === 0) {
         e.preventDefault()
@@ -98,13 +96,13 @@ export default function useDialog(ref, { onClose, initialFocus = 'container', tr
         document.querySelector(FORM_FIRST_INPUT)
       home?.focus?.()
     }
-  }, [ref, trap])
+  }, [ref])
 
   return {
     titleId,
     dialogProps: {
       role,
-      'aria-modal': trap ? 'true' : undefined,
+      'aria-modal': 'true',
       'aria-labelledby': titleId,
       tabIndex: -1
     }

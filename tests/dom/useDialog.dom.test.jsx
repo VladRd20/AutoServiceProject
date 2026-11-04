@@ -65,31 +65,6 @@ describe('useDialog / Modal', () => {
     expect(document.activeElement).toBe(opener)
   })
 
-  it('autoFocus=false nu muta focusul si nu il restaureaza', async () => {
-    const user = userEvent.setup()
-    function H() {
-      const [open, setOpen] = useState(false)
-      return (
-        <div>
-          <input aria-label="cauta" onChange={() => setOpen(true)} />
-          {open && (
-            <Modal title="Rezultate" onClose={() => setOpen(false)} autoFocus={false}>
-              <p>x</p>
-            </Modal>
-          )}
-        </div>
-      )
-    }
-    render(<H />)
-    const input = screen.getByLabelText('cauta')
-    await user.click(input)
-    await user.keyboard('a')
-    expect(screen.getByRole('dialog')).toBeTruthy()
-    expect(document.activeElement).toBe(input)
-    await user.keyboard('bc')
-    expect(input.value).toBe('abc')
-  })
-
   it('dialoguri suprapuse: Escape inchide doar cel din varf', async () => {
     const user = userEvent.setup()
     const onResult = vi.fn()

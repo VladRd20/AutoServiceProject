@@ -4,7 +4,7 @@ import LazyBoundary, { lazyRetry } from '../components/LazyBoundary'
 
 // Modalele rare se incarca la cerere (chunk separat) - nu cresc bundle-ul de
 // pornire. SettingsModal e eager (~21 KB): modalul de prima rulare trebuie sa apara
-// imediat, nu dupa ce formularul e deja interactiv. SearchModal ramane eager (Ctrl+K trebuie sa fie instant). Chunk-urile
+// imediat, nu dupa ce formularul e deja interactiv. CommandPalette ramane eager (Ctrl+K trebuie sa fie instant). Chunk-urile
 // se preincarca in idle dupa prima randare, deci prima deschidere nu asteapta.
 const loadReportsModal = () => import('../components/ReportsModal')
 const loadVehicleHistoryModal = () => import('../components/VehicleHistoryModal')
