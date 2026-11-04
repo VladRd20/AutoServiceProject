@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import FisaForm from './components/FisaForm'
 import ListaItems from './components/ListaItems'
 import Totaluri from './components/Totaluri'
@@ -14,6 +14,8 @@ import { formatLei } from './format'
 import { validateFisa, reduceriDinFisa, isFisaEmpty, calcTotaluri } from '../../shared/calculations'
 import { draftBackupRef, autosaverRef } from './draftBackup'
 import { createAutosaver } from './autosave'
+import { applyDraftPatch } from './draftPatch'
+import LazyBoundary, { lazyRetry } from './components/LazyBoundary'
 import './app-extra.css'
 
 // Modalele rare se incarca la cerere (chunk separat) - nu cresc bundle-ul de
@@ -23,10 +25,10 @@ const loadSettingsModal = () => import('./components/SettingsModal')
 const loadReportsModal = () => import('./components/ReportsModal')
 const loadVehicleHistoryModal = () => import('./components/VehicleHistoryModal')
 const loadWhatsNewModal = () => import('./components/WhatsNewModal')
-const SettingsModal = lazy(loadSettingsModal)
-const ReportsModal = lazy(loadReportsModal)
-const VehicleHistoryModal = lazy(loadVehicleHistoryModal)
-const WhatsNewModal = lazy(loadWhatsNewModal)
+const SettingsModal = lazyRetry(loadSettingsModal)
+const ReportsModal = lazyRetry(loadReportsModal)
+const VehicleHistoryModal = lazyRetry(loadVehicleHistoryModal)
+const WhatsNewModal = lazyRetry(loadWhatsNewModal)
 
 // Drafturile se reciteasca integral cel mult o data la atatea ms in timpul
 // salvarilor automate (plasa de siguranta); intre timp se aplica un patch local.
@@ -192,6 +194,9 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   const fisaRef = useRef(null)
   const readOnlyRef = useRef(readOnly)
   const patchDraftRef = useRef(null)
+  // Id-uri de drafturi finalizate/sterse: un callback 'saved' intarziat al
+  // autosave-ului nu are voie sa le readuca in sidebar.
+  const removedDraftIdsRef = useRef(new Set())
   const lastDraftsRefreshRef = useRef(0)
   const errorToastedRef = useRef(false)
   // true cat timp finalizam: nu trimitem update-uri catre autosaver, altfel
@@ -364,13 +369,12 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
   // si dedupe-ul) sau ca plasa de siguranta, cel mult o data la 10s.
   patchDraftRef.current = (doc, id) => {
     const prev = draftsRef.current
-    if (!prev.some((d) => d.id === id)) {
+    const { action, next } = applyDraftPatch(prev, doc, id, removedDraftIdsRef.current)
+    if (action === 'ignore') return
+    if (action === 'refresh') {
       refreshDrafts()
       return
     }
-    const entry = { ...doc, id, status: 'draft', updatedAt: new Date().toISOString() }
-    // Cel mai recent modificat primul, ca in listDrafts.
-    const next = [entry, ...prev.filter((d) => d.id !== id)]
     draftsRef.current = next
     if (!sameDraftsView(prev, next)) setDrafts(next)
     if (Date.now() - lastDraftsRefreshRef.current >= DRAFTS_SAFETY_REFRESH_MS) refreshDrafts()
@@ -545,6 +549,14 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
       return null
     })
   }, [])
+
+  const closeSettings = () => {
+    if (firstRunOpen) lsSet(FIRST_RUN_KEY, '1')
+    setFirstRunOpen(false)
+    setSettingsOpen(false)
+  }
+  const closeReports = () => setReportsOpen(false)
+  const closeVehicleHistory = () => setVehicleHistoryQuery(null)
 
   // Starea backup-ului automat: la pornire, la 2 minute si dupa finalizare.
   const refreshBackupStatus = useCallback(async () => {
@@ -732,11 +744,13 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
         resetToNewFisa()
         setErrors({})
       }
+      removedDraftIdsRef.current.add(id)
       const res = await window.serviceAuto.fisa.deleteDraft(id)
       if (res.ok) {
         if (lsGet(LAST_DRAFT_KEY) === id) lsSet(LAST_DRAFT_KEY, null)
         refreshDrafts()
       } else {
+        removedDraftIdsRef.current.delete(id) // stergerea a esuat: draftul exista in continuare
         showToast('error', res.error.message)
         refreshDrafts()
       }
@@ -826,9 +840,10 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
     let finalizedOk = false
     try {
       const current = fisaRef.current || fisa
+      const finalId = current.id || autosaver.getId()
       let res
       try {
-        res = await window.serviceAuto.fisa.finalize({ ...current, id: current.id || autosaver.getId() })
+        res = await window.serviceAuto.fisa.finalize({ ...current, id: finalId })
       } catch (err) {
         res = { ok: false, error: { code: 'IPC', message: err?.message || 'Finalizarea a eșuat.' } }
       }
@@ -843,6 +858,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
 
       // Draftul a disparut (main l-a sters la finalizare) - nimic de mai salvat.
       finalizedOk = true
+      if (finalId) removedDraftIdsRef.current.add(finalId)
       autosaver.reset(null)
       if (lsGet(LAST_DRAFT_KEY) === (current.id || null)) lsSet(LAST_DRAFT_KEY, null)
       refreshBackupStatus()
@@ -1337,12 +1353,9 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
       {/* Fallback null: chunk-urile sunt preincarcate, deci modalul apare practic instant. */}
       <Suspense fallback={null}>
         {(settingsOpen || firstRunOpen) && (
+          <LazyBoundary showToast={showToast} onClose={closeSettings}>
           <SettingsModal
-            onClose={() => {
-              if (firstRunOpen) lsSet(FIRST_RUN_KEY, '1')
-              setFirstRunOpen(false)
-              setSettingsOpen(false)
-            }}
+            onClose={closeSettings}
             showToast={showToast}
             confirm={confirmAction}
             onDataChanged={onDataChanged}
@@ -1359,17 +1372,27 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
             firstRun={firstRunOpen}
             readOnly={readOnly}
           />
+          </LazyBoundary>
         )}
 
-        {whatsNew && <WhatsNewModal entries={whatsNew.entries} onClose={closeWhatsNew} />}
+        {whatsNew && (
+          <LazyBoundary showToast={showToast} onClose={closeWhatsNew}>
+            <WhatsNewModal entries={whatsNew.entries} onClose={closeWhatsNew} />
+          </LazyBoundary>
+        )}
 
-        {reportsOpen && <ReportsModal onClose={() => setReportsOpen(false)} showToast={showToast} />}
+        {reportsOpen && (
+          <LazyBoundary showToast={showToast} onClose={closeReports}>
+            <ReportsModal onClose={closeReports} showToast={showToast} />
+          </LazyBoundary>
+        )}
 
         {vehicleHistoryQuery && (
+          <LazyBoundary showToast={showToast} onClose={closeVehicleHistory}>
           <VehicleHistoryModal
             vin={vehicleHistoryQuery.vin}
             nrInmatriculare={vehicleHistoryQuery.nrInmatriculare}
-            onClose={() => setVehicleHistoryQuery(null)}
+            onClose={closeVehicleHistory}
             onOpenPdf={handleOpenPdfFromSearch}
             onPrintPdf={handlePrintPdfFromList}
             onDeleteFinalized={handleDeleteFinalized}
@@ -1377,6 +1400,7 @@ export default function App({ readOnly = false, onRequestActivation } = {}) {
             onNewForProfile={handleNewFisaForProfile}
             showToast={showToast}
           />
+          </LazyBoundary>
         )}
       </Suspense>
     </div>
