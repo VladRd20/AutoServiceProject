@@ -35,6 +35,10 @@ Data is never stored next to the `.exe` (an NSIS update wipes the install folder
 | Corrupt `app-config.json` (holds the custom data folder) | Bad file copied to `app-config.json.corrupt-<time>`, config restored from `app-config.json.bak` (last good version, kept on every write); writes are atomic. If no good `.bak` exists the file is left untouched and no setting is written over it |
 | Fișă briefly unreadable at start (antivirus lock) | Skipped, not quarantined; re-read on the next list/search until it loads (no restart needed) |
 | Hand-edited / oversize entry in an imported backup | Each entry is migrated + sanitized before writing; unusable ones (e.g. > 300 lines) are skipped and counted as `invalide`, the rest is imported |
+| File locked by antivirus / OneDrive placeholder | rename/unlink are retried with exponential backoff + jitter (EBUSY/EPERM/EACCES/EMFILE/ENFILE), ~3-5 s total budget; the happy path never waits |
+| Sync-conflict copies (`name-DESKTOP-XXXX.json`, `name (1).json`, `-conflict-`, Dropbox "conflicted copy") and duplicate `nr` | Nothing is deleted or hidden; logged as warnings and exposed through `getStoreWarnings()` (`fise.js`) for the UI |
+| Data folder lost while the app runs (USB pulled, network drop) | After 3 consecutive write failures with drive-lost errors (ENOENT/ENOTDIR/ENODEV/EIO/network), the startup probe is re-run; if it fails the app switches to `date-temporar` exactly like at startup (banner, merge-back later) |
+| Large data and snapshots | Snapshots/exports are streamed to a temp file (fsync -> rename), one fișă at a time, yielding to the event loop every 50 entries; same JSON shape as before (older app versions can import them). On window close no new snapshot is taken if one is < 10 min old |
 | Update installation | Draft flush + final backup before `quitAndInstall` |
 
 Manual tools (Settings → Backup): backup now, export a backup file (e.g. to USB), restore from a file or from the latest snapshot. Restore **only adds what is missing** and never overwrites an existing fișă.

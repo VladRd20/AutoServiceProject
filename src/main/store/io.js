@@ -41,10 +41,30 @@ const renameFile = (from, to) => {
 const TRANSIENT = new Set(['EPERM', 'EBUSY', 'EACCES', 'EMFILE', 'ENFILE'])
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-// Pe Windows, antivirusul/indexerul poate tine scurt un fisier deschis si
-// rename/unlink esueaza cu EPERM/EBUSY - o reincercare scurta rezolva de
-// obicei, in loc sa piarda o salvare.
-export async function withRetry(fn, attempts = 4) {
+// Erori care sugereaza ca DISCUL/folderul a disparut (unitate scoasa, retea
+// cazuta), nu o blocare scurta. Folosite de paths.js pentru re-proba.
+const LOST_DRIVE = new Set([
+  'ENOENT', 'ENOTDIR', 'ENODEV', 'EIO', 'ENXIO', 'ENETDOWN', 'ENETUNREACH', 'ENOTCONN',
+  'EHOSTUNREACH', 'ETIMEDOUT', 'ECONNRESET', 'ENONET', 'UNKNOWN'
+])
+export const isTransientCode = (code) => TRANSIENT.has(code)
+export const isLostDriveCode = (code) => LOST_DRIVE.has(code)
+
+// Cârlige (setate de paths.js): raporteaza rezultatul fiecarei scrieri atomice.
+export const ioHooks = { onWriteOk: null, onWriteFail: null }
+const notify = (name, ...args) => {
+  try {
+    ioHooks[name]?.(...args)
+  } catch {
+    /* un cârlig defect nu are voie sa strice scrierea */
+  }
+}
+
+// Pe Windows, antivirusul/indexerul/OneDrive poate tine un fisier deschis si
+// rename/unlink esueaza cu EPERM/EBUSY - reincercam cu backoff exponential +
+// jitter. Cu valorile implicite (8 incercari, baza 50ms, plafon 1s) bugetul
+// total e ~2.7-4.4s; calea fericita (prima incercare reusita) nu asteapta deloc.
+export async function withRetry(fn, attempts = 8, { baseMs = 50, maxMs = 1000 } = {}) {
   let last
   for (let i = 0; i < attempts; i++) {
     try {
@@ -52,10 +72,31 @@ export async function withRetry(fn, attempts = 4) {
     } catch (err) {
       last = err
       if (!TRANSIENT.has(err?.code) || i === attempts - 1) throw err
-      await sleep(40 * (i + 1))
+      const delay = Math.min(maxMs, baseMs * 2 ** i)
+      await sleep(delay * (0.75 + Math.random() * 0.5))
     }
   }
   throw last
+}
+
+// Scriere atomica prin STREAMING: `producer(write)` emite continutul in bucati
+// (write = async string => void); apoi fsync -> rename. Nu tine tot continutul
+// in memorie. Aceleasi garantii ca writeJsonAtomic (tmp orfan la crash).
+export async function writeStreamAtomic(filePath, producer, failMessage = 'Nu s-a putut scrie fișierul pe disc.') {
+  const tmpPath = `${filePath}${tmpSuffix()}`
+  try {
+    const handle = await fs.open(tmpPath, 'w')
+    try {
+      await producer((chunk) => handle.write(chunk, null, 'utf-8'))
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+    await withRetry(() => renameFile(tmpPath, filePath))
+  } catch (err) {
+    await fs.unlink(tmpPath).catch(() => {})
+    throw toAppError(err, failMessage)
+  }
 }
 
 // Scriere atomica + durabila: tmp -> fsync -> rename. Fara fsync, o cadere de
@@ -73,8 +114,10 @@ export async function writeJsonAtomic(filePath, data, failMessage = 'Nu s-a putu
     await withRetry(() => renameFile(tmpPath, filePath))
   } catch (err) {
     await fs.unlink(tmpPath).catch(() => {})
+    notify('onWriteFail', filePath, err)
     throw toAppError(err, failMessage)
   }
+  notify('onWriteOk', filePath)
 }
 
 // Copie atomica (pentru backup): un crash la mijlocul copierii nu lasa un

@@ -14,7 +14,8 @@ import {
   mapLimit,
   readJson,
   runExclusive,
-  writeJsonAtomic
+  writeJsonAtomic,
+  writeStreamAtomic
 } from './io'
 import {
   ensureDirs,
@@ -48,7 +49,8 @@ const status = { lastBackupAt: null, lastError: null, lastSnapshotAt: 0 }
 // + snapshot-uri zilnice (un singur fisier JSON cu tot), ultimele 30 de zile:
 //   protejeaza si de o fisa CORUPTA/modificata gresit care s-ar propaga in
 //   oglinzi - snapshot-ul de ieri ramane bun.
-export function backupNow() {
+export function backupNow(opts) {
+  const closing = Boolean(opts && opts.closing === true)
   return runExclusive('backup', async () => {
     await ensureDirs()
     const localMirror = path.join(getBackupDir(), 'mirror')
@@ -76,7 +78,7 @@ export function backupNow() {
           await copyFileAtomic(getCounterPath(), path.join(dest, 'contor.json')).catch(() => {})
         }
       }
-      await maybeSnapshot(total)
+      await maybeSnapshot(total, { closing })
       status.lastBackupAt = new Date().toISOString()
       status.lastError = null
       log.info(`[backup] actualizat (local + safety-backup): ${total} fisiere copiate/actualizate`)
@@ -140,16 +142,50 @@ async function readJsonDir(dir) {
   return out
 }
 
-async function buildBundle() {
-  const settings = await readJson(getSettingsPath())
-  return {
-    format: BUNDLE_FORMAT,
-    version: 1,
-    createdAt: new Date().toISOString(),
-    fise: await readJsonDir(getFiseDir()),
-    drafturi: await readJsonDir(getDraftsDir()),
-    setari: settings.ok ? settings.value : null
-  }
+const BUNDLE_BATCH = 50
+const yieldToLoop = () => new Promise((r) => setImmediate(r))
+
+// Scrie bundle-ul INCREMENTAL (streaming): antet, apoi fiecare fisa serializata
+// individual (compact), cate BUNDLE_BATCH odata, cedand bucla de evenimente intre
+// loturi. Forma e identica cu cea veche { format, version, createdAt, fise,
+// drafturi, setari } - doar fara indentare - deci importBackup (si versiunile
+// vechi ale aplicatiei) il citesc neschimbat. Intoarce numarul de intrari.
+async function writeBundleStreaming(destFile, failMessage) {
+  const counts = { fise: 0, drafturi: 0 }
+  await writeStreamAtomic(
+    destFile,
+    async (write) => {
+      const settings = await readJson(getSettingsPath())
+      await write(
+        `{"format":${JSON.stringify(BUNDLE_FORMAT)},"version":1,"createdAt":${JSON.stringify(new Date().toISOString())}`
+      )
+      for (const [key, dir] of [
+        ['fise', getFiseDir()],
+        ['drafturi', getDraftsDir()]
+      ]) {
+        await write(`,"${key}":{`)
+        const names = (await listFiles(dir)).filter((n) => n.endsWith('.json') && !isTmpName(n))
+        let first = true
+        for (let i = 0; i < names.length; i += BUNDLE_BATCH) {
+          const parts = []
+          await mapLimit(names.slice(i, i + BUNDLE_BATCH), 32, async (n) => {
+            const r = await readJson(path.join(dir, n))
+            if (r.ok) parts.push(`${JSON.stringify(n.replace(/\.json$/, ''))}:${JSON.stringify(r.value)}`)
+          })
+          if (parts.length) {
+            await write((first ? '' : ',') + parts.join(','))
+            first = false
+            counts[key] += parts.length
+          }
+          await yieldToLoop()
+        }
+        await write('}')
+      }
+      await write(`,"setari":${JSON.stringify(settings.ok ? settings.value : null)}}`)
+    },
+    failMessage
+  )
+  return counts
 }
 
 const dayStamp = (d = new Date()) => {
@@ -157,15 +193,20 @@ const dayStamp = (d = new Date()) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-async function maybeSnapshot(changedCount) {
+async function maybeSnapshot(changedCount, { closing = false } = {}) {
   const dir = getSnapshotsDir()
   const today = path.join(dir, `snapshot-${dayStamp()}.json`)
   const haveToday = await exists(today)
-  const recent = Date.now() - status.lastSnapshotAt < SNAPSHOT_MIN_INTERVAL_MS
+  let lastAt = status.lastSnapshotAt
+  // La inchidere flush-ul trebuie sa ramana scurt: nu refacem snapshot-ul daca
+  // unul (chiar dintr-o sesiune anterioara) are < 10 minute.
+  if (closing && haveToday) lastAt = Math.max(lastAt, (await fs.stat(today).catch(() => null))?.mtimeMs || 0)
+  const recent = Date.now() - lastAt < SNAPSHOT_MIN_INTERVAL_MS
   if (haveToday && (changedCount === 0 || recent)) return
+  if (closing && recent) return
   try {
     await fs.mkdir(dir, { recursive: true })
-    await writeJsonAtomic(today, await buildBundle(), 'Nu s-a putut scrie snapshot-ul.')
+    await writeBundleStreaming(today, 'Nu s-a putut scrie snapshot-ul.')
     status.lastSnapshotAt = Date.now()
     const all = (await listFiles(dir)).filter((n) => /^snapshot-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort()
     for (const old of all.slice(0, Math.max(0, all.length - SNAPSHOT_KEEP))) {
@@ -180,9 +221,8 @@ async function maybeSnapshot(changedCount) {
 export async function exportBackup(destFile) {
   await ensureDirs()
   if (typeof destFile !== 'string' || !destFile.trim()) throw new AppError('INVALID_PATH', 'Cale invalidă.')
-  const bundle = await buildBundle()
-  await writeJsonAtomic(destFile, bundle, 'Nu s-a putut scrie fișierul de backup.')
-  return { path: destFile, fise: Object.keys(bundle.fise).length, drafturi: Object.keys(bundle.drafturi).length }
+  const counts = await writeBundleStreaming(destFile, 'Nu s-a putut scrie fișierul de backup.')
+  return { path: destFile, fise: counts.fise, drafturi: counts.drafturi }
 }
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v)
@@ -330,7 +370,7 @@ export async function flushBackup() {
     timer = null
   }
   try {
-    await backupNow()
+    await backupNow({ closing: true })
   } catch {
     /* deja logat */
   }
