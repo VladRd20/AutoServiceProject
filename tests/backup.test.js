@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fisa, ls, makeEnv, mkTmp, read } from './helpers'
 
 let env
@@ -182,6 +182,23 @@ describe('folder de date', () => {
     expect(ls(path.join(usb, 'fise'))).toContain(`${a.baseName}.json`)
     expect(fs.existsSync(tempDir)).toBe(false) // redenumit "fuzionat", nu sters
     expect(ls(env.userData).some((n) => n.startsWith('date-temporar-fuzionat-'))).toBe(true)
+  })
+
+  it('changeDataPath: config nescriibil -> anuleaza curat, baseDir ramane neschimbat', async () => {
+    const { fise, paths } = env.s
+    await fise.finalizeFisa(fisa())
+    const cfgFile = path.join(env.userData, 'app-config.json')
+    const bad = '{"dataPath":"D:\\\\x"'
+    fs.writeFileSync(cfgFile, bad)
+    const real = fs.copyFileSync
+    vi.spyOn(fs, 'copyFileSync').mockImplementation((from, to, ...r) => {
+      if (String(to).includes('.corrupt-')) throw Object.assign(new Error('full'), { code: 'ENOSPC' })
+      return real(from, to, ...r)
+    })
+    const before = paths.getBaseDir()
+    await expect(paths.changeDataPath(path.join(mkTmp('nou-'), 'x'))).rejects.toMatchObject({ code: 'CONFIG_UNWRITABLE' })
+    expect(paths.getBaseDir()).toBe(before)
+    expect(fs.readFileSync(cfgFile, 'utf-8')).toBe(bad)
   })
 
   it('changeDataPath: copiaza, verifica, comuta; refuza foldere imbricate; pastreaza originalul', async () => {
