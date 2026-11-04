@@ -1,0 +1,80 @@
+/* ===== Dropdown-uri: autocomplete si meniul "..." (overflow). ===== */
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-md);
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.autocomplete-dropdown li {
+  padding: 7px 10px;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.autocomplete-dropdown li.active,
+.autocomplete-dropdown li:hover {
+  background: var(--info-bg);
+  color: var(--accent-hover);
+}
+
+.overflow-menu {
+  width: auto;
+}
+
+.overflow-menu .autocomplete-dropdown {
+  left: auto;
+  right: 0;
+  min-width: 220px;
+  white-space: nowrap;
+}
+
+/* Itemii sunt <li><button>: padding-ul sta pe <button> (elementul focusabil
+   real), li ramane doar wrapper - hover-ul de mai sus tot functioneaza, iar
+   :focus-within acopera navigarea cu Tab. */
+.overflow-menu .autocomplete-dropdown li {
+  padding: 0;
+}
+
+.overflow-menu .autocomplete-dropdown li button {
+  --btn-min-h: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  border-radius: inherit;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.overflow-menu .autocomplete-dropdown li button:disabled {
+  opacity: 0.5;
+}
+
+.overflow-menu .autocomplete-dropdown li:focus-within {
+  background: var(--info-bg);
+  color: var(--accent-hover);
+}

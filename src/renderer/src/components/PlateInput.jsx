@@ -1,5 +1,4 @@
 import React from 'react'
-import './plate.css'
 
 // Drapelul Republicii Moldova, mic, ca icon in interiorul campului (SVG inline).
 function MoldovaFlag() {

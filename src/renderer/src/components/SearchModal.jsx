@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { calcTotaluri, reduceriDinFisa } from '../../../shared/calculations'
-import './search-extra.css'
 import { PRESETS, hasRange, presetRange } from '../../../shared/dateRange'
 
 const SEARCH_DEBOUNCE_MS = 300

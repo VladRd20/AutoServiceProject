@@ -1,0 +1,114 @@
+/* ===== Bannere: eroare/avertisment de aplicatie, banner de actualizare,
+   punctul de notificare de pe "Setari". ===== */
+
+.app-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px var(--space-4);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  border-bottom: 1px solid var(--danger);
+  background: var(--danger-solid-bg);
+  color: var(--danger-solid-ink);
+}
+
+.app-banner.warn {
+  background: var(--warn-solid-bg);
+  border-bottom-color: var(--warn-solid-border);
+  color: var(--warn-solid-ink);
+}
+
+.app-banner span {
+  flex: 1;
+}
+
+.app-banner button {
+  flex-shrink: 0;
+}
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  color: var(--info-ink);
+  padding: 10px var(--space-4);
+  border-radius: var(--radius-control);
+  margin-bottom: var(--space-4);
+  font-size: var(--fs-sm);
+}
+
+.update-banner button {
+  --btn-min-h: var(--control-h-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  padding: 0 14px;
+  font-size: var(--fs-sm);
+  flex-shrink: 0;
+}
+
+.update-banner button:hover {
+  background: var(--accent-hover);
+}
+
+.update-banner-ready {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success-ink);
+}
+
+.update-banner-ready button {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--success-on);
+}
+
+.update-banner-ready button:hover {
+  filter: brightness(1.08);
+}
+
+.update-banner-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.update-notes {
+  display: block;
+  font-size: var(--fs-xs);
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-progress {
+  flex: 1;
+  height: 6px;
+  background: var(--border-subtle);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  max-width: 200px;
+}
+
+.update-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+/* Punct de notificare pe "Setari" cand exista o actualizare */
+.update-dot {
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--warn-dot);
+  box-shadow: 0 0 0 2px var(--sidebar-bg);
+  flex: none;
+}

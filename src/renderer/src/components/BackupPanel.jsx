@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import './settings-extra.css'
 
 const pad = (n) => String(n).padStart(2, '0')
 

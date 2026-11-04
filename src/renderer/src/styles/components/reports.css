@@ -1,0 +1,182 @@
+/* ===== Rapoarte: segmented control, KPI-uri, bare si grafic lunar. ===== */
+
+.reports-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  align-self: flex-start;
+}
+
+.segmented button {
+  --btn-min-h: var(--control-h-sm);
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 14px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.segmented button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: var(--space-4);
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+}
+
+.kpi-label {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+}
+
+.report-block {
+  margin-bottom: 18px;
+}
+
+.report-block h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.bar-row {
+  margin-bottom: 9px;
+}
+
+.bar-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--fs-sm);
+  margin-bottom: 3px;
+}
+
+.bar-head span {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.bar-track,
+.split-bar {
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+
+.bar-fill,
+.split-a {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.split-bar {
+  height: 10px;
+  background: color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
+}
+
+.split-legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.dot-a {
+  background: var(--accent);
+}
+
+.dot-b {
+  background: color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
+}
+
+.month-chart {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  height: 150px;
+}
+
+.month-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.month-val {
+  height: 14px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.month-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.month-bar {
+  width: 60%;
+  max-width: 44px;
+  border-radius: var(--radius-control) var(--radius-control) 0 0;
+  background: var(--accent);
+}
+
+.month-label {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}

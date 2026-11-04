@@ -1,0 +1,189 @@
+/* ===== Butoane. Inaltimea vine din --control-h (densitate); variantele mici
+   o suprascriu prin --btn-min-h, fara lupte de specificitate. ===== */
+
+button {
+  --btn-min-h: var(--control-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--btn-min-h);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-control);
+  padding: 0 var(--space-4);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow-sm);
+  /* Doar apasarea (1px, instant) da feedback tactil la click - nu e o
+     animatie, e un raspuns imediat la actiune. */
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    transform 80ms ease;
+}
+
+button:hover {
+  background: var(--surface-hover);
+  border-color: var(--text-faint);
+}
+
+button:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+button:disabled:active {
+  transform: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-release {
+  --btn-min-h: var(--control-h-lg);
+  padding: 0 26px;
+  font-size: var(--fs-lg);
+  letter-spacing: 0.015em;
+}
+
+.btn-release:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-sm {
+  --btn-min-h: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--fs-sm);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: var(--danger-on);
+  border-color: var(--danger);
+}
+
+.btn-danger:hover {
+  filter: brightness(0.92);
+}
+
+.icon-btn {
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+.theme-toggle {
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-lg);
+  line-height: 1;
+  box-shadow: none;
+}
+
+.theme-toggle:hover {
+  border-color: var(--text-faint);
+  box-shadow: var(--shadow-sm);
+}
+
+/* "Inchide" / "Sterge" discret: doar icoana, fara cadru. */
+.btn-remove {
+  --btn-min-h: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: var(--fs-md);
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  box-shadow: none;
+}
+
+.btn-remove:hover {
+  color: var(--danger);
+}
+
+.btn-remove-spacer {
+  width: 32px;
+  flex-shrink: 0;
+}
+
+.linie-head .btn-remove-spacer {
+  width: 32px;
+}
+
+/* Stari dinamice pentru butoane care reflecta un proces in fundal (ex.
+   verificare actualizari) - doar culoare, fara nicio miscare/animatie. */
+.btn-status-info {
+  background: var(--info-bg);
+  border-color: var(--info-border);
+  color: var(--info-ink);
+}
+
+.btn-status-success {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success-ink);
+}
+
+.btn-status-error {
+  background: var(--danger-solid-bg);
+  border-color: var(--danger);
+  color: var(--danger-solid-ink);
+}
+
+.btn-status-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-status-info:hover,
+.btn-status-success:hover,
+.btn-status-error:hover,
+.btn-status-accent:hover {
+  filter: brightness(0.95);
+}
+
+.btn-new {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.btn-new kbd {
+  margin-left: auto;
+  background: var(--on-dark-1);
+  border-color: var(--on-dark-3);
+  color: inherit;
+  opacity: 0.8;
+}

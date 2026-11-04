@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react'
-import './search-extra.css'
 import Modal from './Modal'
 import { formatLei, formatMoney } from '../format'
 

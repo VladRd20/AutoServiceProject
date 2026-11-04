@@ -1,0 +1,208 @@
+/* ===== Sidebar: brand, lista de lucru, recente, butonul Setari. ===== */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 2px 6px;
+}
+
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-control);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--brand-from), var(--brand-to));
+  color: var(--on-dark);
+}
+
+.brand-name {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: var(--fs-lg);
+  letter-spacing: -0.01em;
+  color: var(--sidebar-text);
+}
+
+.sidebar h3 {
+  display: flex;
+  align-items: center;
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sidebar-text-muted);
+}
+
+.sidebar h3 .count-badge {
+  margin-left: var(--space-2);
+}
+
+.sidebar-settings-btn {
+  flex-shrink: 0;
+  justify-content: flex-start;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  border: 1px solid var(--sidebar-active);
+  border-top-color: var(--sidebar-hover);
+}
+
+.sidebar-settings-btn:hover {
+  background: var(--sidebar-hover);
+  border-color: var(--sidebar-active);
+}
+
+.sidebar-settings-btn .version {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--sidebar-text-muted);
+}
+
+.drafts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.drafts-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.drafts-list button:first-child {
+  --btn-min-h: 0;
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--sidebar-text);
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.drafts-list li.active button:first-child {
+  background: var(--sidebar-active);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.drafts-list button:first-child:hover {
+  background: var(--sidebar-hover);
+}
+
+.drafts-list span {
+  font-size: var(--fs-xs);
+  color: var(--sidebar-text-muted);
+}
+
+/* Randul din lista de lucru mosteneste dimensiunea si culoarea butonului.
+   Selectorul are specificitate mai mare decat `.drafts-list span`, deci nu
+   mai e nevoie de !important. */
+.drafts-list .draft-row,
+.recent-info .draft-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--space-2);
+  font-size: inherit;
+  color: inherit;
+}
+
+.draft-row .plate-sm {
+  white-space: nowrap;
+}
+
+/* Textul de ajutor din sidebar sta pe fundal intunecat: culoarea "faint" a
+   temei (gandita pentru suprafete deschise) nu ar avea contrast acolo. */
+.sidebar .hint {
+  color: var(--sidebar-text-muted);
+}
+
+.draft-row em {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--sidebar-text-muted);
+}
+
+.drafts-list .btn-remove {
+  color: var(--sidebar-text-muted);
+  background: transparent;
+  box-shadow: none;
+  padding: 6px;
+}
+
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recent-list li {
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--sidebar-hover);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recent-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.recent-info strong {
+  font-size: var(--fs-sm);
+  color: var(--sidebar-text);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.recent-info span {
+  font-size: var(--fs-xs);
+  color: var(--sidebar-text-muted);
+}
+
+.recent-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.recent-actions button {
+  --btn-min-h: 0;
+  flex: 1;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0;
+  padding: 6px var(--space-1);
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  border: 1px solid var(--sidebar-active);
+  box-shadow: none;
+}
+
+.recent-actions button:hover {
+  background: var(--sidebar-active);
+  border-color: var(--sidebar-active);
+}
+
+.recent-actions .danger-hover:hover {
+  color: var(--danger-on);
+  background: var(--danger);
+  border-color: var(--danger);
+}

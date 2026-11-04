@@ -1,5 +1,4 @@
 import React from 'react'
-import './settings-extra.css'
 
 export default function UpdateBanner({ status, version, percent, notes, onDownload, onInstall }) {
   if (status === 'available') {

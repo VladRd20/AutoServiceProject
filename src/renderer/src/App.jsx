@@ -14,7 +14,6 @@ import { formatLei } from './format'
 import { validateFisa, reduceriDinFisa, isFisaEmpty, calcTotaluri } from '../../shared/calculations'
 import { draftBackupRef, autosaverRef } from './draftBackup'
 import { createAutosaver } from './autosave'
-import './app-extra.css'
 
 // Modalele rare se incarca la cerere (chunk separat) - nu cresc bundle-ul de
 // pornire. SearchModal ramane eager (Ctrl+K trebuie sa fie instant). Chunk-urile

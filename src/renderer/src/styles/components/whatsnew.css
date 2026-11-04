@@ -1,0 +1,74 @@
+/* ===== "Ce e nou" (modal cu istoricul versiunilor). ===== */
+
+.wn-body {
+  max-height: 65vh;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.wn-entry + .wn-entry {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.wn-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.wn-head h3 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.wn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wn-list li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  line-height: 1.4;
+}
+
+.wn-tag {
+  flex: none;
+  min-width: 84px;
+  text-align: center;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  margin-top: 1px;
+}
+
+.wn-nou {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+.wn-imb {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+}
+
+.wn-rez {
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+  color: var(--warn);
+}
+
+.wn-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}

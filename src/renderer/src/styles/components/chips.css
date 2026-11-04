@@ -1,0 +1,87 @@
+/* ===== Chip-uri, insigne si placuta de inmatriculare din antet. ===== */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+}
+
+.chip:empty {
+  display: none;
+}
+
+.chip.chip-error {
+  background: var(--danger-solid-bg);
+  border-color: var(--danger);
+  color: var(--danger-solid-ink);
+}
+
+.chip.chip-warn {
+  background: var(--warn-solid-bg);
+  border-color: var(--warn-solid-border);
+  color: var(--warn-solid-ink);
+}
+
+/* Indicatorul de salvare automata (are si clasa `.chip`) */
+.autosave-status {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.autosave-status.saved {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success-ink);
+}
+
+.count-badge {
+  display: inline-block;
+  min-width: 20px;
+  margin-left: var(--space-2);
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-align: center;
+  vertical-align: 1px;
+}
+
+.sidebar .count-badge {
+  background: var(--sidebar-hover);
+  border-color: var(--sidebar-active);
+  color: var(--sidebar-text-muted);
+}
+
+/* Placuta de inmatriculare */
+.plate {
+  display: inline-block;
+  padding: 2px 10px;
+  border: 1.5px solid var(--text);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.plate-sm {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}

@@ -3,7 +3,6 @@ import { foldForMatch } from '../../../shared/calculations'
 import Autocomplete from './Autocomplete'
 import PlateInput from './PlateInput'
 import Icon from './Icon'
-import './form-extra.css'
 
 // Label-ul era un simplu text alaturi de input, fara asociere htmlFor/id -
 // clic pe text nu focusa inputul, iar un cititor de ecran nu putea anunta

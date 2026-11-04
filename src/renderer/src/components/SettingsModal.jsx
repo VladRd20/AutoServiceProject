@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react'
 import Modal from './Modal'
 import BackupPanel from './BackupPanel'
 import TrashPanel from './TrashPanel'
-import './settings-extra.css'
 
 export default function SettingsModal({ onClose, showToast, confirm, firstRun = false, readOnly = false, onDataChanged, update }) {
   const [loading, setLoading] = useState(true)

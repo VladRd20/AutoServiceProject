@@ -5,7 +5,7 @@ import ErrorBoundary from './ErrorBoundary'
 import LicenseGate from './LicenseGate'
 import TitleBar from './components/TitleBar'
 import { initTheme } from './theme'
-import './styles.css'
+import './styles/index.css'
 
 // Cat mai devreme, inainte de primul render, ca sa nu clipeasca tema gresita.
 initTheme()

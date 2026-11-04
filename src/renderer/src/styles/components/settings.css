@@ -1,0 +1,91 @@
+/* ===== Setari: sectiuni, backup, cos (trash), randul de actualizare.
+   (Bannerul de actualizare e in banners.css, toolbar-ul de rapoarte in reports.css.) ===== */
+
+.settings-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-right: var(--space-1);
+}
+
+.settings-section {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.settings-section h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-md);
+}
+
+.settings-welcome {
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  color: var(--info-ink);
+  border-radius: var(--radius-control);
+  padding: 10px var(--space-3);
+  margin: 0 0 14px;
+  font-size: var(--fs-md);
+}
+
+.settings-warn {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  color: var(--warn-ink);
+  border-radius: var(--radius-control);
+  padding: var(--space-2) 10px;
+  margin: var(--space-2) 0;
+  font-size: var(--fs-sm);
+  word-break: break-word;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: 10px;
+}
+
+.trash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--fs-sm);
+}
+
+.trash-row-info {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trash-row-date {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.update-status.update-success {
+  color: var(--success);
+}
+
+.update-status.update-error {
+  color: var(--danger);
+}
+
+.update-status.update-accent {
+  color: var(--accent);
+  font-weight: 600;
+}

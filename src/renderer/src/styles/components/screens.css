@@ -1,0 +1,80 @@
+/* ===== Ecrane intregi: crash, activare licenta. ===== */
+
+.crash-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  text-align: center;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.activation-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.activation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+}
+
+.activation-close {
+  float: right;
+}
+
+.activation-card {
+  background: var(--elevated);
+  border-radius: var(--radius-card);
+  padding: var(--space-7);
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.activation-card h1 {
+  font-size: var(--fs-xl);
+  margin: 0 0 var(--space-2);
+  color: var(--text);
+}
+
+.activation-card p {
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  margin: 0 0 var(--space-5);
+}
+
+.activation-card textarea {
+  width: 100%;
+  padding: 10px var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
+  resize: vertical;
+  margin-bottom: var(--space-3);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.activation-card button {
+  width: 100%;
+  padding: 10px;
+}
+
+.activation-error {
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  margin: -4px 0 var(--space-3);
+}

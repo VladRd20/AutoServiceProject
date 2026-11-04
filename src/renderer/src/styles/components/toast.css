@@ -1,0 +1,56 @@
+/* ===== Toast-uri (un singur set de reguli; fostele duplicate sunt unite). ===== */
+
+.toast-stack {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 10px;
+  z-index: 50;
+}
+
+.toast {
+  background: var(--sidebar-bg);
+  color: var(--on-dark);
+  border: 1px solid transparent;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 420px;
+  box-shadow: var(--shadow-md);
+}
+
+.toast-error {
+  background: var(--danger-solid-bg);
+}
+
+.toast-success {
+  background: var(--success-bg);
+  color: var(--success-ink);
+  border-color: var(--success-border);
+}
+
+.toast-warning {
+  background: var(--warn-solid-bg);
+  color: var(--warn-solid-ink);
+}
+
+.toast-info {
+  background: var(--info-solid-bg);
+  color: var(--info-solid-ink);
+}
+
+.toast button {
+  background: var(--on-dark-2);
+  border: none;
+  color: inherit;
+}
+
+.toast-close {
+  --btn-min-h: 0;
+  padding: var(--space-1) 6px;
+}

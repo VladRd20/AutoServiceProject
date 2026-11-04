@@ -1,6 +1,5 @@
 import React from 'react'
 import Modal from './Modal'
-import './whatsnew.css'
 
 const TIP = {
   nou: { label: 'Nou', cls: 'wn-nou' },

@@ -1,0 +1,59 @@
+/* ===== Breakpoint-uri (importat ULTIMUL, ca sa bata regulile de baza).
+   1280px = laptop mic (1280x720): sidebar si margini mai stranse.
+   1150px = formularul trece pe o singura coloana.
+   960px  = ferestre ~1024x640: sidebar ingust, topbar pe doua randuri. ===== */
+
+@media (max-width: 1280px) {
+  .app {
+    --main-px: var(--space-6);
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .topbar-search {
+    width: 160px;
+  }
+
+  .topbar-search:focus-visible {
+    width: 210px;
+  }
+
+  .form-col .grid-2 {
+    gap: var(--space-3) var(--space-3);
+  }
+}
+
+@media (max-width: 1150px) {
+  .form-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 960px) {
+  .app {
+    --sidebar-w: 216px;
+    --main-px: var(--space-4);
+  }
+
+  .topbar {
+    padding: 0 var(--space-2);
+  }
+
+  .topbar-actions {
+    flex-wrap: wrap;
+  }
+
+  .totaluri-grid {
+    gap: 0 var(--space-2);
+  }
+
+  .totaluri-grid .th {
+    letter-spacing: 0.02em;
+  }
+
+  .card {
+    padding: var(--space-3) var(--space-4);
+  }
+}

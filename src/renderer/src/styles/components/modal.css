@@ -1,0 +1,98 @@
+/* ===== Modale si dialogul de confirmare. ===== */
+
+.modal-overlay {
+  --modal-top: clamp(16px, 8vh, 64px); /* distanta de sus; se scade si de jos din max-height */
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: var(--modal-top);
+  z-index: 100;
+}
+
+.modal {
+  background: var(--elevated);
+  border-radius: var(--radius-card);
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 2 * var(--modal-top, 8vh));
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-5) var(--space-6);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: var(--fs-xl);
+}
+
+/* Dialog de confirmare custom (inlocuieste window.confirm nativ) - overlay
+   separat, centrat vertical, peste orice alt modal (z-index mai mare) - se
+   poate declansa dintr-un modal deja deschis. */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 110;
+}
+
+.confirm-dialog {
+  background: var(--elevated);
+  border-radius: var(--radius-card);
+  width: min(380px, calc(100vw - 32px));
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-5) 22px;
+}
+
+.confirm-message {
+  margin: 0 0 18px;
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.confirm-body {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.confirm-body .confirm-message {
+  margin: 0;
+}
+
+.confirm-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--info-bg);
+  color: var(--info-ink);
+}
+
+.confirm-icon.danger {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

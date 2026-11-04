@@ -1,0 +1,47 @@
+/* ===== Liste piese / lucrari (randuri `.linie`). ===== */
+
+.linie {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: var(--space-2);
+}
+
+.linie .field {
+  align-self: flex-start;
+}
+
+.linie-head {
+  margin-bottom: var(--space-1);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 6px;
+}
+
+.linie-head .field-small {
+  text-align: right;
+}
+
+.linie .field-small input {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.linie-total {
+  min-width: 110px;
+  align-self: flex-start;
+  text-align: right;
+  font-weight: 600;
+  font-size: var(--fs-md);
+  font-family: var(--font-mono);
+  line-height: var(--control-h); /* aliniat cu inaltimea campurilor de pe rand */
+}
+
+.linie-head .linie-total {
+  line-height: normal;
+  font-weight: 600;
+}

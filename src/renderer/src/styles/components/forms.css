@@ -1,0 +1,231 @@
+/* ===== Formulare: campuri, input/select/textarea, switch, camp de placuta de
+   inmatriculare (prefix md-). Inaltimea campurilor vine din --control-h. ===== */
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3) var(--space-5);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field label {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.field input,
+.field select {
+  height: var(--control-h);
+  padding: 0 var(--control-px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-size: var(--fs-md);
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.field textarea {
+  display: block;
+  margin-bottom: 2px;
+  padding: var(--space-2) var(--control-px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-size: var(--fs-md);
+  font-family: inherit;
+  line-height: 1.4;
+  resize: vertical;
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.field select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.field input::placeholder,
+.field textarea::placeholder,
+.autocomplete input::placeholder {
+  color: var(--text-faint);
+}
+
+.field-grow {
+  flex: 1;
+}
+
+.field-small {
+  width: 100px;
+}
+
+/* VIN pe tot randul din grila cardului Automobil. */
+.field-full {
+  grid-column: 1 / -1;
+}
+
+/* Cod piesa (intern) in lista de piese. */
+.field-cod {
+  width: 130px;
+  flex-shrink: 0;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: var(--fs-xs);
+}
+
+.field-counter {
+  align-self: flex-end;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.field-counter.warn {
+  color: var(--danger);
+}
+
+.fisa-nr {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-weight: normal;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.hint {
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.checkbox-field label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+
+.checkbox-field input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+}
+
+.autocomplete {
+  position: relative;
+  width: 100%;
+}
+
+.autocomplete input {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* Switch "Data curenta" */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Comutatorul de sub caseta de note nu trebuie sa se lipeasca de textarea. */
+.field + .switch {
+  margin-top: 10px;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-track {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  transition: background-color 140ms ease;
+}
+
+.switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 1px 2px var(--thumb-shadow);
+  transition: transform 140ms ease;
+}
+
+.switch input:checked + .switch-track {
+  background: var(--accent);
+}
+
+.switch input:checked + .switch-track::after {
+  transform: translateX(13px);
+}
+
+.switch input:focus-visible + .switch-track {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Camp pentru numarul de inmatriculare: pastreaza stilul campurilor aplicatiei
+   (fundal, bordura, focus din tema); doar iconul cu drapelul si fontul monospatiat
+   il diferentiaza. Clasele au prefix md- ca sa nu se ciocneasca cu `.plate` din antet. */
+.md-plate {
+  position: relative;
+  display: block;
+}
+
+.md-plate-flag {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 22px;
+  height: 15px;
+  margin-top: -7.5px; /* fara transform */
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--ring-neutral);
+  pointer-events: none;
+}
+
+.field .md-plate-input {
+  padding-left: 44px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.field .md-plate-input::placeholder {
+  font-weight: 400;
+  letter-spacing: 1px;
+}
+
+/* aer intre numarul de inmatriculare si randul de campuri de sub el */
+.field:has(> .md-plate) {
+  margin-bottom: 14px;
+}

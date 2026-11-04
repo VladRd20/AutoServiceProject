@@ -1,0 +1,209 @@
+/* ===== Design tokens: SINGURA sursa de adevar pentru culori, tipografie,
+   spatiere, raze, umbre si inaltimea controalelor. Nicio alta foaie de stil
+   nu mai contine valori hex/rgba brute - doar var(--...).
+
+   Teme: fiecare token de culoare e declarat O SINGURA DATA, ca
+   light-dark(<light>, <dark>). Tema efectiva o decide `color-scheme`:
+     - implicit (fara alegere): `light dark` = urmeaza live preferinta sistemului;
+     - [data-theme='light'] / [data-theme='dark']: alegerea explicita.
+   (light-dark() e suportat de Chromium 123+; Electron 33 = Chromium 130.) */
+
+:root {
+  /* ----- Primitive: paleta bruta (nu se folosesc direct in componente) ----- */
+  --white: #ffffff;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-150: #f4f5f7;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-600: #4b5563;
+  --gray-550: #626977;
+  --ink-900: #1f2430;
+  --ink-800: #2d3341;
+  --ink-700: #374151;
+
+  --navy-300: #7fa8cf;
+  --navy-200: #9dbfe0;
+  --navy-400: #3b6a9a;
+  --navy-700: #1c3552;
+  --navy-800: #142639;
+  --navy-950: #0d1b2a;
+
+  --green-50: #f0fdf4;
+  --green-200: #bbf7d0;
+  --green-300: #86efac;
+  --green-400: #4ade80;
+  --green-700: #15803d;
+  --green-900: #14532d;
+  --green-950: #052e16;
+
+  --amber-50: #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-200: #fde68a;
+  --amber-300: #fcd34d;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+  --amber-700: #b45309;
+  --amber-800: #92400e;
+  --amber-900: #78350f;
+
+  --red-50: #fef2f2;
+  --red-200: #fecaca;
+  --red-300: #fca5a5;
+  --red-400: #f87171;
+  --red-600: #dc2626;
+  --red-800: #991b1b;
+  --red-900: #7f1d1d;
+
+  --blue-50: #eff6ff;
+  --blue-100: #dbeafe;
+  --blue-200: #bfdbfe;
+  --blue-800: #1e3a8a;
+  --blue-900: #1e3a5f;
+
+  /* ----- Familii de font ----- */
+  --font-heading: 'Sora', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
+
+  /* ----- Scara tipografica (px) + inaltimi de rand ----- */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+  --lh-xs: 16px;
+  --lh-sm: 18px;
+  --lh-md: 20px;
+  --lh-lg: 24px;
+  --lh-xl: 28px;
+  --lh-2xl: 32px;
+
+  /* ----- Spatiere (grila de 4px) ----- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+
+  /* ----- Raze: 6 controale, 10 carduri/modale, 999 chip-uri ----- */
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-pill: 999px;
+
+  /* ----- Inaltimea controalelor (densitate): compact implicit ----- */
+  --control-h: 34px;
+  --control-h-sm: 28px;
+  --control-h-lg: 42px;
+  --control-px: 12px;
+
+  /* ----- Culori semantice (light-dark(light, dark)) ----- */
+  --bg: light-dark(var(--gray-150), #16181d);
+  --surface: light-dark(var(--white), #1f2229);
+  --surface-2: light-dark(var(--gray-50), #14161a); /* fundal "scufundat": zone secundare, zebra, goluri */
+  --surface-hover: light-dark(var(--gray-100), #262a32);
+  --elevated: light-dark(var(--white), #23272e); /* modale, dropdown-uri, popover-e */
+  --border: light-dark(var(--gray-300), #3a3f47);
+  --border-subtle: light-dark(var(--gray-200), #2c2f36);
+
+  --text: light-dark(var(--ink-900), #e8eaed);
+  --text-muted: light-dark(var(--gray-600), #aab0ba);
+  --text-faint: light-dark(var(--gray-550), #9199a5); /* >= 4.5:1 pe toate suprafetele, in ambele teme */
+
+  /* Sidebar-ul si bara de titlu sunt intunecate in ambele teme */
+  --sidebar-bg: light-dark(var(--ink-900), #101216);
+  --sidebar-text: #e5e7eb;
+  --sidebar-text-muted: light-dark(var(--gray-400), #7c828d);
+  --sidebar-hover: light-dark(var(--ink-800), #1a1d23);
+  --sidebar-active: light-dark(var(--ink-700), #262a32);
+
+  --accent: light-dark(var(--navy-700), var(--navy-300));
+  --accent-hover: light-dark(var(--navy-800), var(--navy-200));
+  --accent-ink: light-dark(var(--white), var(--navy-950));
+  --brand-from: var(--navy-400);
+  --brand-to: var(--navy-700);
+
+  --focus-ring-color: var(--accent);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring: var(--focus-ring-width) solid var(--focus-ring-color);
+
+  /* ----- Status: success / warn / danger / info -----
+     -bg/-border/-ink = varianta "soft" (fundal tintat, text inchis);
+     -solid-* = varianta plina (toast, banner, chip de eroare);
+     --X = culoarea de accent (text/bordura/umplere), --X-on = text pe umplere. */
+  --success: light-dark(var(--green-700), var(--green-400));
+  --success-on: light-dark(var(--white), var(--green-950));
+  --success-bg: light-dark(var(--green-50), #14291c);
+  --success-border: light-dark(var(--green-200), #1f4a2e);
+  --success-ink: light-dark(var(--green-900), var(--green-300));
+
+  --warn: light-dark(var(--amber-700), var(--amber-400));
+  --warn-dot: var(--amber-500);
+  --warn-bg: light-dark(var(--amber-50), #2a2110);
+  --warn-border: light-dark(var(--amber-200), #5c4410);
+  --warn-ink: light-dark(var(--amber-800), var(--amber-300));
+  --warn-solid-bg: var(--amber-900);
+  --warn-solid-border: var(--amber-500);
+  --warn-solid-ink: var(--amber-100);
+
+  --danger: light-dark(var(--red-600), var(--red-400));
+  --danger-on: light-dark(var(--white), #2a0a0a);
+  --danger-bg: light-dark(var(--red-50), #2a1416);
+  --danger-border: light-dark(var(--red-200), #5c2326);
+  --danger-ink: light-dark(var(--red-800), var(--red-300));
+  --danger-solid-bg: light-dark(var(--red-900), #4c1414);
+  --danger-solid-ink: var(--white);
+
+  --info: light-dark(var(--blue-800), var(--blue-200));
+  --info-bg: light-dark(var(--blue-50), #16233d);
+  --info-border: light-dark(var(--blue-200), #234876);
+  --info-ink: light-dark(var(--blue-800), var(--blue-200));
+  --info-solid-bg: var(--blue-900);
+  --info-solid-ink: var(--blue-100);
+
+  /* Suprafete peste continut intunecat (toast, butoane in toast, kbd in sidebar) */
+  --on-dark: var(--white);
+  --on-dark-1: rgba(255, 255, 255, 0.12);
+  --on-dark-2: rgba(255, 255, 255, 0.15);
+  --on-dark-3: rgba(255, 255, 255, 0.2);
+  --scrim: rgba(10, 12, 16, 0.55);
+  --ring-neutral: rgba(128, 128, 128, 0.35);
+  --thumb-shadow: rgba(0, 0, 0, 0.3);
+
+  /* ----- Umbre: 3 niveluri. Light = blur discret; dark = bordura de 1px +
+     highlight subtil, nu blur greu. Culorile sunt light-dark(), geometria e comuna. ----- */
+  --sh-ring: light-dark(transparent, rgba(255, 255, 255, 0.07));
+  --sh-hl: light-dark(transparent, rgba(255, 255, 255, 0.05));
+  --sh-ink-1: light-dark(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.3));
+  --sh-ink-2: light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.35));
+  --sh-ink-3: light-dark(rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.4));
+  --shadow-sm: 0 1px 2px var(--sh-ink-1), 0 0 0 1px var(--sh-ring), inset 0 1px 0 var(--sh-hl);
+  --shadow-md: 0 4px 12px var(--sh-ink-2), 0 0 0 1px var(--sh-ring), inset 0 1px 0 var(--sh-hl);
+  --shadow-lg: 0 12px 32px var(--sh-ink-3), 0 0 0 1px var(--sh-ring), inset 0 1px 0 var(--sh-hl);
+  --shadow-bar: 0 -6px 18px var(--sh-ink-1);
+
+  color-scheme: light dark; /* implicit: urmeaza sistemul */
+}
+
+/* Alegerea explicita a utilizatorului bate preferinta sistemului. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/* Densitate: compact (implicit, definit mai sus) sau comfortable.
+   Comutatorul din UI vine ulterior; aici sunt doar tokenii. */
+[data-density='comfortable'] {
+  --control-h: 40px;
+  --control-h-sm: 32px;
+  --control-h-lg: 48px;
+  --control-px: 14px;
+}
