@@ -176,6 +176,14 @@ function licenseFilePath() {
   return path.join(app.getPath('userData'), 'license.dat')
 }
 
+// True daca cheia stocata are semnatura valida si aceleasi date ca payload-ul din inregistrare.
+function recordKeyMatches(record) {
+  const verified = verifyLicenseKey(record.key)
+  if (!verified) return false
+  const p = record.payload
+  return deriveId(verified) === deriveId(p) && verified.product === p.product && verified.client === p.client
+}
+
 let cachedActivated = null
 let cachedActivatedAt = 0
 let cachedPayload = null
@@ -204,6 +212,13 @@ export function isActivated() {
     try {
       const record = decryptRecord(raw, deriveKey(fingerprint))
       if (record?.fingerprint === fingerprint && record?.payload) {
+        // Re-verificam semnatura cheii originale: un license.dat falsificat
+        // (cu payload inventat) nu trece. Inregistrarile vechi, fara "key"
+        // (activate inainte de aceasta versiune), raman valabile ca pana acum.
+        if (record.key !== undefined && !recordKeyMatches(record)) {
+          log.warn('[license] cheia stocata nu corespunde inregistrarii - activare respinsa')
+          return false
+        }
         cachedActivated = true
         cachedPayload = record.payload
         return true
@@ -301,7 +316,7 @@ export async function activate(keyString) {
   }
 
   const fingerprint = getMachineFingerprint()
-  const record = { payload, fingerprint, activatedAt: new Date().toISOString() }
+  const record = { payload, key: String(keyString).trim(), fingerprint, activatedAt: new Date().toISOString() }
   const encrypted = encryptRecord(record, deriveKey(fingerprint))
 
   fs.mkdirSync(path.dirname(licenseFilePath()), { recursive: true })
