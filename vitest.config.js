@@ -7,8 +7,7 @@ export default defineConfig({
     include: ['tests/**/*.test.js', 'tests/**/*.dom.test.jsx'],
     setupFiles: ['tests/setup.js'],
     testTimeout: 20000,
-    pool: 'forks',
-    poolOptions: { forks: { singleFork: true } }
+    pool: 'forks'
   },
   resolve: {
     alias: { electron: resolve('tests/stubs/electron.js') }

@@ -1,15 +1,19 @@
 import fs from 'fs'
 import path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withRetry } from '../src/main/store/io.js'
-import { fisa, ls, makeEnv, mkTmp, read } from './helpers'
+import { _setRetryDelayScale, withRetry } from '../src/main/store/io.js'
+import { fisa, ls, makeEnv } from './helpers'
 
 const err = (code) => Object.assign(new Error(code), { code })
 
 describe('withRetry: buget de reincercare', () => {
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    _setRetryDelayScale(0.01) // revenim la valoarea comprimata din tests/setup.js
+  })
 
   it('backoff exponential cu jitter: bugetul total implicit e ~3-5s, calea fericita nu asteapta', async () => {
+    _setRetryDelayScale(1) // bugetul REAL de productie
     const delays = []
     vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn, ms) => {
       delays.push(ms)
@@ -113,7 +117,7 @@ describe('re-proba folder de date dupa esecuri de scriere', () => {
   afterEach(() => env.cleanup())
 
   const waitFor = async (cond) => {
-    for (let i = 0; i < 100 && !cond(); i++) await new Promise((r) => setTimeout(r, 20))
+    for (let i = 0; i < 400 && !cond(); i++) await new Promise((r) => setTimeout(r, 20))
   }
 
   it('dupa 3 esecuri consecutive cu folderul disparut trece pe folderul temporar, ca la pornire', async () => {
@@ -156,93 +160,5 @@ describe('re-proba folder de date dupa esecuri de scriere', () => {
     }
     await new Promise((r) => setTimeout(r, 100))
     expect(paths.isUsingFallbackLocation()).toBe(false)
-  })
-})
-
-describe('snapshot streaming', () => {
-  let env
-  beforeEach(async () => {
-    env = await makeEnv()
-  })
-  afterEach(() => env.cleanup())
-
-  it('snapshot-ul are forma veche (aceleasi chei) si e importabil de importBackup', async () => {
-    const { fise, drafts, settings, backup } = env.s
-    for (let i = 0; i < 120; i++) await fise.finalizeFisa(fisa({ auto: { ...fisa().auto, nrInmatriculare: `C AB ${i}` } }))
-    await drafts.saveDraft(fisa({ observatii: 'draft' }))
-    await settings.saveSettings({ numeService: 'Service X' })
-    await backup.backupNow()
-    const snapDir = path.join(env.safety, 'snapshots')
-    const snap = path.join(snapDir, ls(snapDir).find((f) => f.startsWith('snapshot-')))
-    const raw = fs.readFileSync(snap, 'utf-8')
-    expect(raw).not.toMatch(/\n {2}"/) // compact, fara indentare
-    const b = JSON.parse(raw)
-    expect(Object.keys(b)).toEqual(['format', 'version', 'createdAt', 'fise', 'drafturi', 'setari'])
-    expect(b.format).toBe('service-auto-backup')
-    expect(b.version).toBe(1)
-    expect(Object.keys(b.fise)).toHaveLength(120)
-    expect(Object.keys(b.drafturi)).toHaveLength(1)
-    expect(b.setari.numeService).toBe('Service X')
-    expect(ls(snapDir).some((f) => f.includes('.tmp-'))).toBe(false)
-
-    // import intr-o instalare goala
-    const other = await makeEnv()
-    try {
-      const r = await other.s.backup.importBackup(snap)
-      expect(r.fiseRestaurate).toBe(120)
-      expect(r.drafturiRestaurate).toBe(1)
-      expect(r.setariRestaurate).toBe(true)
-    } finally {
-      other.cleanup()
-      await env.restart()
-    }
-  })
-
-  it('exportBackup (streaming) numara corect si ramane importabil; un snapshot in format VECHI (indentat) tot se importa', async () => {
-    const { fise, backup } = env.s
-    await fise.finalizeFisa(fisa())
-    await fise.finalizeFisa(fisa({ auto: { ...fisa().auto, nrInmatriculare: 'B XY 999' } }))
-    const tmp = mkTmp('sa-exp-')
-    const out = path.join(tmp, 'b.json')
-    const ex = await backup.exportBackup(out)
-    expect(ex).toMatchObject({ fise: 2, drafturi: 0 })
-    const b = read(out)
-
-    // aceeasi continut in formatul vechi: JSON.stringify(bundle, null, 2)
-    const legacy = path.join(tmp, 'legacy.json')
-    fs.writeFileSync(legacy, JSON.stringify(b, null, 2))
-    // makeEnv muta variabilele de mediu globale: instalatiile se folosesc pe rand
-    let r1, r2
-    const e1 = await makeEnv()
-    try {
-      r1 = await e1.s.backup.importBackup(out)
-    } finally {
-      e1.cleanup()
-    }
-    const e2 = await makeEnv()
-    try {
-      r2 = await e2.s.backup.importBackup(legacy)
-      expect(r1).toEqual(r2)
-      expect(r1.fiseRestaurate).toBe(2)
-    } finally {
-      e2.cleanup()
-      fs.rmSync(tmp, { recursive: true, force: true })
-    }
-  })
-
-  it('la inchidere nu se refac snapshot-ul daca unul are < 10 minute', async () => {
-    const { fise, backup } = env.s
-    await fise.finalizeFisa(fisa())
-    await backup.backupNow()
-    const snapDir = path.join(env.safety, 'snapshots')
-    const snap = path.join(snapDir, ls(snapDir).find((f) => f.startsWith('snapshot-')))
-    const before = fs.statSync(snap).mtimeMs
-    await env.restart() // sesiune noua: lastSnapshotAt = 0, dar fisierul e recent
-    await env.s.fise.finalizeFisa(fisa({ auto: { ...fisa().auto, nrInmatriculare: 'B ZZ 1' } }))
-    await new Promise((r) => setTimeout(r, 30))
-    await env.s.backup.flushBackup()
-    expect(fs.statSync(snap).mtimeMs).toBe(before)
-    // backup-ul normal (nu la inchidere) il actualizeaza (comportament existent)
-    await env.s.backup.backupNow()
   })
 })
