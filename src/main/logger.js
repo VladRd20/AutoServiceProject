@@ -40,9 +40,19 @@ process.on('uncaughtException', (err) => {
   log.error('[uncaughtException]', err)
   notifyRendererFatalError(err)
 })
+// Erori de retea "benigne" (ex: electron-updater fara internet): se logheaza, dar nu
+// merita bannerul de eroare fatala. Filtru conservator - doar coduri/mesaje de retea
+// cunoscute; orice altceva (inclusiv non-Error) ramane tratat ca eroare reala.
+const BENIGN_NETWORK = /net::ERR_|ENOTFOUND|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|ENETUNREACH/
+export function isBenignRejection(reason) {
+  if (!(reason instanceof Error)) return false
+  return BENIGN_NETWORK.test(`${reason.code || ''} ${reason.message || ''}`)
+}
+
 process.on('unhandledRejection', (reason) => {
   log.error('[unhandledRejection]', reason)
-  notifyRendererFatalError(reason)
+  // Bannerul doar pentru Error-uri reale, nu pentru valori aruncate arbitrar sau esecuri de retea
+  if (reason instanceof Error && !isBenignRejection(reason)) notifyRendererFatalError(reason)
 })
 
 // Copiaza fisierele de log (inclusiv cele vechi, rotite) intr-un folder pe
