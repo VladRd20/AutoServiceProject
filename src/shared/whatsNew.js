@@ -13,6 +13,43 @@
 
 export const WHATS_NEW = [
   {
+    version: '0.9.2',
+    date: '2026-11-05',
+    titlu: 'Aspect nou și lucru mai rapid de la tastatură',
+    items: [
+      { tip: 'nou', text: 'Aspect reîmprospătat, cu temă luminoasă, întunecată sau după sistem (butonul de temă din bara de sus).' },
+      { tip: 'nou', text: 'Ctrl+K deschide căutarea rapidă: fișe, ciorne, mașini și comenzi, totul dintr-un singur loc.' },
+      { tip: 'nou', text: 'Apasă ? pentru lista tuturor scurtăturilor de la tastatură.' },
+      { tip: 'nou', text: 'Ai șters din greșeală un rând de piesă sau lucrare? Îl poți readuce imediat cu „Anulează”.' },
+      { tip: 'imbunatatit', text: 'Prețurile și cantitățile se pot scrie cu virgulă (de ex. 48,5).' },
+      { tip: 'imbunatatit', text: 'Din Setări poți alege o afișare compactă, ca să încapă mai multe rânduri pe ecran.' },
+      { tip: 'imbunatatit', text: 'Aplicația te avertizează dacă găsește copii în conflict ale fișelor sau numere de fișă duplicate.' },
+      { tip: 'rezolvat', text: 'Fereastra aplicației apare de fiecare dată la pornire (uneori rămânea invizibilă).' }
+    ]
+  },
+  {
+    version: '0.9.1',
+    date: '2026-11-05',
+    titlu: 'Mai rapid și mai stabil',
+    items: [
+      { tip: 'imbunatatit', text: 'Aplicația pornește mai repede, iar copia de siguranță se face la scurt timp după pornire, fără să te încetinească.' },
+      { tip: 'imbunatatit', text: 'Pregătirea PDF-ului nu mai blochează fereastra, nici când fișa are multe rânduri.' },
+      { tip: 'imbunatatit', text: 'Dacă datele sunt într-un folder sincronizat (OneDrive, Google Drive), salvarea așteaptă mai mult când fișierul e ocupat, în loc să dea eroare.' },
+      { tip: 'imbunatatit', text: 'La închidere, aplicația salvează ce era în lucru și se închide fără să rămână blocată.' }
+    ]
+  },
+  {
+    version: '0.9.0',
+    date: '2026-11-05',
+    titlu: 'Date mai bine protejate',
+    items: [
+      { tip: 'rezolvat', text: 'Dacă descărcarea unei actualizări eșuează, o poți reîncerca imediat, fără să repornești aplicația.' },
+      { tip: 'imbunatatit', text: 'Setările și exportul CSV nu mai pot rămâne pe jumătate salvate dacă se oprește curentul sau calculatorul.' },
+      { tip: 'imbunatatit', text: 'Restaurarea dintr-o copie de siguranță verifică și curăță datele înainte să le aducă înapoi.' },
+      { tip: 'imbunatatit', text: 'Numărul fișei se păstrează corect chiar dacă salvarea este întreruptă.' }
+    ]
+  },
+  {
     version: '0.8.2',
     date: '2026-10-15',
     titlu: 'Pornire și listare mai rapide',
