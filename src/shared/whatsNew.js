@@ -13,6 +13,17 @@
 
 export const WHATS_NEW = [
   {
+    version: '0.9.0',
+    date: '2026-11-05',
+    titlu: 'Date mai bine protejate',
+    items: [
+      { tip: 'rezolvat', text: 'Dacă descărcarea unei actualizări eșuează, o poți reîncerca imediat, fără să repornești aplicația.' },
+      { tip: 'imbunatatit', text: 'Setările și exportul CSV nu mai pot rămâne pe jumătate salvate dacă se oprește curentul sau calculatorul.' },
+      { tip: 'imbunatatit', text: 'Restaurarea dintr-o copie de siguranță verifică și curăță datele înainte să le aducă înapoi.' },
+      { tip: 'imbunatatit', text: 'Numărul fișei se păstrează corect chiar dacă salvarea este întreruptă.' }
+    ]
+  },
+  {
     version: '0.8.2',
     date: '2026-10-15',
     titlu: 'Pornire și listare mai rapide',
