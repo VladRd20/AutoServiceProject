@@ -13,6 +13,17 @@
 
 export const WHATS_NEW = [
   {
+    version: '0.9.1',
+    date: '2026-11-05',
+    titlu: 'Mai rapid și mai stabil',
+    items: [
+      { tip: 'imbunatatit', text: 'Aplicația pornește mai repede, iar copia de siguranță se face la scurt timp după pornire, fără să te încetinească.' },
+      { tip: 'imbunatatit', text: 'Pregătirea PDF-ului nu mai blochează fereastra, nici când fișa are multe rânduri.' },
+      { tip: 'imbunatatit', text: 'Dacă datele sunt într-un folder sincronizat (OneDrive, Google Drive), salvarea așteaptă mai mult când fișierul e ocupat, în loc să dea eroare.' },
+      { tip: 'imbunatatit', text: 'La închidere, aplicația salvează ce era în lucru și se închide fără să rămână blocată.' }
+    ]
+  },
+  {
     version: '0.9.0',
     date: '2026-11-05',
     titlu: 'Date mai bine protejate',
