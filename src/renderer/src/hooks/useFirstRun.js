@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { FIRST_RUN_KEY, lsGet, lsSet } from '../fisaModel'
 
 // Prima rulare (modalul "Datele service-ului") + "Ce e nou". ORDINEA conteaza:
 //  1. Decizia "prima rulare" se ia INAINTE ca formularul sa fie afisat/interactiv
 //     (firstRunChecked) - altfel modalul apare peste ce a inceput utilizatorul sa tasteze.
-//  2. "Ce e nou" apare abia dupa ce: drafturile sunt incarcate (initialCheckDone),
-//     decizia de prima rulare e luata si fereastra de prima configurare e inchisa.
+//  2. "Ce e nou" se decide tot in timpul pornirii ascunse si apare odata cu interfata
+//     (dupa initialCheckDone + firstRunChecked), doar daca nu e deschisa prima configurare.
 //  3. Dupa o prima configurare (firstRunShownRef) NU aratam "Ce e nou": marcam doar
 //     versiunea ca vazuta.
 export default function useFirstRun({ initialCheckDone }) {
@@ -15,10 +15,15 @@ export default function useFirstRun({ initialCheckDone }) {
   const [whatsNew, setWhatsNew] = useState(null) // { entries, markSeen }
   const whatsNewCheckedRef = useRef(false)
 
-  // Prima pornire: cerem numele service-ului daca nu e completat.
+  // Intrarile "Ce e nou" nevazute, aduse in timpul pornirii (cat interfata e inca ascunsa).
+  const pendingWhatsNewRef = useRef(null)
+
+  // Prima pornire: cerem numele service-ului daca nu e completat. In paralel aducem si
+  // "Ce e nou", ca decizia sa fie luata INAINTE ca formularul sa devina interactiv
+  // (altfel modalul putea aparea tarziu, peste ce tasta/apasa deja utilizatorul).
   // Intoarce promisiunea (mereu rezolvata) - folosita de poarta de vizibilitate din App.
   function checkFirstRun() {
-    return window.serviceAuto.settings
+    const settingsP = window.serviceAuto.settings
       .get()
       .then((res) => {
         if (!res.ok) return
@@ -28,29 +33,32 @@ export default function useFirstRun({ initialCheckDone }) {
         }
       })
       .catch(() => {})
-      .finally(() => setFirstRunChecked(true))
+    const whatsNewP = window.serviceAuto.app
+      .getWhatsNew('unseen')
+      .then((res) => {
+        if (res?.ok && res.data.entries.length) pendingWhatsNewRef.current = res.data.entries
+      })
+      .catch(() => {})
+    return Promise.all([settingsP, whatsNewP]).finally(() => setFirstRunChecked(true))
   }
 
   const markFirstRunChecked = useCallback(() => setFirstRunChecked(true), [])
 
-  // "Ce e nou": o singura data dupa o actualizare, dupa ce aplicatia s-a incarcat
-  // si nu e deschisa fereastra de prima configurare.
-  useEffect(() => {
+  // "Ce e nou": o singura data dupa o actualizare, in ACELASI cadru in care interfata
+  // devine vizibila (layout effect = inainte de desenare), nu mai tarziu. Daca poarta
+  // s-a deschis pe timeout si raspunsul vine dupa, nu il mai aratam acum (ramane
+  // nevazut si apare la urmatoarea pornire) - niciodata peste o lucrare inceputa.
+  useLayoutEffect(() => {
     if (!initialCheckDone || !firstRunChecked || firstRunOpen || whatsNewCheckedRef.current) return
     whatsNewCheckedRef.current = true
-    // Instalare noua (tocmai a trecut prin prima configurare): nu are ce sa afle
-    // "nou" - altfel, dupa inchiderea setarilor, ar aparea imediat inca un modal
-    // (draftul gol e deja salvat, deci main nu o mai vede ca "fresh").
+    // Instalare noua (tocmai a trecut prin prima configurare): nu are ce sa afle "nou".
     if (firstRunShownRef.current) {
       window.serviceAuto.app.markWhatsNewSeen().catch(() => {})
       return
     }
-    window.serviceAuto.app
-      .getWhatsNew('unseen')
-      .then((res) => {
-        if (res?.ok && res.data.entries.length) setWhatsNew({ entries: res.data.entries, markSeen: true })
-      })
-      .catch(() => {})
+    const entries = pendingWhatsNewRef.current
+    pendingWhatsNewRef.current = null
+    if (entries) setWhatsNew({ entries, markSeen: true })
   }, [initialCheckDone, firstRunChecked, firstRunOpen])
 
   const openWhatsNew = useCallback(async () => {
