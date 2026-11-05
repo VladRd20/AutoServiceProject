@@ -13,6 +13,21 @@
 
 export const WHATS_NEW = [
   {
+    version: '0.9.2',
+    date: '2026-11-05',
+    titlu: 'Aspect nou și lucru mai rapid de la tastatură',
+    items: [
+      { tip: 'nou', text: 'Aspect reîmprospătat, cu temă luminoasă, întunecată sau după sistem (butonul de temă din bara de sus).' },
+      { tip: 'nou', text: 'Ctrl+K deschide căutarea rapidă: fișe, ciorne, mașini și comenzi, totul dintr-un singur loc.' },
+      { tip: 'nou', text: 'Apasă ? pentru lista tuturor scurtăturilor de la tastatură.' },
+      { tip: 'nou', text: 'Ai șters din greșeală un rând de piesă sau lucrare? Îl poți readuce imediat cu „Anulează”.' },
+      { tip: 'imbunatatit', text: 'Prețurile și cantitățile se pot scrie cu virgulă (de ex. 48,5).' },
+      { tip: 'imbunatatit', text: 'Din Setări poți alege o afișare compactă, ca să încapă mai multe rânduri pe ecran.' },
+      { tip: 'imbunatatit', text: 'Aplicația te avertizează dacă găsește copii în conflict ale fișelor sau numere de fișă duplicate.' },
+      { tip: 'rezolvat', text: 'Fereastra aplicației apare de fiecare dată la pornire (uneori rămânea invizibilă).' }
+    ]
+  },
+  {
     version: '0.9.1',
     date: '2026-11-05',
     titlu: 'Mai rapid și mai stabil',
