@@ -13,6 +13,16 @@
 
 export const WHATS_NEW = [
   {
+    version: '0.9.3',
+    date: '2026-11-05',
+    titlu: 'Actualizare de siguranță',
+    items: [
+      { tip: 'imbunatatit', text: 'Aplicația folosește acum o versiune nouă și sigură a motorului ei, cu toate actualizările de securitate la zi.' },
+      { tip: 'imbunatatit', text: 'Aplicația este mai bine protejată împotriva modificării fișierelor ei de pe calculator.' },
+      { tip: 'rezolvat', text: 'Fereastra „Ce e nou” nu mai apare pe neașteptate peste o fișă la care lucrezi deja.' }
+    ]
+  },
+  {
     version: '0.9.2',
     date: '2026-11-05',
     titlu: 'Aspect nou și lucru mai rapid de la tastatură',
